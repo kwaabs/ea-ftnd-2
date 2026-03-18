@@ -1,0 +1,30 @@
+/* NProgress styles - ECG brand colors */
+#nprogress {
+  pointer-events: none;
+}
+
+#nprogress .bar {
+  /* Changed to bright red color for maximum visibility */
+  background: #dc2626;
+  position: fixed;
+  z-index: 9999;
+  top: 0;
+  left: 0;
+  width: 100%;
+  /* Increased height to 8px for better visibility */
+  height: 8px;
+  /* Stronger shadow for more prominence */
+  box-shadow: 0 3px 6px rgba(220, 38, 38, 0.5);
+}
+
+#nprogress .peg {
+  display: block;
+  position: absolute;
+  right: 0px;
+  width: 100px;
+  height: 100%;
+  /* Red glow effect matching the bar color */
+  box-shadow: 0 0 15px #dc2626, 0 0 8px #dc2626;
+  opacity: 1;
+  transform: rotate(3deg) translate(0px, -4px);
+}
