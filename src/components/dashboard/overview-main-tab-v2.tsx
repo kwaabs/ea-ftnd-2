@@ -140,7 +140,7 @@ export function OverviewMainTabV2({
 
     // Add near other state declarations
     const [isLoadingTimeline, setIsLoadingTimeline] = useState(false);
-    const [groupBy, setGroupBy] = useState<string>("none");
+    const [groupBy, setGroupBy] = useState<string>("meter_type");
 
     const [rankingColumns, setRankingColumns] = useState({
         showNetKwh: false,
@@ -6432,6 +6432,27 @@ export function OverviewMainTabV2({
                                                 const totals = calculateGroupTotals(meters)
                                                 const isExpanded = expandedRows.has(groupKey)
 
+                                                // Calculate group rankings
+                                                const allGroupTotals = Array.from(groupedMeters.entries()).map(([key, meterList]) => ({
+                                                    key,
+                                                    totalImport: calculateGroupTotals(meterList).totalImport,
+                                                    totalExport: calculateGroupTotals(meterList).totalExport,
+                                                }))
+                                                const importRanked = allGroupTotals.sort((a, b) => b.totalImport - a.totalImport)
+                                                const exportRanked = allGroupTotals.sort((a, b) => b.totalExport - a.totalExport)
+
+                                                const groupImportRank = importRanked.findIndex((g) => g.key === groupKey) + 1
+                                                const groupExportRank = exportRanked.findIndex((g) => g.key === groupKey) + 1
+
+                                                const getRankBadgeClass = (rank: number) => {
+                                                    if (rank === 1) return "bg-amber-500 text-white border-amber-600"
+                                                    if (rank === 2) return "bg-gray-400 text-white border-gray-500"
+                                                    if (rank === 3) return "bg-amber-700 text-white border-amber-800"
+                                                    if (rank <= 10) return "bg-green-600 text-white border-green-700"
+                                                    if (rank <= 20) return "bg-blue-600 text-white border-blue-700"
+                                                    return "bg-muted text-muted-foreground border-border"
+                                                }
+
                                                 return (
                                                     <React.Fragment key={groupKey}>
                                                         <tr
@@ -6456,14 +6477,28 @@ export function OverviewMainTabV2({
                                                         {formatNumber(totals.totalImport)}
                                                     </span>
                                                             </td>
-                                                            <td className="py-3 px-4 text-center bg-green-50/50">—</td>
+                                                            <td className="py-3 px-4 text-center bg-green-50/50">
+                                                                <Badge
+                                                                    variant="outline"
+                                                                    className={`text-xs ${getRankBadgeClass(groupImportRank)} font-semibold`}
+                                                                >
+                                                                    #{groupImportRank}
+                                                                </Badge>
+                                                            </td>
 
                                                             <td className="py-3 px-4 text-right font-semibold bg-blue-50/50 border-l">
                                                     <span className="text-blue-700">
                                                         {formatNumber(totals.totalExport)}
                                                     </span>
                                                             </td>
-                                                            <td className="py-3 px-4 text-center bg-blue-50/50">—</td>
+                                                            <td className="py-3 px-4 text-center bg-blue-50/50">
+                                                                <Badge
+                                                                    variant="outline"
+                                                                    className={`text-xs ${getRankBadgeClass(groupExportRank)} font-semibold`}
+                                                                >
+                                                                    #{groupExportRank}
+                                                                </Badge>
+                                                            </td>
 
                                                             {rankingColumns.showNetKwh && (
                                                                 <td className="py-3 px-4 text-right font-semibold border-l">
@@ -6472,7 +6507,11 @@ export function OverviewMainTabV2({
                                                             )}
                                                         </tr>
 
-                                                        {isExpanded && meters.map((meter) => {
+                                                        {isExpanded && meters.map((meter, groupIndex) => {
+                                                            // Calculate group-level rank (position within this group)
+                                                            const groupImportRank = groupIndex + 1
+                                                            const groupExportRank = groupIndex + 1
+
                                                             // Helper function to get badge style based on rank
                                                             const getRankBadgeClass = (rank: number) => {
                                                                 if (rank === 1) return "bg-amber-500 text-white border-amber-600" // Gold
@@ -6539,14 +6578,12 @@ export function OverviewMainTabV2({
                                                             </span>
                                                                     </td>
                                                                     <td className="py-2 px-4 text-center bg-green-50/20">
-                                                                        {meter.import_rank ? (
-                                                                            <Badge
-                                                                                variant="outline"
-                                                                                className={`text-xs ${getRankBadgeClass(meter.import_rank)} font-semibold`}
-                                                                            >
-                                                                                #{meter.import_rank}
-                                                                            </Badge>
-                                                                        ) : "—"}
+                                                                        <Badge
+                                                                            variant="outline"
+                                                                            className={`text-xs ${getRankBadgeClass(groupImportRank)} font-semibold`}
+                                                                        >
+                                                                            #{groupImportRank}
+                                                                        </Badge>
                                                                     </td>
 
                                                                     <td className="py-2 px-4 text-right font-semibold bg-blue-50/20 border-l">
@@ -6555,14 +6592,12 @@ export function OverviewMainTabV2({
                                                             </span>
                                                                     </td>
                                                                     <td className="py-2 px-4 text-center bg-blue-50/20">
-                                                                        {meter.export_rank ? (
-                                                                            <Badge
-                                                                                variant="outline"
-                                                                                className={`text-xs ${getRankBadgeClass(meter.export_rank)} font-semibold`}
-                                                                            >
-                                                                                #{meter.export_rank}
-                                                                            </Badge>
-                                                                        ) : "—"}
+                                                                        <Badge
+                                                                            variant="outline"
+                                                                            className={`text-xs ${getRankBadgeClass(groupExportRank)} font-semibold`}
+                                                                        >
+                                                                            #{groupExportRank}
+                                                                        </Badge>
                                                                     </td>
 
                                                                     {rankingColumns.showNetKwh && (

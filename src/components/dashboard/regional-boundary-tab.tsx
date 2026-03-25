@@ -834,8 +834,8 @@ export function RegionalBoundaryTab() {
                                                 <TableRow key={meter.meter_number}>
                                                     <TableCell className="font-mono text-sm">
                                                         <Link href={`/meters/${meter.meter_number}`} className="hover:text-blue-200 hover:underline">
-                                                        {meter.meter_number}
-                                                    </Link></TableCell>
+                                                            {meter.meter_number}
+                                                        </Link></TableCell>
                                                     <TableCell className="text-sm">{meter.boundary_metering_point || "—"}</TableCell>
                                                     <TableCell className="text-sm">{meter.location || "—"}</TableCell>
                                                     <TableCell>
@@ -1004,8 +1004,20 @@ export function RegionalBoundaryTab() {
                                         <XAxis dataKey="date" className="text-xs" tickFormatter={(value) => formatDateLocal(value)} />
                                         <YAxis
                                             className="text-xs"
-                                            tickFormatter={(value) => `${(value / 1000).toFixed(0)}k`}
-                                            domain={[0, "auto"]}
+                                            tickFormatter={(value) => {
+                                                if (value === 0) return "0"
+                                                if (value >= 1000000) {
+                                                    return `${(value / 1000000).toFixed(1)}M`
+                                                }
+                                                if (value >= 1000 || value <= -1000) {
+                                                    return `${(value / 1000).toFixed(1)}k`
+                                                }
+                                                return value.toFixed(0)
+                                            }}
+                                            domain={["auto", "auto"]}
+                                            type="number"
+                                            ticks={undefined}
+                                            tickCount={5}
                                         />
                                         <ChartTooltip
                                             content={<ChartTooltipContent />}
@@ -1107,7 +1119,19 @@ export function RegionalBoundaryTab() {
                                     <BarChart data={boundaryData?.byBoundaryPoint || []}>
                                         <CartesianGrid strokeDasharray="3 3" className="stroke-muted" />
                                         <XAxis dataKey="boundaryPoint" className="text-xs" angle={-45} textAnchor="end" height={100} />
-                                        <YAxis className="text-xs" tickFormatter={(value) => `${(value / 1000).toFixed(0)}k`} />
+                                        <YAxis
+                                            className="text-xs"
+                                            tickFormatter={(value) => {
+                                                if (value === 0) return "0"
+                                                if (value >= 1000000) {
+                                                    return `${(value / 1000000).toFixed(1)}M`
+                                                }
+                                                if (value >= 1000) {
+                                                    return `${(value / 1000).toFixed(1)}k`
+                                                }
+                                                return value.toFixed(0)
+                                            }}
+                                        />
                                         <ChartTooltip content={<ChartTooltipContent />} />
                                         <Legend />
                                         {showComparisonImport && (
