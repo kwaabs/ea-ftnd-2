@@ -1175,14 +1175,14 @@ export function RegionalBoundaryTab() {
                                                                 </div>
                                                             </TableCell>
                                                             <TableCell className="text-right text-green-600 font-medium">
-                                                                {formatNumber(bp.importKwh)}
+                                                                {formatNumber(bp.importKwh,2)}
                                                             </TableCell>
                                                             <TableCell className="text-right text-blue-600 font-medium">
-                                                                {formatNumber(bp.exportKwh)}
+                                                                {formatNumber(bp.exportKwh,2)}
                                                             </TableCell>
                                                             <TableCell className="text-right font-medium">
                                 <span className={bp.netKwh > 0 ? "text-green-600" : "text-red-600"}>
-                                  {formatNumber(bp.netKwh)}
+                                  {formatNumber(bp.netKwh,2)}
                                 </span>
                                                             </TableCell>
                                                         </TableRow>
@@ -1349,16 +1349,16 @@ export function RegionalBoundaryTab() {
                                                 <TableCell colSpan={5} className="text-red-600">
                                                     Total
                                                 </TableCell>
-                                                <TableCell className="text-right text-green-600">{formatNumber(flowTotals.import)}</TableCell>
-                                                <TableCell className="text-right text-blue-600">{formatNumber(flowTotals.export)}</TableCell>
+                                                <TableCell className="text-right text-green-600">{formatNumber(flowTotals.import,2)}</TableCell>
+                                                <TableCell className="text-right text-blue-600">{formatNumber(flowTotals.export,2)}</TableCell>
                                                 <TableCell className="text-right">
                                                     {(isFlowReversed ? -flowTotals.net : flowTotals.net) > 0 ? (
                                                         <span className="text-green-600">
-                              {formatNumber(Math.abs(isFlowReversed ? -flowTotals.net : flowTotals.net))} →
+                              {formatNumber(Math.abs(isFlowReversed ? -flowTotals.net : flowTotals.net),2)} →
                             </span>
                                                     ) : (isFlowReversed ? -flowTotals.net : flowTotals.net) < 0 ? (
                                                         <span className="text-blue-600">
-                              {formatNumber(Math.abs(isFlowReversed ? -flowTotals.net : flowTotals.net))} ←
+                              {formatNumber(Math.abs(isFlowReversed ? -flowTotals.net : flowTotals.net),2)} ←
                             </span>
                                                     ) : (
                                                         <span className="text-muted-foreground">0</span>

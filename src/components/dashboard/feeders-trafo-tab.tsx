@@ -928,9 +928,9 @@ export function FeedersTrafoTab({ meterTypes = ["BSP"] }: FeedersTrafoTabProps) 
                                 {regionalTotals && (
                                     <TableRow className="bg-primary/10 font-semibold border-t-2">
                                         <TableCell>TOTAL</TableCell>
-                                        <TableCell className="text-green-600 text-right">{formatNumber(regionalTotals.supplyKwh)}</TableCell>
-                                        <TableCell className="text-blue-600 text-right">{formatNumber(regionalTotals.reverseFlowKwh)}</TableCell>
-                                        <TableCell className="text-[#800020] text-right">{formatNumber(regionalTotals.netSupplyKwh)}</TableCell>
+                                        <TableCell className="text-green-600 text-right">{formatNumber(regionalTotals.supplyKwh,2)}</TableCell>
+                                        <TableCell className="text-blue-600 text-right">{formatNumber(regionalTotals.reverseFlowKwh,2)}</TableCell>
+                                        <TableCell className="text-[#800020] text-right">{formatNumber(regionalTotals.netSupplyKwh,2)}</TableCell>
                                         <TableCell className="text-right">100.00%</TableCell>
                                     </TableRow>
                                 )}
@@ -1154,13 +1154,13 @@ export function FeedersTrafoTab({ meterTypes = ["BSP"] }: FeedersTrafoTabProps) 
                                                 <TableCell>{toProperCase(meter.station)}</TableCell>
                                                 <TableCell>{meter.feeder_panel_name}</TableCell>
                                                 <TableCell className="text-right text-green-600">
-                                                    {importValue > 0 ? formatNumber(importValue) : "—"}
+                                                    {importValue > 0 ? formatNumber(importValue,2) : "—"}
                                                 </TableCell>
                                                 <TableCell className="text-right text-blue-600">
-                                                    {exportValue > 0 ? formatNumber(exportValue) : "—"}
+                                                    {exportValue > 0 ? formatNumber(exportValue,2) : "—"}
                                                 </TableCell>
                                                 <TableCell className="text-right font-semibold">
-                                                    {formatNumber(netValue)}
+                                                    {formatNumber(netValue,2)}
                                                 </TableCell>
                                             </TableRow>
                                         )

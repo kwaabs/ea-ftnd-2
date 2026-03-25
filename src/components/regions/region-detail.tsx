@@ -2868,10 +2868,11 @@ export function RegionDetail({ region }: RegionDetailProps) {
                                     </Link>
                                   </TableCell>
                                   <TableCell className="text-right">
-                                    {formatNumber(data.import)}
+                                    {formatNumber(data.import,2)}
+
                                   </TableCell>
                                   <TableCell className="text-right">
-                                    {formatNumber(data.export)}
+                                    {formatNumber(data.export,2)}
                                   </TableCell>
                                   <TableCell className="text-right font-semibold">
                                     {formatNumber(netKwh)}
@@ -3112,7 +3113,7 @@ export function RegionDetail({ region }: RegionDetailProps) {
                                       {district}
                                     </TableCell>
                                     <TableCell className="text-right">
-                                      {formatNumber(data.consumption)}
+                                      {formatNumber(data.consumption,2)}
                                     </TableCell>
                                     <TableCell className="text-right">
                                       {formatNumber(percentage, 1)}%

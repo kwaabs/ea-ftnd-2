@@ -958,12 +958,12 @@ export function DistrictBoundaryTab({
                                 </Table>
                             </div>
                             {totalStatusPages > 1 && (
-                                <div className="flex items-center justify-between mt-4">
-                                    <p className="text-sm text-muted-foreground">
-                                        Showing {(statusCurrentPage - 1) * statusItemsPerPage + 1} to{" "}
-                                        {Math.min(statusCurrentPage * statusItemsPerPage, totalStatusCount)} of{" "}
-                                        {totalStatusCount} meters
-                                    </p>
+                                <div className="flex items-center justify-end mt-4">
+                                    {/*<p className="text-sm text-muted-foreground">*/}
+                                    {/*    Showing {(statusCurrentPage - 1) * statusItemsPerPage + 1} to{" "}*/}
+                                    {/*    {Math.min(statusCurrentPage * statusItemsPerPage, totalStatusCount)} of{" "}*/}
+                                    {/*    {totalStatusCount} meters*/}
+                                    {/*</p>*/}
                                     <TablePagination
                                         currentPage={statusCurrentPage}
                                         totalPages={totalStatusPages}
@@ -1086,7 +1086,7 @@ export function DistrictBoundaryTab({
                                             content={<ChartTooltipContent />}
                                             labelFormatter={(value) => formatDateLocalFull(value)}
                                         />
-                                        <Legend />
+                                        {/*<Legend />*/}
                                         {showTrendsImport &&
                                             boundaryData.byBoundaryPoint
                                                 .filter((bp) => selectedBoundaryPoints.includes(bp.boundaryPoint))

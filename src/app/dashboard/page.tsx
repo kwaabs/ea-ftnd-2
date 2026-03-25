@@ -10,7 +10,7 @@ import { useQuery } from "@tanstack/react-query"
 
 export default function DashboardPage() {
   const { metrics, setMetrics, setLoading } = useDashboardStore()
-  const { filters, applyFilters, clearFilters, clearNonDateFilters } = useAppStore()
+  const { filters, clearFilters, clearNonDateFilters } = useAppStore()
 
   // Clear non-date filters when user leaves the page
   useEffect(() => {
@@ -19,9 +19,7 @@ export default function DashboardPage() {
     }
   }, [clearNonDateFilters])
 
-  const handleApplyFilters = (newFilters: any) => {
-    applyFilters(newFilters)
-  }
+
 
   const handleResetFilters = () => {
     clearFilters()
@@ -126,9 +124,9 @@ export default function DashboardPage() {
     stations: filters.stations || [],
     boundaryMeteringPoints: filters.boundaryMeteringPoints || [],
     meterTypes: filters.meterTypes || [],
-    voltages: (filters.voltageKvs || []).map((v: string) => Number.parseInt(v)),
+    voltages: (filters.voltages || []).map((v: string) => Number.parseInt(v)),
     locations: filters.locations || [],
-    feeders: filters.feeders || [],
+    feeders: filters?.feeders || [],
   }
 
   return (
