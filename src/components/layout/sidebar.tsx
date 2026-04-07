@@ -72,6 +72,7 @@ export function Sidebar() {
         DTX: "Distribution Transformers",
         DISTRICT_BOUNDARY: "District Boundaries",
         REGIONAL_BOUNDARY: "Regional Boundaries",
+        EXPRESS_FEEDER: "Express Feeders",
     }
 
     const organizeMeterTypes = React.useMemo(() => {
@@ -79,7 +80,7 @@ export function Sidebar() {
         const organized: any[] = []
 
         // Define the desired order
-        const desiredOrder = ["BSP", "REGIONAL_BOUNDARY", "DTX", 'DISTRICT_BOUNDARY']
+        const desiredOrder = ["BSP", "REGIONAL_BOUNDARY", "DTX", "DISTRICT_BOUNDARY", "EXPRESS_FEEDER"]
 
         // Sort types according to desired order
         const sortedTypes = [...types].sort((a, b) => {
@@ -182,180 +183,180 @@ export function Sidebar() {
 
     return (
         <>
-        <aside
-            className={cn(
-                "fixed left-0 top-0 z-40 h-screen border-r border-border bg-sidebar text-white transition-all duration-300",
-                isCollapsed ? "w-16" : "w-64",
-            )}
-        >
-            <div className="flex h-full flex-col">
-                <div className="flex h-16 items-center justify-between border-b border-sidebar-border px-4">
-                    {!isCollapsed && <span className="text-lg font-semibold text-sidebar-foreground">Dashboard</span>}
-                    <Button variant="ghost" size="icon" onClick={toggleCollapsed} className="h-8 w-8">
-                        {isCollapsed ? <ChevronRight className="h-4 w-4" /> : <ChevronLeft className="h-4 w-4" />}
-                    </Button>
-                </div>
+            <aside
+                className={cn(
+                    "fixed left-0 top-0 z-40 h-screen border-r border-border bg-sidebar text-white transition-all duration-300",
+                    isCollapsed ? "w-16" : "w-64",
+                )}
+            >
+                <div className="flex h-full flex-col">
+                    <div className="flex h-16 items-center justify-between border-b border-sidebar-border px-4">
+                        {!isCollapsed && <span className="text-lg font-semibold text-sidebar-foreground">Dashboard</span>}
+                        <Button variant="ghost" size="icon" onClick={toggleCollapsed} className="h-8 w-8">
+                            {isCollapsed ? <ChevronRight className="h-4 w-4" /> : <ChevronLeft className="h-4 w-4" />}
+                        </Button>
+                    </div>
 
-                <div className="flex-1 overflow-hidden">
-                    <ScrollArea className="h-full">
-                        <nav className="space-y-1 px-3 py-4">
-                            {menuItems.map((item) => {
-                                const Icon = item.icon
-                                const isActive = pathname === item.href || (item.subItems?.some((sub) => pathname === sub.href) ?? false)
-                                const isOpen = openMenus.includes(item.id)
+                    <div className="flex-1 overflow-hidden">
+                        <ScrollArea className="h-full">
+                            <nav className="space-y-1 px-3 py-4">
+                                {menuItems.map((item) => {
+                                    const Icon = item.icon
+                                    const isActive = pathname === item.href || (item.subItems?.some((sub) => pathname === sub.href) ?? false)
+                                    const isOpen = openMenus.includes(item.id)
 
-                                if (item.subItems && item.subItems.length > 0) {
-                                    return (
-                                        <div key={item.id}>
-                                            <div className="flex items-center gap-1">
-                                                <Button
-                                                    variant="ghost"
-                                                    className={cn(
-                                                        "flex-1 cursor-pointer justify-start",
-                                                        isActive && "bg-sidebar-accent text-sidebar-accent-foreground font-semibold",
-                                                        isCollapsed && "justify-center",
-                                                    )}
-                                                    onClick={() => item.href && handleNavigation(item.href)}
-                                                >
-                                                    <Icon className={cn("h-4 w-4", !isCollapsed && "mr-2")} />
-                                                    {!isCollapsed && <span className="flex-1 text-left">{item.label}</span>}
-                                                </Button>
-                                                {!isCollapsed && (
+                                    if (item.subItems && item.subItems.length > 0) {
+                                        return (
+                                            <div key={item.id}>
+                                                <div className="flex items-center gap-1">
                                                     <Button
                                                         variant="ghost"
-                                                        size="icon"
-                                                        className="h-8 w-8 shrink-0"
-                                                        onClick={() => toggleMenu(item.id)}
+                                                        className={cn(
+                                                            "flex-1 cursor-pointer justify-start",
+                                                            isActive && "bg-sidebar-accent text-sidebar-accent-foreground font-semibold",
+                                                            isCollapsed && "justify-center",
+                                                        )}
+                                                        onClick={() => item.href && handleNavigation(item.href)}
                                                     >
-                                                        <ChevronRight className={cn("h-4 w-4 transition-transform", isOpen && "rotate-90")} />
+                                                        <Icon className={cn("h-4 w-4", !isCollapsed && "mr-2")} />
+                                                        {!isCollapsed && <span className="flex-1 text-left">{item.label}</span>}
                                                     </Button>
-                                                )}
-                                            </div>
-                                            {!isCollapsed && isOpen && (
-                                                <div className="mt-1 ml-4 border-l-2 border-sidebar-border/50 pl-2 space-y-1">
-                                                    {item.subItems.map((subItem) => {
-                                                        // Check if this subItem has districts
-                                                        const hasChevron = subItem.hasSubItems && subItem.onChevronClick
+                                                    {!isCollapsed && (
+                                                        <Button
+                                                            variant="ghost"
+                                                            size="icon"
+                                                            className="h-8 w-8 shrink-0"
+                                                            onClick={() => toggleMenu(item.id)}
+                                                        >
+                                                            <ChevronRight className={cn("h-4 w-4 transition-transform", isOpen && "rotate-90")} />
+                                                        </Button>
+                                                    )}
+                                                </div>
+                                                {!isCollapsed && isOpen && (
+                                                    <div className="mt-1 ml-4 border-l-2 border-sidebar-border/50 pl-2 space-y-1">
+                                                        {item.subItems.map((subItem) => {
+                                                            // Check if this subItem has districts
+                                                            const hasChevron = subItem.hasSubItems && subItem.onChevronClick
 
-                                                        return (
-                                                            <div key={subItem.id} className="flex items-center gap-1">
-                                                                <Button
-                                                                    variant="ghost"
-                                                                    size="sm"
-                                                                    className={cn(
-                                                                        "w-full cursor-pointer justify-start text-sm text-gray-300 hover:text-white hover:bg-sidebar-accent/50",
-                                                                        pathname === subItem.href &&
-                                                                        subItem.href !== "#" &&
-                                                                        "bg-sidebar-accent text-white font-semibold",
-                                                                        subItem.isHeader && "font-medium text-gray-200 hover:bg-sidebar-accent/30 pl-2",
-                                                                        subItem.isIndented && "pl-4",
-                                                                        subItem.isDoubleIndented && "pl-8",
-                                                                        hasChevron && "flex-1",
-                                                                    )}
-                                                                    onClick={() => {
-                                                                        if (subItem.onClick) {
-                                                                            subItem.onClick()
-                                                                        } else if (subItem.href !== "#") {
-                                                                            handleNavigation(subItem.href)
-                                                                        }
-                                                                    }}
-                                                                >
-                                                                    {subItem.hasSubItems && !hasChevron && (
-                                                                        <ChevronRight
-                                                                            className={cn(
-                                                                                "h-3 w-3 mr-1 transition-transform",
-                                                                                openMenus.includes(subItem.id) && "rotate-90",
-                                                                            )}
-                                                                        />
-                                                                    )}
-                                                                    {subItem.label}
-                                                                </Button>
-                                                                {hasChevron && (
+                                                            return (
+                                                                <div key={subItem.id} className="flex items-center gap-1">
                                                                     <Button
                                                                         variant="ghost"
-                                                                        size="icon"
-                                                                        className="h-7 w-7 shrink-0"
-                                                                        onClick={(e) => {
-                                                                            e.stopPropagation()
-                                                                            subItem.onChevronClick?.()
+                                                                        size="sm"
+                                                                        className={cn(
+                                                                            "w-full cursor-pointer justify-start text-sm text-gray-300 hover:text-white hover:bg-sidebar-accent/50",
+                                                                            pathname === subItem.href &&
+                                                                            subItem.href !== "#" &&
+                                                                            "bg-sidebar-accent text-white font-semibold",
+                                                                            subItem.isHeader && "font-medium text-gray-200 hover:bg-sidebar-accent/30 pl-2",
+                                                                            subItem.isIndented && "pl-4",
+                                                                            subItem.isDoubleIndented && "pl-8",
+                                                                            hasChevron && "flex-1",
+                                                                        )}
+                                                                        onClick={() => {
+                                                                            if (subItem.onClick) {
+                                                                                subItem.onClick()
+                                                                            } else if (subItem.href !== "#") {
+                                                                                handleNavigation(subItem.href)
+                                                                            }
                                                                         }}
                                                                     >
-                                                                        <ChevronRight
-                                                                            className={cn(
-                                                                                "h-3 w-3 transition-transform",
-                                                                                openMenus.includes(subItem.id) && "rotate-90",
-                                                                            )}
-                                                                        />
+                                                                        {subItem.hasSubItems && !hasChevron && (
+                                                                            <ChevronRight
+                                                                                className={cn(
+                                                                                    "h-3 w-3 mr-1 transition-transform",
+                                                                                    openMenus.includes(subItem.id) && "rotate-90",
+                                                                                )}
+                                                                            />
+                                                                        )}
+                                                                        {subItem.label}
                                                                     </Button>
-                                                                )}
-                                                            </div>
-                                                        )
-                                                    })}
-                                                </div>
+                                                                    {hasChevron && (
+                                                                        <Button
+                                                                            variant="ghost"
+                                                                            size="icon"
+                                                                            className="h-7 w-7 shrink-0"
+                                                                            onClick={(e) => {
+                                                                                e.stopPropagation()
+                                                                                subItem.onChevronClick?.()
+                                                                            }}
+                                                                        >
+                                                                            <ChevronRight
+                                                                                className={cn(
+                                                                                    "h-3 w-3 transition-transform",
+                                                                                    openMenus.includes(subItem.id) && "rotate-90",
+                                                                                )}
+                                                                            />
+                                                                        </Button>
+                                                                    )}
+                                                                </div>
+                                                            )
+                                                        })}
+                                                    </div>
+                                                )}
+                                            </div>
+                                        )
+                                    }
+
+                                    return (
+                                        <Button
+                                            key={item.id}
+                                            variant="ghost"
+                                            className={cn(
+                                                "w-full cursor-pointer justify-start",
+                                                isActive && "bg-sidebar-accent text-sidebar-accent-foreground font-semibold",
+                                                isCollapsed && "justify-center",
                                             )}
-                                        </div>
+                                            onClick={() => item.href && handleNavigation(item.href)}
+                                        >
+                                            <Icon className={cn("h-4 w-4", !isCollapsed && "mr-2")} />
+                                            {!isCollapsed && item.label}
+                                        </Button>
                                     )
-                                }
-
-                                return (
-                                    <Button
-                                        key={item.id}
-                                        variant="ghost"
-                                        className={cn(
-                                            "w-full cursor-pointer justify-start",
-                                            isActive && "bg-sidebar-accent text-sidebar-accent-foreground font-semibold",
-                                            isCollapsed && "justify-center",
-                                        )}
-                                        onClick={() => item.href && handleNavigation(item.href)}
-                                    >
-                                        <Icon className={cn("h-4 w-4", !isCollapsed && "mr-2")} />
-                                        {!isCollapsed && item.label}
-                                    </Button>
-                                )
-                            })}
-                        </nav>
-                    </ScrollArea>
-                </div>
-
-                {user && (
-                    <div className="border-t border-sidebar-border p-3">
-                        <DropdownMenu>
-                            <DropdownMenuTrigger asChild>
-                                <Button
-                                    variant="ghost"
-                                    className={cn("w-full cursor-pointer", isCollapsed ? "justify-center p-2" : "justify-start")}
-                                >
-                                    <Avatar className={cn("h-8 w-8", !isCollapsed && "mr-2")}>
-                                        <AvatarFallback className="bg-primary text-primary-foreground">
-                                            {user.name?.charAt(0).toUpperCase() || "U"}
-                                        </AvatarFallback>
-                                    </Avatar>
-                                    {!isCollapsed && (
-                                        <div className="flex flex-col items-start flex-1 min-w-0">
-                                            <span className="text-sm font-medium truncate w-full">{user.name}</span>
-                                            <span className="text-xs text-white truncate w-full">{user.email}</span>
-                                        </div>
-                                    )}
-                                </Button>
-                            </DropdownMenuTrigger>
-                            <DropdownMenuContent align="end" className="w-56">
-                                <DropdownMenuItem onClick={() => setCommentsOpen(true)}>
-                                    <MessageSquare className="mr-2 h-4 w-4" />
-                                    Comments
-                                </DropdownMenuItem>
-                                <DropdownMenuSeparator />
-                                <DropdownMenuItem onClick={handleLogout}>
-                                    <LogOut className="mr-2 h-4 w-4" />
-                                    Logout
-                                </DropdownMenuItem>
-                            </DropdownMenuContent>
-                        </DropdownMenu>
+                                })}
+                            </nav>
+                        </ScrollArea>
                     </div>
-                )}
-            </div>
-        </aside>
 
-        <CommentsSheet open={commentsOpen} onClose={() => setCommentsOpen(false)} />
+                    {user && (
+                        <div className="border-t border-sidebar-border p-3">
+                            <DropdownMenu>
+                                <DropdownMenuTrigger asChild>
+                                    <Button
+                                        variant="ghost"
+                                        className={cn("w-full cursor-pointer", isCollapsed ? "justify-center p-2" : "justify-start")}
+                                    >
+                                        <Avatar className={cn("h-8 w-8", !isCollapsed && "mr-2")}>
+                                            <AvatarFallback className="bg-primary text-primary-foreground">
+                                                {user.name?.charAt(0).toUpperCase() || "U"}
+                                            </AvatarFallback>
+                                        </Avatar>
+                                        {!isCollapsed && (
+                                            <div className="flex flex-col items-start flex-1 min-w-0">
+                                                <span className="text-sm font-medium truncate w-full">{user.name}</span>
+                                                <span className="text-xs text-white truncate w-full">{user.email}</span>
+                                            </div>
+                                        )}
+                                    </Button>
+                                </DropdownMenuTrigger>
+                                <DropdownMenuContent align="end" className="w-56">
+                                    <DropdownMenuItem onClick={() => setCommentsOpen(true)}>
+                                        <MessageSquare className="mr-2 h-4 w-4" />
+                                        Comments
+                                    </DropdownMenuItem>
+                                    <DropdownMenuSeparator />
+                                    <DropdownMenuItem onClick={handleLogout}>
+                                        <LogOut className="mr-2 h-4 w-4" />
+                                        Logout
+                                    </DropdownMenuItem>
+                                </DropdownMenuContent>
+                            </DropdownMenu>
+                        </div>
+                    )}
+                </div>
+            </aside>
+
+            <CommentsSheet open={commentsOpen} onClose={() => setCommentsOpen(false)} />
         </>
-    )
+)
 }

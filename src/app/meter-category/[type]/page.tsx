@@ -7,6 +7,7 @@ import { FeedersTrafoTab } from "@/components/dashboard/feeders-trafo-tab"
 import { DtxTab } from "@/components/dashboard/dtx-tab"
 import { RegionalBoundaryTab } from "@/components/dashboard/regional-boundary-tab"
 import { DistrictBoundaryTab } from "@/components/dashboard/district-boundary-tab"
+import { ExpressFeederTab } from "@/components/dashboard/express-feeder-tab"
 import { useAppStore } from "@/stores/app-store"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { formatNumber, formatApiDate } from "@/lib/utils"
@@ -46,6 +47,7 @@ export default function MeterCategoryPage() {
     dtx: "Distribution Transformers",
     "regional-boundary": "Regional Boundary",
     "district-boundary": "District Boundary",
+    "express-feeder": "Express Feeders",
   }
 
   const apiMeterTypeMapping: Record<string, string> = {
@@ -54,6 +56,7 @@ export default function MeterCategoryPage() {
     dtx: "DTX",
     "regional-boundary": "REGIONAL_BOUNDARY",
     "district-boundary": "DISTRICT_BOUNDARY",
+    "express-feeder": "EXPRESS_FEEDER",
   }
 
   const displayName = meterTypeMapping[typeSlug] || typeSlug
@@ -72,51 +75,53 @@ export default function MeterCategoryPage() {
   })
 
   return (
-    <AppLayout>
-      <div className="p-6">
-        <h1 className="text-3xl font-bold mb-6">{displayName}</h1>
+      <AppLayout>
+        <div className="p-6">
+          <h1 className="text-3xl font-bold mb-6">{displayName}</h1>
 
-        {typeSlug === "bsp" ? (
-          <FeedersTrafoTab />
-        ) : typeSlug === "distribution-transformers" || typeSlug === "dtx" ? (
-          <DtxTab />
-        ) : typeSlug === "regional-boundary" ? (
-          <RegionalBoundaryTab />
-        ) : typeSlug === "district-boundary" ? (
-          <DistrictBoundaryTab />
-        ) : (
-          <>
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
-              <Card>
-                <CardHeader>
-                  <CardTitle>Total Consumption</CardTitle>
-                </CardHeader>
-                <CardContent>
-                  <p className="text-3xl font-bold">{formatNumber(consumptionData?.totalKwh || 0)} kWh</p>
-                </CardContent>
-              </Card>
+          {typeSlug === "bsp" ? (
+              <FeedersTrafoTab />
+          ) : typeSlug === "distribution-transformers" || typeSlug === "dtx" ? (
+              <DtxTab />
+          ) : typeSlug === "regional-boundary" ? (
+              <RegionalBoundaryTab />
+          ) : typeSlug === "district-boundary" ? (
+              <DistrictBoundaryTab />
+          ) : typeSlug === "express-feeder" ? (
+              <ExpressFeederTab />
+          ) : (
+              <>
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
+                  <Card>
+                    <CardHeader>
+                      <CardTitle>Total Consumption</CardTitle>
+                    </CardHeader>
+                    <CardContent>
+                      <p className="text-3xl font-bold">{formatNumber(consumptionData?.totalKwh || 0)} kWh</p>
+                    </CardContent>
+                  </Card>
 
-              <Card>
-                <CardHeader>
-                  <CardTitle>Active Meters</CardTitle>
-                </CardHeader>
-                <CardContent>
-                  <p className="text-3xl font-bold">{formatNumber(statusData?.active || 0)}</p>
-                </CardContent>
-              </Card>
+                  <Card>
+                    <CardHeader>
+                      <CardTitle>Active Meters</CardTitle>
+                    </CardHeader>
+                    <CardContent>
+                      <p className="text-3xl font-bold">{formatNumber(statusData?.active || 0)}</p>
+                    </CardContent>
+                  </Card>
 
-              <Card>
-                <CardHeader>
-                  <CardTitle>Total Meters</CardTitle>
-                </CardHeader>
-                <CardContent>
-                  <p className="text-3xl font-bold">{formatNumber(statusData?.total || 0)}</p>
-                </CardContent>
-              </Card>
-            </div>
-          </>
-        )}
-      </div>
-    </AppLayout>
+                  <Card>
+                    <CardHeader>
+                      <CardTitle>Total Meters</CardTitle>
+                    </CardHeader>
+                    <CardContent>
+                      <p className="text-3xl font-bold">{formatNumber(statusData?.total || 0)}</p>
+                    </CardContent>
+                  </Card>
+                </div>
+              </>
+          )}
+        </div>
+      </AppLayout>
   )
 }

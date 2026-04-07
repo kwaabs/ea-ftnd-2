@@ -514,7 +514,7 @@ export function OverviewMainTabV2({
             aggregated[meterType].net = aggregated[meterType].import - aggregated[meterType].export
         })
 
-        const METER_ORDER = ["BSP", "REGIONAL_BOUNDARY", "DISTRICT_BOUNDARY", "DTX"]
+        const METER_ORDER = ["BSP", "EXPRESS_FEEDER","REGIONAL_BOUNDARY", "DISTRICT_BOUNDARY", "DTX"]
 
         return Object.entries(aggregated)
             .map(([meterType, values]) => ({

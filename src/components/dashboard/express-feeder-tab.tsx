@@ -1,0 +1,814 @@
+"use client"
+
+import { useMemo, useState, useEffect } from "react"
+import Link from "next/link"
+import { useAppStore } from "@/stores/app-store"
+import { formatApiDate } from "@/lib/utils"
+import {
+    useExpressFeederAggregate,
+    useExpressFeederDaily,
+    type FeederDetail,
+} from "@/hooks/api/use-express-feeder-api"
+import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card"
+import { Badge } from "@/components/ui/badge"
+import { Button } from "@/components/ui/button"
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
+import { Skeleton } from "@/components/ui/skeleton"
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog"
+import {
+    AreaChart,
+    Area,
+    BarChart,
+    Bar,
+    XAxis,
+    YAxis,
+    CartesianGrid,
+    Tooltip,
+    Legend,
+    ResponsiveContainer,
+} from "recharts"
+import {
+    ArrowDownCircle,
+    ArrowUpCircle,
+    Activity,
+    Zap,
+    TrendingUp,
+    MapPin,
+    Radio,
+    ArrowRight,
+    ChevronRight,
+    ChevronLeft,
+    Gauge,
+} from "lucide-react"
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
+import { Checkbox } from "@/components/ui/checkbox"
+import { Label } from "@/components/ui/label"
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
+import { ChevronsUpDown, Check } from "lucide-react"
+import { ExpressFeederDetail } from "@/components/dashboard/express-feeder-detail"
+
+function formatRaw(value: number): string {
+    return value.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })
+}
+
+function yAxisFormatter(value: number): string {
+    if (value === 0) return "0"
+    const abs = Math.abs(value)
+    if (abs >= 1_000_000) return `${(value / 1_000_000).toFixed(1)}M`
+    if (abs >= 1_000) return `${(value / 1_000).toFixed(1)}k`
+    return value.toFixed(0)
+}
+
+function SummaryCard({
+                         title,
+                         value,
+                         unit,
+                         icon: Icon,
+                         color,
+                         sub,
+                     }: {
+    title: string
+    value: string
+    unit?: string
+    icon: React.ComponentType<{ className?: string }>
+    color: string
+    sub?: string
+}) {
+    return (
+        <Card>
+            <CardContent className="pt-6">
+                <div className="flex items-start justify-between">
+                    <div className="flex-1 min-w-0">
+                        <p className="text-sm font-medium text-muted-foreground">{title}</p>
+                        <p className={`text-2xl font-bold mt-1 tabular-nums ${color}`}>
+                            {value}
+                            {unit && <span className="text-sm font-normal text-muted-foreground ml-1">{unit}</span>}
+                        </p>
+                        {sub && <p className="text-xs text-muted-foreground mt-1">{sub}</p>}
+                    </div>
+                    <div className="p-2 rounded-lg bg-muted">
+                        <Icon className={`h-5 w-5 ${color}`} />
+                    </div>
+                </div>
+            </CardContent>
+        </Card>
+    )
+}
+
+/** Two-row meter cell: shows import and export for one meter end */
+function MeterCell({ label, importKwh, exportKwh, net }: { label: string; importKwh: number; exportKwh: number; net: number }) {
+    return (
+        <div className="space-y-0.5">
+            <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-1">{label}</p>
+            <div className="flex items-center gap-1">
+                <span className="text-[11px] text-muted-foreground w-14">Import:</span>
+                <span className="text-xs font-semibold text-green-700 tabular-nums">{formatRaw(importKwh)}</span>
+            </div>
+            <div className="flex items-center gap-1">
+                <span className="text-[11px] text-muted-foreground w-14">Export:</span>
+                <span className="text-xs font-semibold text-blue-700 tabular-nums">{formatRaw(exportKwh)}</span>
+            </div>
+            <div className="flex items-center gap-1">
+                <span className="text-[11px] text-muted-foreground w-14">Net:</span>
+                <span className={`text-xs font-bold tabular-nums ${net >= 0 ? "text-green-700" : "text-red-600"}`}>{formatRaw(net)}</span>
+            </div>
+        </div>
+    )
+}
+
+export function ExpressFeederTab() {
+    const { filters, updateFilter } = useAppStore()
+    const [activeView, setActiveView] = useState<"overview" | "feeders" | "stations">("overview")
+    const [selectedFeeder, setSelectedFeeder] = useState<FeederDetail | null>(null)
+
+    useEffect(() => {
+        updateFilter("activeTab", "express-feeders")
+    }, [])
+
+    const [pageSize, setPageSize] = useState(10)
+    const [currentPage, setCurrentPage] = useState(1)
+
+    // Feeder chart selector
+    const [selectedChartFeeders, setSelectedChartFeeders] = useState<Set<string>>(new Set())
+    const [showCumulative, setShowCumulative] = useState(false)
+    const [feederSelectorOpen, setFeederSelectorOpen] = useState(false)
+
+    const params = useMemo(
+        () => ({
+            dateFrom: filters.dateRange ? formatApiDate(filters.dateRange.start) : "",
+            dateTo: filters.dateRange ? formatApiDate(filters.dateRange.end) : "",
+            regions: filters.regions || [],
+            districts: filters.districts || [],
+            stations: filters.stations || [],
+            boundaryMeteringPoints: filters.boundaryMeteringPoints || [],
+            voltages: (filters.voltages || []).map(String),
+        }),
+        [filters],
+    )
+
+    const { data: aggregate, isLoading: aggregateLoading } = useExpressFeederAggregate(params)
+    const { data: rawDaily, isLoading: dailyLoading } = useExpressFeederDaily(params)
+
+    const dailyData: any[] = Array.isArray(rawDaily)
+        ? rawDaily
+        : Array.isArray((rawDaily as any)?.data)
+            ? (rawDaily as any).data
+            : []
+
+    // Daily chart grouped by date — new API has nested sending_meter / receiving_meter objects
+    const dailyChartData = useMemo(() => {
+        const dateMap = new Map<string, { date: string; import: number; export: number; net: number }>()
+        dailyData.forEach((record: any) => {
+            const date = (record.consumption_date ?? record.group_period)?.split("T")[0]
+            if (!date) return
+            if (!dateMap.has(date)) dateMap.set(date, { date, import: 0, export: 0, net: 0 })
+            const entry = dateMap.get(date)!
+            entry.import += (record.sending_meter?.import_kwh || 0) + (record.receiving_meter?.import_kwh || 0)
+            entry.export += (record.sending_meter?.export_kwh || 0) + (record.receiving_meter?.export_kwh || 0)
+            entry.net = entry.import - entry.export
+        })
+        return Array.from(dateMap.values()).sort((a, b) => a.date.localeCompare(b.date))
+    }, [dailyData])
+
+    // All feeder names for the selector
+    const allFeederNames = useMemo(
+        () => (aggregate?.feederBreakdown || []).map((f) => f.feederName),
+        [aggregate]
+    )
+
+    const toggleChartFeeder = (name: string) => {
+        setSelectedChartFeeders((prev) => {
+            const next = new Set(prev)
+            if (next.has(name)) next.delete(name)
+            else next.add(name)
+            return next
+        })
+    }
+
+    // Feeder bar chart — filtered by selection (show all if none selected)
+    const feederChartData = useMemo(() => {
+        if (!aggregate?.feederBreakdown) return []
+        const all = aggregate.feederBreakdown.map((f) => ({
+            name: f.feederName,
+            "Sending Import": f.sendingMeter.importKwh,
+            "Sending Export": f.sendingMeter.exportKwh,
+            "Receiving Import": f.receivingMeter.importKwh,
+            "Receiving Export": f.receivingMeter.exportKwh,
+        }))
+        if (selectedChartFeeders.size === 0) return all
+        return all.filter((d) => selectedChartFeeders.has(d.name))
+    }, [aggregate, selectedChartFeeders])
+
+    // Cumulative data: sum all selected feeders per day — separate import and export series
+    const cumulativeChartData = useMemo(() => {
+        if (!showCumulative || selectedChartFeeders.size < 2) return []
+        const dateMap = new Map<string, { import: number; export: number }>()
+        dailyData.forEach((r: any) => {
+            const feederName = r.feeder_name
+            if (!selectedChartFeeders.has(feederName)) return
+            const date = (r.consumption_date ?? r.group_period)?.split("T")[0]
+            if (!date) return
+            if (!dateMap.has(date)) dateMap.set(date, { import: 0, export: 0 })
+            const entry = dateMap.get(date)!
+            entry.import += (r.sending_meter?.import_kwh || 0) + (r.receiving_meter?.import_kwh || 0)
+            entry.export += (r.sending_meter?.export_kwh || 0) + (r.receiving_meter?.export_kwh || 0)
+        })
+        return Array.from(dateMap.entries())
+            .sort(([a], [b]) => a.localeCompare(b))
+            .map(([date, v]) => ({ date, "Combined Import": v.import, "Combined Export": v.export }))
+    }, [dailyData, selectedChartFeeders, showCumulative])
+
+
+
+    // Sending station chart
+    const sendingChartData = useMemo(() => {
+        if (!aggregate?.sendingStationBreakdown) return []
+        return aggregate.sendingStationBreakdown.map((s) => ({
+            name: s.station,
+            import: s.import,
+            export: s.export,
+        }))
+    }, [aggregate])
+
+    const isLoading = aggregateLoading || dailyLoading
+
+    if (isLoading) {
+        return (
+            <div className="space-y-6">
+                <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                    {Array.from({ length: 4 }).map((_, i) => (
+                        <Card key={i}>
+                            <CardContent className="pt-6">
+                                <Skeleton className="h-4 w-24 mb-2" />
+                                <Skeleton className="h-8 w-32" />
+                            </CardContent>
+                        </Card>
+                    ))}
+                </div>
+                <Skeleton className="h-64 w-full" />
+            </div>
+        )
+    }
+
+    return (
+        <div className="space-y-6">
+            {/* Summary Cards */}
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                <SummaryCard
+                    title="Total Import"
+                    value={formatRaw(aggregate?.totalImportKwh || 0)}
+                    unit="kWh"
+                    icon={ArrowDownCircle}
+                    color="text-green-600"
+                    sub="Across all feeder meters"
+                />
+                <SummaryCard
+                    title="Total Export"
+                    value={formatRaw(aggregate?.totalExportKwh || 0)}
+                    unit="kWh"
+                    icon={ArrowUpCircle}
+                    color="text-blue-600"
+                    sub="Across all feeder meters"
+                />
+                <SummaryCard
+                    title="Net Energy"
+                    value={formatRaw(aggregate?.netKwh || 0)}
+                    unit="kWh"
+                    icon={Activity}
+                    color={(aggregate?.netKwh || 0) >= 0 ? "text-green-600" : "text-red-600"}
+                    sub="Import minus export"
+                />
+                <SummaryCard
+                    title="Unique Feeders"
+                    value={`${aggregate?.uniqueFeederCount ?? 0}`}
+                    unit="feeders"
+                    icon={Radio}
+                    color="text-orange-600"
+                    sub={`${(aggregate?.uniqueFeederCount ?? 0) * 2} meters (2 per feeder)`}
+                />
+            </div>
+
+            {/* Tabs */}
+            <Tabs value={activeView} onValueChange={(v) => setActiveView(v as any)}>
+                <TabsList>
+                    <TabsTrigger value="overview">Daily Trends</TabsTrigger>
+                    <TabsTrigger value="feeders">Feeder Breakdown</TabsTrigger>
+                    <TabsTrigger value="stations">Station Breakdown</TabsTrigger>
+                </TabsList>
+
+                {/* Daily Trends */}
+                <TabsContent value="overview" className="mt-4 space-y-4">
+                    <Card>
+                        <CardHeader>
+                            <CardTitle className="flex items-center gap-2">
+                                <TrendingUp className="h-4 w-4" />
+                                Daily Energy Flow Trends
+                            </CardTitle>
+                            <CardDescription>Aggregate import and export across all feeder meters over the selected period</CardDescription>
+                        </CardHeader>
+                        <CardContent>
+                            {dailyChartData.length === 0 ? (
+                                <div className="h-64 flex items-center justify-center text-muted-foreground text-sm">
+                                    No daily data available for the selected period.
+                                </div>
+                            ) : (
+                                <ResponsiveContainer width="100%" height={300}>
+                                    <AreaChart data={dailyChartData} margin={{ top: 5, right: 20, left: 0, bottom: 5 }}>
+                                        <defs>
+                                            <linearGradient id="efImportGrad" x1="0" y1="0" x2="0" y2="1">
+                                                <stop offset="5%" stopColor="#16a34a" stopOpacity={0.2} />
+                                                <stop offset="95%" stopColor="#16a34a" stopOpacity={0} />
+                                            </linearGradient>
+                                            <linearGradient id="efExportGrad" x1="0" y1="0" x2="0" y2="1">
+                                                <stop offset="5%" stopColor="#2563eb" stopOpacity={0.2} />
+                                                <stop offset="95%" stopColor="#2563eb" stopOpacity={0} />
+                                            </linearGradient>
+                                        </defs>
+                                        <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
+                                        <XAxis
+                                            dataKey="date"
+                                            className="text-xs"
+                                            tickFormatter={(v) => {
+                                                const d = new Date(v)
+                                                return `${d.getDate()} ${d.toLocaleString("default", { month: "short" })}`
+                                            }}
+                                            interval="preserveStartEnd"
+                                        />
+                                        <YAxis
+                                            className="text-xs"
+                                            tickFormatter={yAxisFormatter}
+                                            tickCount={5}
+                                            domain={["auto", "auto"]}
+                                            type="number"
+                                        />
+                                        <Tooltip
+                                            formatter={(value: number, name: string) => [
+                                                `${formatRaw(value)} kWh`,
+                                                name === "import" ? "Import" : name === "export" ? "Export" : "Net",
+                                            ]}
+                                            labelFormatter={(label) => {
+                                                const d = new Date(label)
+                                                return d.toLocaleDateString("default", { weekday: "short", day: "numeric", month: "short", year: "numeric" })
+                                            }}
+                                        />
+                                        <Legend />
+                                        <Area type="monotone" dataKey="import" name="Import" stroke="#16a34a" strokeWidth={2} fill="url(#efImportGrad)" dot={false} />
+                                        <Area type="monotone" dataKey="export" name="Export" stroke="#2563eb" strokeWidth={2} fill="url(#efExportGrad)" dot={false} />
+                                    </AreaChart>
+                                </ResponsiveContainer>
+                            )}
+                        </CardContent>
+                    </Card>
+                </TabsContent>
+
+                {/* Feeder Breakdown */}
+                <TabsContent value="feeders" className="mt-4 space-y-4">
+                    {/* Chart with feeder selector */}
+                    <Card>
+                        <CardHeader>
+                            <div className="flex flex-col gap-3">
+                                <div className="flex items-start justify-between gap-4">
+                                    <div>
+                                        <CardTitle className="flex items-center gap-2">
+                                            <Zap className="h-4 w-4" />
+                                            All Feeders — Meter-Level Import / Export
+                                        </CardTitle>
+                                        <CardDescription className="mt-1">
+                                            Select feeders to compare. Shows all feeders when none are selected.
+                                        </CardDescription>
+                                    </div>
+
+                                    {/* Multi-select feeder dropdown */}
+                                    <Popover open={feederSelectorOpen} onOpenChange={setFeederSelectorOpen}>
+                                        <PopoverTrigger asChild>
+                                            <Button variant="outline" size="sm" className="min-w-48 justify-between shrink-0">
+                        <span className="truncate">
+                          {selectedChartFeeders.size === 0
+                              ? "All feeders"
+                              : selectedChartFeeders.size === 1
+                                  ? Array.from(selectedChartFeeders)[0]
+                                  : `${selectedChartFeeders.size} feeders selected`}
+                        </span>
+                                                <ChevronsUpDown className="h-3.5 w-3.5 ml-2 opacity-50 shrink-0" />
+                                            </Button>
+                                        </PopoverTrigger>
+                                        <PopoverContent className="w-72 p-2" align="end">
+                                            <div className="flex items-center justify-between px-2 py-1 mb-1">
+                                                <span className="text-xs font-semibold text-muted-foreground">Select feeders</span>
+                                                {selectedChartFeeders.size > 0 && (
+                                                    <button
+                                                        className="text-xs text-muted-foreground hover:text-foreground underline"
+                                                        onClick={() => setSelectedChartFeeders(new Set())}
+                                                    >
+                                                        Clear all
+                                                    </button>
+                                                )}
+                                            </div>
+                                            <div className="max-h-64 overflow-y-auto space-y-0.5">
+                                                {allFeederNames.map((name) => (
+                                                    <div
+                                                        key={name}
+                                                        className="flex items-center gap-2 px-2 py-1.5 rounded hover:bg-muted cursor-pointer"
+                                                        onClick={() => toggleChartFeeder(name)}
+                                                    >
+                                                        <Checkbox
+                                                            checked={selectedChartFeeders.has(name)}
+                                                            onCheckedChange={() => toggleChartFeeder(name)}
+                                                            className="shrink-0"
+                                                        />
+                                                        <span className="text-sm truncate">{name}</span>
+                                                        {selectedChartFeeders.has(name) && (
+                                                            <Check className="h-3.5 w-3.5 ml-auto shrink-0 text-primary" />
+                                                        )}
+                                                    </div>
+                                                ))}
+                                            </div>
+                                        </PopoverContent>
+                                    </Popover>
+                                </div>
+
+                                {/* Cumulate checkbox — only show when 2+ feeders selected */}
+                                {selectedChartFeeders.size >= 2 && (
+                                    <div className="flex items-center gap-2 border-t pt-3">
+                                        <Checkbox
+                                            id="feeder-cumulate"
+                                            checked={showCumulative}
+                                            onCheckedChange={(checked) => setShowCumulative(!!checked)}
+                                        />
+                                        <Label htmlFor="feeder-cumulate" className="text-sm font-normal cursor-pointer">
+                                            Show cumulative (combined daily total) instead of individual feeders
+                                        </Label>
+                                    </div>
+                                )}
+                            </div>
+                        </CardHeader>
+                        <CardContent>
+                            {/* Bar chart — always the default: all feeders, filtered selection, or single feeder */}
+                            {!showCumulative && (
+                                feederChartData.length === 0 ? (
+                                    <div className="h-64 flex items-center justify-center text-muted-foreground text-sm">
+                                        No feeder data available.
+                                    </div>
+                                ) : (
+                                    <ResponsiveContainer width="100%" height={Math.max(320, feederChartData.length * 28 + 80)}>
+                                        <BarChart data={feederChartData} margin={{ top: 5, right: 20, left: 0, bottom: feederChartData.length > 4 ? 60 : 20 }}>
+                                            <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
+                                            <XAxis dataKey="name" className="text-xs" angle={feederChartData.length > 4 ? -40 : 0} textAnchor={feederChartData.length > 4 ? "end" : "middle"} interval={0} tick={{ fontSize: 11 }} />
+                                            <YAxis className="text-xs" tickFormatter={yAxisFormatter} tickCount={5} />
+                                            <Tooltip formatter={(value: number, name: string) => [`${formatRaw(value)} kWh`, name]} />
+                                            <Legend />
+                                            <Bar dataKey="Sending Import" fill="#16a34a" radius={[2, 2, 0, 0]} />
+                                            <Bar dataKey="Sending Export" fill="#86efac" radius={[2, 2, 0, 0]} />
+                                            <Bar dataKey="Receiving Import" fill="#2563eb" radius={[2, 2, 0, 0]} />
+                                            <Bar dataKey="Receiving Export" fill="#93c5fd" radius={[2, 2, 0, 0]} />
+                                        </BarChart>
+                                    </ResponsiveContainer>
+                                )
+                            )}
+
+                            {/* 2+ feeders, cumulative — two area series: combined import + combined export */}
+                            {selectedChartFeeders.size >= 2 && showCumulative && (
+                                cumulativeChartData.length === 0 ? (
+                                    <div className="h-64 flex items-center justify-center text-muted-foreground text-sm">
+                                        No daily data for selected feeders.
+                                    </div>
+                                ) : (
+                                    <ResponsiveContainer width="100%" height={320}>
+                                        <AreaChart data={cumulativeChartData} margin={{ top: 5, right: 20, left: 0, bottom: 5 }}>
+                                            <defs>
+                                                <linearGradient id="cumImportGrad" x1="0" y1="0" x2="0" y2="1">
+                                                    <stop offset="5%" stopColor="#16a34a" stopOpacity={0.25} />
+                                                    <stop offset="95%" stopColor="#16a34a" stopOpacity={0} />
+                                                </linearGradient>
+                                                <linearGradient id="cumExportGrad" x1="0" y1="0" x2="0" y2="1">
+                                                    <stop offset="5%" stopColor="#2563eb" stopOpacity={0.25} />
+                                                    <stop offset="95%" stopColor="#2563eb" stopOpacity={0} />
+                                                </linearGradient>
+                                            </defs>
+                                            <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
+                                            <XAxis
+                                                dataKey="date"
+                                                className="text-xs"
+                                                tickFormatter={(v) => { const d = new Date(v); return `${d.getDate()} ${d.toLocaleString("default", { month: "short" })}` }}
+                                                interval="preserveStartEnd"
+                                            />
+                                            <YAxis className="text-xs" tickFormatter={yAxisFormatter} tickCount={5} />
+                                            <Tooltip
+                                                formatter={(value: number, name: string) => [`${formatRaw(value)} kWh`, name]}
+                                                labelFormatter={(l) => new Date(l).toLocaleDateString("default", { weekday: "short", day: "numeric", month: "short" })}
+                                            />
+                                            <Legend />
+                                            <Area type="monotone" dataKey="Combined Import" stroke="#16a34a" strokeWidth={2} fill="url(#cumImportGrad)" dot={false} />
+                                            <Area type="monotone" dataKey="Combined Export" stroke="#2563eb" strokeWidth={2} fill="url(#cumExportGrad)" dot={false} />
+                                        </AreaChart>
+                                    </ResponsiveContainer>
+                                )
+                            )}
+
+
+                        </CardContent>
+                    </Card>
+
+                    {/* Feeder table with per-meter columns */}
+                    <Card>
+                        <CardHeader>
+                            <CardTitle>All Feeders</CardTitle>
+                            <CardDescription>
+                                Click a feeder row to view detailed meter-level insights. Each feeder has one sending meter and one receiving meter — each with import and export readings.
+                            </CardDescription>
+                        </CardHeader>
+                        <CardContent className="p-0">
+                            <div className="overflow-auto max-h-[560px]">
+                                <Table>
+                                    <TableHeader className="sticky top-0 bg-background z-10">
+                                        <TableRow>
+                                            <TableHead className="w-8">#</TableHead>
+                                            <TableHead>Feeder</TableHead>
+                                            <TableHead>Route</TableHead>
+                                            <TableHead className="text-center border-l bg-green-50/50 dark:bg-green-950/20" colSpan={3}>
+                                                <span className="text-green-800 dark:text-green-400 text-xs font-semibold">Sending Meter</span>
+                                            </TableHead>
+                                            <TableHead className="text-center border-l bg-blue-50/50 dark:bg-blue-950/20" colSpan={3}>
+                                                <span className="text-blue-800 dark:text-blue-400 text-xs font-semibold">Receiving Meter</span>
+                                            </TableHead>
+                                            <TableHead className="text-right border-l">Total Import</TableHead>
+                                            <TableHead className="text-right">Total Export</TableHead>
+                                            <TableHead className="text-right">Net kWh</TableHead>
+                                            <TableHead className="w-8"></TableHead>
+                                        </TableRow>
+                                        <TableRow className="bg-muted/30">
+                                            <TableHead />
+                                            <TableHead />
+                                            <TableHead />
+                                            <TableHead className="text-right text-[11px] text-green-700 border-l">Import</TableHead>
+                                            <TableHead className="text-right text-[11px] text-green-700">Export</TableHead>
+                                            <TableHead className="text-right text-[11px] text-green-700">Net</TableHead>
+                                            <TableHead className="text-right text-[11px] text-blue-700 border-l">Import</TableHead>
+                                            <TableHead className="text-right text-[11px] text-blue-700">Export</TableHead>
+                                            <TableHead className="text-right text-[11px] text-blue-700">Net</TableHead>
+                                            <TableHead className="border-l" />
+                                            <TableHead />
+                                            <TableHead />
+                                            <TableHead />
+                                        </TableRow>
+                                    </TableHeader>
+                                    <TableBody>
+                                        {(aggregate?.feederBreakdown || [])
+                                            .slice((currentPage - 1) * pageSize, currentPage * pageSize)
+                                            .map((feeder, idx) => (
+                                                <TableRow
+                                                    key={feeder.feederName}
+                                                    className="cursor-pointer hover:bg-muted/50 transition-colors"
+                                                    onClick={() => setSelectedFeeder(feeder)}
+                                                >
+                                                    <TableCell className="text-muted-foreground text-sm">{(currentPage - 1) * pageSize + idx + 1}</TableCell>
+                                                    <TableCell>
+                                                        <div className="flex items-center gap-2">
+                                                            <span className="font-medium text-sm">{feeder.feederName}</span>
+                                                            <Link
+                                                                href={`/express-feeders/${encodeURIComponent(feeder.feederName)}`}
+                                                                onClick={(e) => e.stopPropagation()}
+                                                                className="text-xs text-blue-600 hover:underline shrink-0"
+                                                            >
+                                                                View
+                                                            </Link>
+                                                        </div>
+                                                        {feeder.isCrossRegion && (
+                                                            <Badge variant="secondary" className="text-xs mt-0.5">Cross-Region</Badge>
+                                                        )}
+                                                    </TableCell>
+                                                    <TableCell>
+                                                        <div className="flex items-center gap-1 text-xs">
+                                                            <div className="text-right">
+                                                                <div className="font-medium">{feeder.sendingMeter.station}</div>
+                                                                <div className="text-muted-foreground">{feeder.sendingMeter.region}</div>
+                                                            </div>
+                                                            <ArrowRight className="h-3 w-3 text-muted-foreground shrink-0" />
+                                                            <div>
+                                                                <div className="font-medium">{feeder.receivingMeter.station}</div>
+                                                                <div className="text-muted-foreground">{feeder.receivingMeter.region}</div>
+                                                            </div>
+                                                        </div>
+                                                        <div className="text-xs text-muted-foreground font-mono mt-1">
+                                                            {feeder.sendingMeter.meterNumber || "NO METER"} / {feeder.receivingMeter.meterNumber || "NO METER"}
+                                                        </div>
+                                                    </TableCell>
+                                                    {/* Sending meter readings */}
+                                                    <TableCell className="text-right tabular-nums text-green-700 font-semibold border-l text-xs">
+                                                        {formatRaw(feeder.sendingMeter.importKwh)}
+                                                    </TableCell>
+                                                    <TableCell className="text-right tabular-nums text-blue-700 font-semibold text-xs">
+                                                        {formatRaw(feeder.sendingMeter.exportKwh)}
+                                                    </TableCell>
+                                                    <TableCell className={`text-right tabular-nums font-bold text-xs ${feeder.sendingMeter.netKwh >= 0 ? "text-green-700" : "text-red-600"}`}>
+                                                        {formatRaw(feeder.sendingMeter.netKwh)}
+                                                    </TableCell>
+                                                    {/* Receiving meter readings */}
+                                                    <TableCell className="text-right tabular-nums text-green-700 font-semibold border-l text-xs">
+                                                        {formatRaw(feeder.receivingMeter.importKwh)}
+                                                    </TableCell>
+                                                    <TableCell className="text-right tabular-nums text-blue-700 font-semibold text-xs">
+                                                        {formatRaw(feeder.receivingMeter.exportKwh)}
+                                                    </TableCell>
+                                                    <TableCell className={`text-right tabular-nums font-bold text-xs ${feeder.receivingMeter.netKwh >= 0 ? "text-green-700" : "text-red-600"}`}>
+                                                        {formatRaw(feeder.receivingMeter.netKwh)}
+                                                    </TableCell>
+                                                    {/* Totals */}
+                                                    <TableCell className="text-right tabular-nums text-green-700 font-semibold border-l text-sm">
+                                                        {formatRaw(feeder.totalImport)}
+                                                    </TableCell>
+                                                    <TableCell className="text-right tabular-nums text-blue-700 font-semibold text-sm">
+                                                        {formatRaw(feeder.totalExport)}
+                                                    </TableCell>
+                                                    <TableCell className={`text-right tabular-nums font-bold text-sm ${feeder.netKwh >= 0 ? "text-green-700" : "text-red-600"}`}>
+                                                        {formatRaw(feeder.netKwh)}
+                                                    </TableCell>
+                                                    <TableCell>
+                                                        <ChevronRight className="h-4 w-4 text-muted-foreground" />
+                                                    </TableCell>
+                                                </TableRow>
+                                            ))}
+                                        {(aggregate?.feederBreakdown || []).length === 0 && (
+                                            <TableRow>
+                                                <TableCell colSpan={13} className="text-center text-muted-foreground py-8">
+                                                    No feeder data available.
+                                                </TableCell>
+                                            </TableRow>
+                                        )}
+                                    </TableBody>
+                                </Table>
+                            </div>
+
+                            {/* Pagination controls */}
+                            {(aggregate?.feederBreakdown || []).length > 0 && (() => {
+                                const total = aggregate!.feederBreakdown.length
+                                const totalPages = Math.ceil(total / pageSize)
+                                const start = (currentPage - 1) * pageSize + 1
+                                const end = Math.min(currentPage * pageSize, total)
+                                return (
+                                    <div className="flex items-center justify-between px-4 py-3 border-t">
+                                        <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                                            <span>Rows per page:</span>
+                                            <Select
+                                                value={String(pageSize)}
+                                                onValueChange={(v) => {
+                                                    setPageSize(Number(v))
+                                                    setCurrentPage(1)
+                                                }}
+                                            >
+                                                <SelectTrigger className="h-8 w-20">
+                                                    <SelectValue />
+                                                </SelectTrigger>
+                                                <SelectContent>
+                                                    {[10, 20, 50, 100].map((n) => (
+                                                        <SelectItem key={n} value={String(n)}>{n}</SelectItem>
+                                                    ))}
+                                                </SelectContent>
+                                            </Select>
+                                        </div>
+                                        <div className="flex items-center gap-3 text-sm">
+                      <span className="text-muted-foreground">
+                        {start}–{end} of {total}
+                      </span>
+                                            <div className="flex items-center gap-1">
+                                                <Button
+                                                    variant="outline"
+                                                    size="sm"
+                                                    className="h-8 w-8 p-0"
+                                                    disabled={currentPage === 1}
+                                                    onClick={() => setCurrentPage((p) => p - 1)}
+                                                >
+                                                    <ChevronLeft className="h-4 w-4" />
+                                                </Button>
+                                                <span className="text-muted-foreground px-1">
+                          Page {currentPage} of {totalPages}
+                        </span>
+                                                <Button
+                                                    variant="outline"
+                                                    size="sm"
+                                                    className="h-8 w-8 p-0"
+                                                    disabled={currentPage === totalPages}
+                                                    onClick={() => setCurrentPage((p) => p + 1)}
+                                                >
+                                                    <ChevronRight className="h-4 w-4" />
+                                                </Button>
+                                            </div>
+                                        </div>
+                                    </div>
+                                )
+                            })()}
+                        </CardContent>
+                    </Card>
+                </TabsContent>
+
+                {/* Station Breakdown */}
+                <TabsContent value="stations" className="mt-4 space-y-4">
+                    <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+                        {/* Sending Stations */}
+                        <Card>
+                            <CardHeader>
+                                <CardTitle className="flex items-center gap-2">
+                                    <MapPin className="h-4 w-4 text-orange-600" />
+                                    Sending Stations
+                                </CardTitle>
+                                <CardDescription>Energy originating from each sending station. A station may have multiple feeders.</CardDescription>
+                            </CardHeader>
+                            <CardContent>
+                                {sendingChartData.length > 0 && (
+                                    <ResponsiveContainer width="100%" height={200}>
+                                        <BarChart data={sendingChartData} margin={{ top: 5, right: 10, left: 0, bottom: 30 }}>
+                                            <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
+                                            <XAxis dataKey="name" className="text-xs" angle={-30} textAnchor="end" interval={0} />
+                                            <YAxis className="text-xs" tickFormatter={yAxisFormatter} tickCount={5} />
+                                            <Tooltip formatter={(v: number, name: string) => [`${formatRaw(v)} kWh`, name === "import" ? "Import" : "Export"]} />
+                                            <Legend />
+                                            <Bar dataKey="import" name="Import" fill="#f97316" radius={[3, 3, 0, 0]} />
+                                            <Bar dataKey="export" name="Export" fill="#fdba74" radius={[3, 3, 0, 0]} />
+                                        </BarChart>
+                                    </ResponsiveContainer>
+                                )}
+                                <div className="mt-4 space-y-2">
+                                    {(aggregate?.sendingStationBreakdown || []).map((s, idx) => (
+                                        <div key={s.station} className="flex items-start justify-between py-2 border-b last:border-0">
+                                            <div>
+                                                <div className="flex items-center gap-2">
+                                                    <span className="text-xs font-bold text-muted-foreground w-5">{idx + 1}</span>
+                                                    <span className="font-medium text-sm">{s.station}</span>
+                                                    <Badge variant="outline" className="text-xs">{s.feederCount} {s.feederCount === 1 ? "feeder" : "feeders"}</Badge>
+                                                </div>
+                                                <p className="text-xs text-muted-foreground ml-7">{s.district}, {s.region}</p>
+                                            </div>
+                                            <div className="text-right text-xs space-y-0.5">
+                                                <p className="font-semibold text-green-700 tabular-nums">{formatRaw(s.import)} kWh import</p>
+                                                <p className="font-semibold text-blue-700 tabular-nums">{formatRaw(s.export)} kWh export</p>
+                                                <p className={`font-bold tabular-nums ${s.net >= 0 ? "text-green-700" : "text-red-600"}`}>{formatRaw(s.net)} net</p>
+                                            </div>
+                                        </div>
+                                    ))}
+                                    {(aggregate?.sendingStationBreakdown || []).length === 0 && (
+                                        <p className="text-center text-muted-foreground text-sm py-4">No data available.</p>
+                                    )}
+                                </div>
+                            </CardContent>
+                        </Card>
+
+                        {/* Receiving Stations */}
+                        <Card>
+                            <CardHeader>
+                                <CardTitle className="flex items-center gap-2">
+                                    <MapPin className="h-4 w-4 text-purple-600" />
+                                    Receiving Stations
+                                </CardTitle>
+                                <CardDescription>Energy arriving at each destination station. Feeders may cross regions.</CardDescription>
+                            </CardHeader>
+                            <CardContent>
+                                <div className="space-y-2">
+                                    {(aggregate?.receivingStationBreakdown || []).map((s, idx) => (
+                                        <div key={s.station} className="flex items-start justify-between py-2 border-b last:border-0">
+                                            <div>
+                                                <div className="flex items-center gap-2 flex-wrap">
+                                                    <span className="text-xs font-bold text-muted-foreground w-5">{idx + 1}</span>
+                                                    <span className="font-medium text-sm">{s.station}</span>
+                                                    <Badge variant="outline" className="text-xs">{s.feederCount} {s.feederCount === 1 ? "feeder" : "feeders"}</Badge>
+                                                    <Badge variant="outline" className="text-xs">{s.type}</Badge>
+                                                </div>
+                                                <p className="text-xs text-muted-foreground ml-7">{s.region}</p>
+                                            </div>
+                                            <div className="text-right text-xs space-y-0.5">
+                                                <p className="font-semibold text-green-700 tabular-nums">{formatRaw(s.import)} kWh import</p>
+                                                <p className="font-semibold text-blue-700 tabular-nums">{formatRaw(s.export)} kWh export</p>
+                                                <p className={`font-bold tabular-nums ${s.net >= 0 ? "text-green-700" : "text-red-600"}`}>{formatRaw(s.net)} net</p>
+                                            </div>
+                                        </div>
+                                    ))}
+                                    {(aggregate?.receivingStationBreakdown || []).length === 0 && (
+                                        <p className="text-center text-muted-foreground text-sm py-4">No data available.</p>
+                                    )}
+                                </div>
+                            </CardContent>
+                        </Card>
+                    </div>
+                </TabsContent>
+            </Tabs>
+
+            {/* Feeder Detail Dialog */}
+            <Dialog open={!!selectedFeeder} onOpenChange={(open) => { if (!open) setSelectedFeeder(null) }}>
+                <DialogContent className="!max-w-5xl w-full max-h-[90vh] overflow-y-auto">
+                    <DialogHeader>
+                        <DialogTitle className="flex items-center gap-2">
+                            <Gauge className="h-5 w-5 text-orange-600" />
+                            {selectedFeeder?.feederName}
+                        </DialogTitle>
+                        <DialogDescription>
+                            Meter-level detail for this express feeder — sending and receiving ends with import / export readings.
+                        </DialogDescription>
+                    </DialogHeader>
+                    {selectedFeeder && (
+                        <ExpressFeederDetail feeder={selectedFeeder} dailyData={dailyData} />
+                    )}
+                </DialogContent>
+            </Dialog>
+        </div>
+    )
+}

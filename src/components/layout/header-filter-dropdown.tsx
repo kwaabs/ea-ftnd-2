@@ -23,14 +23,22 @@ export function HeaderFilterDropdown() {
     const isBoundaryDetailsPage = pathname?.startsWith("/regional-boundary/") || pathname?.startsWith("/district-boundary/")
     const isRegionDetailsPage = pathname?.startsWith("/regions/") && pathname.split("/").length === 3
     const isDistrictDetailsPage = pathname?.startsWith("/districts/") && pathname.split("/").length === 3
-    const isDateOnlyPage = isMeterDetailsPage || isStationDetailsPage || isBoundaryDetailsPage || isRegionDetailsPage || isDistrictDetailsPage
+    const isExpressFeederDetailPage = (pathname?.startsWith("/express-feeders/") && pathname.split("/").length === 3)
+        || (pathname?.startsWith("/meter-category/express-feeder/"))
+    const isDateOnlyPage = isMeterDetailsPage || isStationDetailsPage || isBoundaryDetailsPage || isRegionDetailsPage || isDistrictDetailsPage || isExpressFeederDetailPage
 
     // Regions overview page — show only date + region filters
     const isRegionsOverviewPage = pathname === "/regions"
 
+    // Express feeders overview page — show only date + region + station filters
+
     const meterCategory = pathname?.includes("/meter-category/")
         ? pathname.split("/meter-category/")[1]?.split("/")[0]
         : null
+
+    // Matches both /express-feeders and /meter-category/express-feeder
+    const isExpressFeedersPage = pathname === "/express-feeders" || meterCategory === "express-feeder"
+
 
     // Map meterCategory to activeTab expected by the hook
     const getActiveTab = () => {
@@ -132,13 +140,13 @@ export function HeaderFilterDropdown() {
         setFilters(defaultFilters)
     }
 
-    const showMeterType = !isRegionsOverviewPage && !["bsp", "dtx", "district-boundary", "regional-boundary"].includes(meterCategory || "")
+    const showMeterType = !isRegionsOverviewPage && !isExpressFeedersPage && !["bsp", "dtx", "district-boundary", "regional-boundary"].includes(meterCategory || "")
     const showStation = !isRegionsOverviewPage && !["dtx", "district-boundary", "regional-boundary"].includes(meterCategory || "")
     const showRegion = !["district-boundary", "regional-boundary"].includes(meterCategory || "")
-    const showDistrict = !isRegionsOverviewPage && !["bsp", "district-boundary", "regional-boundary"].includes(meterCategory || "")
-    const showBoundaryPoint = !isRegionsOverviewPage && !["bsp", "dtx"].includes(meterCategory || "")
-    const showLocation = !isRegionsOverviewPage && ["district-boundary", "regional-boundary"].includes(meterCategory || "")
-    const showVoltage = !isRegionsOverviewPage && hasVoltageData
+    const showDistrict = !isRegionsOverviewPage && !isExpressFeedersPage && !["bsp", "district-boundary", "regional-boundary"].includes(meterCategory || "")
+    const showBoundaryPoint = !isRegionsOverviewPage && !isExpressFeedersPage && !["bsp", "dtx"].includes(meterCategory || "")
+    const showLocation = !isRegionsOverviewPage && !isExpressFeedersPage && ["district-boundary", "regional-boundary"].includes(meterCategory || "")
+    const showVoltage = !isRegionsOverviewPage && !isExpressFeedersPage && hasVoltageData
 
     // Transform options for react-select
     const regionOptions = (filterOptions?.regions || []).map((r) => ({ value: r, label: r }))
