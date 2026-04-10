@@ -47,6 +47,7 @@ import { Label } from "@/components/ui/label"
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
 import { ChevronsUpDown, Check } from "lucide-react"
 import { ExpressFeederDetail } from "@/components/dashboard/express-feeder-detail"
+import { ExpressFeederNetworkMap } from "@/components/dashboard/express-feeder-network-map"
 
 function formatRaw(value: number): string {
     return value.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })
@@ -119,7 +120,7 @@ function MeterCell({ label, importKwh, exportKwh, net }: { label: string; import
 
 export function ExpressFeederTab() {
     const { filters, updateFilter } = useAppStore()
-    const [activeView, setActiveView] = useState<"overview" | "feeders" | "stations">("overview")
+    const [activeView, setActiveView] = useState<"overview" | "feeders" | "stations" | "map">("overview")
     const [selectedFeeder, setSelectedFeeder] = useState<FeederDetail | null>(null)
 
     useEffect(() => {
@@ -135,15 +136,19 @@ export function ExpressFeederTab() {
     const [feederSelectorOpen, setFeederSelectorOpen] = useState(false)
 
     const params = useMemo(
-        () => ({
-            dateFrom: filters.dateRange ? formatApiDate(filters.dateRange.start) : "",
-            dateTo: filters.dateRange ? formatApiDate(filters.dateRange.end) : "",
-            regions: filters.regions || [],
-            districts: filters.districts || [],
-            stations: filters.stations || [],
-            boundaryMeteringPoints: filters.boundaryMeteringPoints || [],
-            voltages: (filters.voltages || []).map(String),
-        }),
+        () => {
+            const p = {
+                dateFrom: filters.dateRange ? formatApiDate(filters.dateRange.start) : "",
+                dateTo: filters.dateRange ? formatApiDate(filters.dateRange.end) : "",
+                regions: filters.regions || [],
+                districts: filters.districts || [],
+                stations: filters.stations || [],
+                boundaryMeteringPoints: filters.boundaryMeteringPoints || [],
+                voltages: (filters.voltages || []).map(String),
+            }
+            console.log("[v0] Express Feeder Tab - Filters applied:", p)
+            return p
+        },
         [filters],
     )
 
@@ -295,6 +300,7 @@ export function ExpressFeederTab() {
                     <TabsTrigger value="overview">Daily Trends</TabsTrigger>
                     <TabsTrigger value="feeders">Feeder Breakdown</TabsTrigger>
                     <TabsTrigger value="stations">Station Breakdown</TabsTrigger>
+                    <TabsTrigger value="map">Network Map</TabsTrigger>
                 </TabsList>
 
                 {/* Daily Trends */}
@@ -790,11 +796,16 @@ export function ExpressFeederTab() {
                         </Card>
                     </div>
                 </TabsContent>
+
+                {/* Network Map */}
+                <TabsContent value="map" className="mt-4">
+                    <ExpressFeederNetworkMap feeders={aggregate?.feederBreakdown || []} />
+                </TabsContent>
             </Tabs>
 
             {/* Feeder Detail Dialog */}
             <Dialog open={!!selectedFeeder} onOpenChange={(open) => { if (!open) setSelectedFeeder(null) }}>
-                <DialogContent className="!max-w-5xl w-full max-h-[90vh] overflow-y-auto">
+                <DialogContent className="max-w-3xl max-h-[90vh] overflow-y-auto">
                     <DialogHeader>
                         <DialogTitle className="flex items-center gap-2">
                             <Gauge className="h-5 w-5 text-orange-600" />
