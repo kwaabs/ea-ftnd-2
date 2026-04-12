@@ -896,7 +896,9 @@ export function DistrictBoundaryTab({
 
                                                 return (
                                                     <TableRow key={meter.meter_number}>
-                                                        <TableCell className="font-mono text-xs">{meter.meter_number}</TableCell>
+                                                        <TableCell className="text-sm"><Link href={`/meters/${meter.meter_number}`} className=" hover:underline">
+                                                            {meter.meter_number}
+                                                        </Link></TableCell>
                                                         <TableCell className="text-sm">{meter.boundary_metering_point || "—"}</TableCell>
                                                         <TableCell className="text-sm">{meter.location || "—"}</TableCell>
                                                         <TableCell>

@@ -34,7 +34,6 @@ import {
     Activity,
     Zap,
     TrendingUp,
-    MapPin,
     Radio,
     ArrowRight,
     ChevronRight,
@@ -48,6 +47,8 @@ import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover
 import { ChevronsUpDown, Check } from "lucide-react"
 import { ExpressFeederDetail } from "@/components/dashboard/express-feeder-detail"
 import { ExpressFeederNetworkMap } from "@/components/dashboard/express-feeder-network-map"
+import { ExpressFeederMeterStatus } from "@/components/dashboard/express-feeder-meter-status"
+import { ExpressFeederStationsTab } from "@/components/dashboard/express-feeder-stations-tab"
 
 function formatRaw(value: number): string {
     return value.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })
@@ -226,16 +227,6 @@ export function ExpressFeederTab() {
 
 
 
-    // Sending station chart
-    const sendingChartData = useMemo(() => {
-        if (!aggregate?.sendingStationBreakdown) return []
-        return aggregate.sendingStationBreakdown.map((s) => ({
-            name: s.station,
-            import: s.import,
-            export: s.export,
-        }))
-    }, [aggregate])
-
     const isLoading = aggregateLoading || dailyLoading
 
     if (isLoading) {
@@ -301,6 +292,7 @@ export function ExpressFeederTab() {
                     <TabsTrigger value="feeders">Feeder Breakdown</TabsTrigger>
                     <TabsTrigger value="stations">Station Breakdown</TabsTrigger>
                     <TabsTrigger value="map">Network Map</TabsTrigger>
+                    <TabsTrigger value="status">Meter Status</TabsTrigger>
                 </TabsList>
 
                 {/* Daily Trends */}
@@ -709,97 +701,21 @@ export function ExpressFeederTab() {
                 </TabsContent>
 
                 {/* Station Breakdown */}
-                <TabsContent value="stations" className="mt-4 space-y-4">
-                    <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-                        {/* Sending Stations */}
-                        <Card>
-                            <CardHeader>
-                                <CardTitle className="flex items-center gap-2">
-                                    <MapPin className="h-4 w-4 text-orange-600" />
-                                    Sending Stations
-                                </CardTitle>
-                                <CardDescription>Energy originating from each sending station. A station may have multiple feeders.</CardDescription>
-                            </CardHeader>
-                            <CardContent>
-                                {sendingChartData.length > 0 && (
-                                    <ResponsiveContainer width="100%" height={200}>
-                                        <BarChart data={sendingChartData} margin={{ top: 5, right: 10, left: 0, bottom: 30 }}>
-                                            <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
-                                            <XAxis dataKey="name" className="text-xs" angle={-30} textAnchor="end" interval={0} />
-                                            <YAxis className="text-xs" tickFormatter={yAxisFormatter} tickCount={5} />
-                                            <Tooltip formatter={(v: number, name: string) => [`${formatRaw(v)} kWh`, name === "import" ? "Import" : "Export"]} />
-                                            <Legend />
-                                            <Bar dataKey="import" name="Import" fill="#f97316" radius={[3, 3, 0, 0]} />
-                                            <Bar dataKey="export" name="Export" fill="#fdba74" radius={[3, 3, 0, 0]} />
-                                        </BarChart>
-                                    </ResponsiveContainer>
-                                )}
-                                <div className="mt-4 space-y-2">
-                                    {(aggregate?.sendingStationBreakdown || []).map((s, idx) => (
-                                        <div key={s.station} className="flex items-start justify-between py-2 border-b last:border-0">
-                                            <div>
-                                                <div className="flex items-center gap-2">
-                                                    <span className="text-xs font-bold text-muted-foreground w-5">{idx + 1}</span>
-                                                    <span className="font-medium text-sm">{s.station}</span>
-                                                    <Badge variant="outline" className="text-xs">{s.feederCount} {s.feederCount === 1 ? "feeder" : "feeders"}</Badge>
-                                                </div>
-                                                <p className="text-xs text-muted-foreground ml-7">{s.district}, {s.region}</p>
-                                            </div>
-                                            <div className="text-right text-xs space-y-0.5">
-                                                <p className="font-semibold text-green-700 tabular-nums">{formatRaw(s.import)} kWh import</p>
-                                                <p className="font-semibold text-blue-700 tabular-nums">{formatRaw(s.export)} kWh export</p>
-                                                <p className={`font-bold tabular-nums ${s.net >= 0 ? "text-green-700" : "text-red-600"}`}>{formatRaw(s.net)} net</p>
-                                            </div>
-                                        </div>
-                                    ))}
-                                    {(aggregate?.sendingStationBreakdown || []).length === 0 && (
-                                        <p className="text-center text-muted-foreground text-sm py-4">No data available.</p>
-                                    )}
-                                </div>
-                            </CardContent>
-                        </Card>
-
-                        {/* Receiving Stations */}
-                        <Card>
-                            <CardHeader>
-                                <CardTitle className="flex items-center gap-2">
-                                    <MapPin className="h-4 w-4 text-purple-600" />
-                                    Receiving Stations
-                                </CardTitle>
-                                <CardDescription>Energy arriving at each destination station. Feeders may cross regions.</CardDescription>
-                            </CardHeader>
-                            <CardContent>
-                                <div className="space-y-2">
-                                    {(aggregate?.receivingStationBreakdown || []).map((s, idx) => (
-                                        <div key={s.station} className="flex items-start justify-between py-2 border-b last:border-0">
-                                            <div>
-                                                <div className="flex items-center gap-2 flex-wrap">
-                                                    <span className="text-xs font-bold text-muted-foreground w-5">{idx + 1}</span>
-                                                    <span className="font-medium text-sm">{s.station}</span>
-                                                    <Badge variant="outline" className="text-xs">{s.feederCount} {s.feederCount === 1 ? "feeder" : "feeders"}</Badge>
-                                                    <Badge variant="outline" className="text-xs">{s.type}</Badge>
-                                                </div>
-                                                <p className="text-xs text-muted-foreground ml-7">{s.region}</p>
-                                            </div>
-                                            <div className="text-right text-xs space-y-0.5">
-                                                <p className="font-semibold text-green-700 tabular-nums">{formatRaw(s.import)} kWh import</p>
-                                                <p className="font-semibold text-blue-700 tabular-nums">{formatRaw(s.export)} kWh export</p>
-                                                <p className={`font-bold tabular-nums ${s.net >= 0 ? "text-green-700" : "text-red-600"}`}>{formatRaw(s.net)} net</p>
-                                            </div>
-                                        </div>
-                                    ))}
-                                    {(aggregate?.receivingStationBreakdown || []).length === 0 && (
-                                        <p className="text-center text-muted-foreground text-sm py-4">No data available.</p>
-                                    )}
-                                </div>
-                            </CardContent>
-                        </Card>
-                    </div>
+                <TabsContent value="stations" className="mt-4">
+                    <ExpressFeederStationsTab
+                        aggregate={aggregate}
+                        feeders={aggregate?.feederBreakdown || []}
+                    />
                 </TabsContent>
 
                 {/* Network Map */}
                 <TabsContent value="map" className="mt-4">
                     <ExpressFeederNetworkMap feeders={aggregate?.feederBreakdown || []} />
+                </TabsContent>
+
+                {/* Meter Status */}
+                <TabsContent value="status" className="mt-4">
+                    <ExpressFeederMeterStatus params={params} />
                 </TabsContent>
             </Tabs>
 

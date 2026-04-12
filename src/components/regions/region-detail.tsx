@@ -2489,7 +2489,7 @@ export function RegionDetail({ region }: RegionDetailProps) {
             {/*Tables */}
             <Card>
                 <CardHeader>
-                    <CardTitle>Energy Trading Regions</CardTitle>
+                    <CardTitle>Energy Trading (Regional Boundary Meters)</CardTitle>
                 </CardHeader>
                 <CardContent>
                     <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
@@ -2910,7 +2910,7 @@ export function RegionDetail({ region }: RegionDetailProps) {
                     <CardHeader>
                         <CardTitle className="flex items-center gap-2">
                             <Zap className="h-5 w-5 text-purple-600" />
-                            Express Feeder Trading
+                            Energy Trading (Express Feeders)
                         </CardTitle>
                         <CardDescription>
                             Energy exchanged with other regions via express feeders — inbound (received) and outbound (sent)
