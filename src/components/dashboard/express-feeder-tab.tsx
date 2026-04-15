@@ -827,7 +827,7 @@ export function ExpressFeederTab() {
 
             {/* Feeder Detail Dialog */}
             <Dialog open={!!selectedFeeder} onOpenChange={(open) => { if (!open) setSelectedFeeder(null) }}>
-                <DialogContent className="max-w-3xl max-h-[90vh] overflow-y-auto">
+                <DialogContent className="!max-w-3xl w-full max-h-[90vh] overflow-y-auto">
                     <DialogHeader>
                         <DialogTitle className="flex items-center gap-2">
                             <Gauge className="h-5 w-5 text-orange-600" />
