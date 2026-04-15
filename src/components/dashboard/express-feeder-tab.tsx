@@ -652,9 +652,6 @@ export function ExpressFeederTab() {
                                             <TableHead className="text-center border-l bg-blue-50/50 dark:bg-blue-950/20" colSpan={3}>
                                                 <span className="text-blue-800 dark:text-blue-400 text-xs font-semibold">Receiving Meter</span>
                                             </TableHead>
-                                            <TableHead className="text-right border-l">Total Import</TableHead>
-                                            <TableHead className="text-right">Total Export</TableHead>
-                                            <TableHead className="text-right">Net kWh</TableHead>
                                             <TableHead className="w-8"></TableHead>
                                         </TableRow>
                                         <TableRow className="bg-muted/30">
@@ -667,9 +664,6 @@ export function ExpressFeederTab() {
                                             <TableHead className="text-right text-[11px] text-blue-700 border-l">Import</TableHead>
                                             <TableHead className="text-right text-[11px] text-blue-700">Export</TableHead>
                                             <TableHead className="text-right text-[11px] text-blue-700">Net</TableHead>
-                                            <TableHead className="border-l" />
-                                            <TableHead />
-                                            <TableHead />
                                             <TableHead />
                                         </TableRow>
                                     </TableHeader>
@@ -734,16 +728,6 @@ export function ExpressFeederTab() {
                                                     <TableCell className={`text-right tabular-nums font-bold text-xs ${feeder.receivingMeter.netKwh >= 0 ? "text-green-700" : "text-red-600"}`}>
                                                         {formatRaw(feeder.receivingMeter.netKwh)}
                                                     </TableCell>
-                                                    {/* Totals */}
-                                                    <TableCell className="text-right tabular-nums text-green-700 font-semibold border-l text-sm">
-                                                        {formatRaw(feeder.totalImport)}
-                                                    </TableCell>
-                                                    <TableCell className="text-right tabular-nums text-blue-700 font-semibold text-sm">
-                                                        {formatRaw(feeder.totalExport)}
-                                                    </TableCell>
-                                                    <TableCell className={`text-right tabular-nums font-bold text-sm ${feeder.netKwh >= 0 ? "text-green-700" : "text-red-600"}`}>
-                                                        {formatRaw(feeder.netKwh)}
-                                                    </TableCell>
                                                     <TableCell>
                                                         <ChevronRight className="h-4 w-4 text-muted-foreground" />
                                                     </TableCell>
@@ -751,7 +735,7 @@ export function ExpressFeederTab() {
                                             ))}
                                         {(aggregate?.feederBreakdown || []).length === 0 && (
                                             <TableRow>
-                                                <TableCell colSpan={13} className="text-center text-muted-foreground py-8">
+                                                <TableCell colSpan={10} className="text-center text-muted-foreground py-8">
                                                     No feeder data available.
                                                 </TableCell>
                                             </TableRow>
