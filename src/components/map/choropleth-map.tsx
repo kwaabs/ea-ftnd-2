@@ -5,6 +5,8 @@ import maplibregl from "maplibre-gl"
 import "maplibre-gl/dist/maplibre-gl.css"
 import { useAllRegionsGeometry } from "@/hooks/api/use-regions-geometry-api"
 import { useBspAggregate } from "@/hooks/api/use-bsp-api"
+import { useDtxAggregate } from "@/hooks/api/use-dtx-api"
+import { useRegionalBoundaryAggregate } from "@/hooks/api/use-regional-boundary-api"
 import { useMeters } from "@/hooks/api/use-meter-api"
 import { useAppStore } from "@/stores/app-store"
 import { formatApiDate } from "@/lib/utils"
@@ -37,12 +39,43 @@ export function ChoroplethMap() {
         crossBoundary: false,
     })
 
-    // Fetch geometries and BSP energy data
+    const dateFrom = formatApiDate(filters.dateRange?.start || new Date(Date.now() - 30 * 24 * 60 * 60 * 1000))
+    const dateTo = formatApiDate(filters.dateRange?.end || new Date())
+
+    // Fetch geometries
     const { data: geometryData, isLoading: isLoadingGeometry } = useAllRegionsGeometry()
-    const { data: energyData, isLoading: isLoadingEnergy } = useBspAggregate({
-        dateFrom: formatApiDate(filters.dateRange?.start || new Date(Date.now() - 30 * 24 * 60 * 60 * 1000)),
-        dateTo: formatApiDate(filters.dateRange?.end || new Date()),
-    })
+
+    // Each meter type uses its own dedicated hook and endpoint
+    const { data: bspData, isLoading: isLoadingBsp } = useBspAggregate({ dateFrom, dateTo })
+    const { data: dtxData, isLoading: isLoadingDtx } = useDtxAggregate({ dateFrom, dateTo })
+    const { data: boundaryData, isLoading: isLoadingBoundary } = useRegionalBoundaryAggregate({ dateFrom, dateTo })
+
+    const isLoadingEnergy = isLoadingBsp || isLoadingDtx || isLoadingBoundary
+
+    // ── Per-type region lookup helpers ──────────────────────────────────────
+    // BSP: byRegion[].region is lowercased, value is supplyKwh / netSupplyKwh
+    const getBspImport = (regionName: string): number => {
+        const match = bspData?.byRegion?.find((r) => r.region.toLowerCase() === regionName.toLowerCase())
+        return match?.supplyKwh ?? 0
+    }
+    const getBspNet = (regionName: string): number => {
+        const match = bspData?.byRegion?.find((r) => r.region.toLowerCase() === regionName.toLowerCase())
+        return match?.netSupplyKwh ?? 0
+    }
+    // DTX: regionalBreakdown[].region original casing, value is .import
+    const getDtxImport = (regionName: string): number => {
+        const match = dtxData?.regionalBreakdown?.find((r) => r.region.toLowerCase() === regionName.toLowerCase())
+        return match?.import ?? 0
+    }
+    // Regional Boundary: byBoundaryPoint[].boundaryPoint is "RegionA/RegionB"
+    // Sum all boundary points where either side matches the region name
+    const getBoundaryImport = (regionName: string): number => {
+        if (!boundaryData?.byBoundaryPoint) return 0
+        const lower = regionName.toLowerCase()
+        return boundaryData.byBoundaryPoint
+            .filter((b) => b.boundaryPoint.toLowerCase().includes(lower))
+            .reduce((sum, b) => sum + (b.importKwh ?? 0), 0)
+    }
 
     const { data: meterStats } = useMeters({
         region: selectedRegion?.region,
@@ -68,138 +101,89 @@ export function ChoroplethMap() {
         }
     }, [meterStats])
 
-    // Calculate independent min/max ranges for each metric from BSP aggregate
+    // Canonical list of region names from geometry — used as the basis for all range calculations
+    const allRegionNames = useMemo(
+        () => (geometryData?.data?.regions ?? []).map((r) => r.region),
+        [geometryData]
+    )
+
+    // Independent min/max ranges per metric — used by the legend scales
     const metricRanges = useMemo(() => {
-        if (!energyData?.byRegion?.length) {
-            return {
-                bsp: { min: 0, max: 0 },
-                dtx: { min: 0, max: 0 },
-                net: { min: 0, max: 0 },
-                crossBoundary: { min: 0, max: 0 },
-            }
-        }
-
-        const bspValues = energyData.byRegion.map((r) => r.supplyKwh)
-        const dtxValues = energyData.byRegion.map((r) => r.reverseFlowKwh)
-        const netValues = energyData.byRegion.map((r) => r.netSupplyKwh)
-
+        const rangeFrom = (vals: number[]) =>
+            vals.length ? { min: Math.min(...vals), max: Math.max(...vals) } : { min: 0, max: 0 }
         return {
-            bsp: { min: Math.min(...bspValues), max: Math.max(...bspValues) },
-            dtx: { min: Math.min(...dtxValues), max: Math.max(...dtxValues) },
-            net: { min: Math.min(...netValues), max: Math.max(...netValues) },
-            crossBoundary: { min: 0, max: 0 },
+            bsp: rangeFrom(allRegionNames.map(getBspImport)),
+            dtx: rangeFrom(allRegionNames.map(getDtxImport)),
+            net: rangeFrom(allRegionNames.map(getBspNet)),
+            crossBoundary: rangeFrom(allRegionNames.map(getBoundaryImport)),
         }
-    }, [energyData])
+    }, [bspData, dtxData, boundaryData, allRegionNames])
 
-    // min/max values for map coloring
+    // Global min/max across all active metrics — used for choropleth color scaling
     const { minValue, maxValue } = useMemo(() => {
-        if (!energyData?.byRegion?.length) return { minValue: 0, maxValue: 0 }
-
-        const values = energyData.byRegion.map((region) => {
-            let totalValue = 0
-            let activeMetrics = 0
-
-            if (selectedMetrics.bsp) {
-                totalValue += region.supplyKwh
-                activeMetrics++
-            }
-            if (selectedMetrics.dtx) {
-                totalValue += region.reverseFlowKwh
-                activeMetrics++
-            }
-            if (selectedMetrics.net) {
-                totalValue += region.netSupplyKwh
-                activeMetrics++
-            }
-
-            return activeMetrics > 0 ? totalValue / activeMetrics : 0
+        if (allRegionNames.length === 0) return { minValue: 0, maxValue: 0 }
+        const values = allRegionNames.map((region) => {
+            let total = 0
+            if (selectedMetrics.bsp) total += getBspImport(region)
+            if (selectedMetrics.dtx) total += getDtxImport(region)
+            if (selectedMetrics.net) total += getBspNet(region)
+            if (selectedMetrics.crossBoundary) total += getBoundaryImport(region)
+            return total
         })
+        return { minValue: Math.min(...values), maxValue: Math.max(...values) }
+    }, [bspData, dtxData, boundaryData, allRegionNames, selectedMetrics])
 
-        return {
-            minValue: Math.min(...values),
-            maxValue: Math.max(...values),
-        }
-    }, [energyData, selectedMetrics])
+    const getRegionColor = (regionName: string) => {
+        const noMetric = !selectedMetrics.bsp && !selectedMetrics.dtx && !selectedMetrics.net && !selectedMetrics.crossBoundary
+        if (noMetric) return "#e5e7eb"
 
-    const getRegionColor = (properties: any) => {
-        let totalValue = 0
-        let activeMetrics = 0
+        let total = 0
+        if (selectedMetrics.bsp) total += getBspImport(regionName)
+        if (selectedMetrics.dtx) total += getDtxImport(regionName)
+        if (selectedMetrics.net) total += getBspNet(regionName)
+        if (selectedMetrics.crossBoundary) total += getBoundaryImport(regionName)
 
-        if (selectedMetrics.bsp) {
-            totalValue += properties.bsp_import
-            activeMetrics++
-        }
-        if (selectedMetrics.dtx) {
-            totalValue += properties.dtx_import
-            activeMetrics++
-        }
-        if (selectedMetrics.net) {
-            totalValue += properties.net_consumption
-            activeMetrics++
-        }
-        if (selectedMetrics.crossBoundary) {
-            totalValue += Math.abs(properties.cross_boundary)
-            activeMetrics++
-        }
-
-        if (activeMetrics === 0) return "#e5e7eb" // Gray if no metrics selected
-
-        const avgValue = totalValue / activeMetrics
-
-        // Normalize based on actual data range
         const range = maxValue - minValue
-        const normalized = range > 0 ? (avgValue - minValue) / range : 0
+        const normalized = range > 0 ? (total - minValue) / range : 0
 
-        // Green → Yellow → Red gradient
         if (normalized < 0.5) {
-            // Green to Yellow
             const t = normalized * 2
             return `rgb(${Math.floor(34 + t * 221)}, ${Math.floor(197 - t * 42)}, 94)`
         } else {
-            // Yellow to Red
             const t = (normalized - 0.5) * 2
             return `rgb(${255}, ${Math.floor(155 - t * 155)}, ${Math.floor(94 - t * 94)})`
         }
     }
 
-    // Combine geometry with BSP energy data
+    // Combine geometry with per-type energy values — each metric from its own hook
     const geoJsonData = useMemo(() => {
         if (!geometryData?.data?.regions) return null
-
         const regions = geometryData.data.regions
         if (regions.length === 0) return null
 
-        // Each region has a complete GeoJSON feature already
         const features = regions.map((regionGeom) => {
-            const regionEnergy = energyData?.byRegion?.find(
-                (r) => r.region.toLowerCase() === regionGeom.region.toLowerCase()
-            )
-
-            const properties = {
-                ...regionGeom.geojson.properties,
-                bsp_import: regionEnergy?.supplyKwh || 0,
-                dtx_import: regionEnergy?.reverseFlowKwh || 0,
-                net_consumption: regionEnergy?.netSupplyKwh || 0,
-                cross_boundary: 0,
-            }
-
-            // Calculate color for this feature
-            const color = getRegionColor(properties)
+            const regionName = regionGeom.region
+            const bsp_import = getBspImport(regionName)
+            const dtx_import = getDtxImport(regionName)
+            const net_consumption = getBspNet(regionName)
+            const cross_boundary = getBoundaryImport(regionName)
+            const color = getRegionColor(regionName)
 
             return {
                 ...regionGeom.geojson,
                 properties: {
-                    ...properties,
-                    color, // Add color to properties
+                    ...regionGeom.geojson.properties,
+                    bsp_import,
+                    dtx_import,
+                    net_consumption,
+                    cross_boundary,
+                    color,
                 },
             }
         })
 
-        return {
-            type: "FeatureCollection" as const,
-            features,
-        }
-    }, [geometryData, energyData, selectedMetrics])
+        return { type: "FeatureCollection" as const, features }
+    }, [geometryData, bspData, dtxData, boundaryData, selectedMetrics])
 
     // Initialize map with retry mechanism
     useEffect(() => {
@@ -396,7 +380,8 @@ export function ChoroplethMap() {
         addChoroplethLayer()
     }, [geoJsonData, selectedMetrics, mapLoaded])
 
-    if (isLoadingGeometry || isLoadingEnergy) {
+    // Only block on geometry — energy data layers in once ready
+    if (isLoadingGeometry) {
         return (
             <div className="space-y-4">
                 <Card>
@@ -410,11 +395,10 @@ export function ChoroplethMap() {
                         <div className="h-5 w-36 bg-muted animate-pulse rounded" />
                     </CardContent>
                 </Card>
-
                 <div className="h-[calc(100vh-300px)] w-full flex items-center justify-center bg-muted/10 rounded-lg border">
                     <div className="text-center space-y-2">
                         <div className="h-10 w-10 border-4 border-primary border-t-transparent rounded-full animate-spin mx-auto" />
-                        <p className="text-sm text-muted-foreground">Loading map data...</p>
+                        <p className="text-sm text-muted-foreground">Loading map boundaries...</p>
                     </div>
                 </div>
             </div>
@@ -552,11 +536,16 @@ export function ChoroplethMap() {
             <div className="flex gap-4 relative">
                 {/* Map Container */}
                 <div
-                    className={`transition-all duration-300 ease-in-out ${
-                        selectedRegion ? "w-[60%]" : "w-full"
+                    className={`relative transition-all duration-300 ease-in-out ${selectedRegion ? "w-[60%]" : "w-full"
                     } h-[calc(100vh-300px)] rounded-lg border overflow-hidden`}
                 >
                     <div ref={mapContainer} className="w-full h-full" />
+                    {isLoadingEnergy && (
+                        <div className="absolute top-3 right-3 bg-background/90 backdrop-blur-sm border rounded-md px-3 py-1.5 flex items-center gap-2 shadow-sm">
+                            <div className="h-3.5 w-3.5 border-2 border-primary border-t-transparent rounded-full animate-spin" />
+                            <span className="text-xs text-muted-foreground">Loading energy data...</span>
+                        </div>
+                    )}
                 </div>
 
                 {/* Side Panel */}
@@ -654,28 +643,28 @@ export function ChoroplethMap() {
                                     <div className="flex justify-between text-sm">
                                         <span className="text-muted-foreground">Total Import:</span>
                                         <span className="font-medium">
-                      {(selectedRegion.bsp_import + selectedRegion.dtx_import).toLocaleString()} kWh
-                    </span>
+                                            {(selectedRegion.bsp_import + selectedRegion.dtx_import).toLocaleString()} kWh
+                                        </span>
                                     </div>
                                     <div className="flex justify-between text-sm">
                                         <span className="text-muted-foreground">Net Flow:</span>
                                         <span className="font-medium">
-                      {(
-                          selectedRegion.bsp_import +
-                          selectedRegion.dtx_import -
-                          selectedRegion.net_consumption
-                      ).toLocaleString()}{" "}
+                                            {(
+                                                selectedRegion.bsp_import +
+                                                selectedRegion.dtx_import -
+                                                selectedRegion.net_consumption
+                                            ).toLocaleString()}{" "}
                                             kWh
-                    </span>
+                                        </span>
                                     </div>
                                     <div className="flex justify-between text-sm">
                                         <span className="text-muted-foreground">Cross-Boundary Net:</span>
                                         <span
                                             className={`font-medium ${selectedRegion.cross_boundary >= 0 ? "text-green-600" : "text-red-600"}`}
                                         >
-                      {selectedRegion.cross_boundary >= 0 ? "+" : ""}
+                                            {selectedRegion.cross_boundary >= 0 ? "+" : ""}
                                             {selectedRegion.cross_boundary.toLocaleString()} kWh
-                    </span>
+                                        </span>
                                     </div>
                                 </div>
                             </div>
