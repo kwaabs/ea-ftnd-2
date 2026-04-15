@@ -131,10 +131,25 @@ export function ExpressFeederTab() {
     const [pageSize, setPageSize] = useState(10)
     const [currentPage, setCurrentPage] = useState(1)
 
-    // Feeder chart selector
+    // Feeder chart selector (Feeder Breakdown tab)
     const [selectedChartFeeders, setSelectedChartFeeders] = useState<Set<string>>(new Set())
     const [showCumulative, setShowCumulative] = useState(false)
     const [feederSelectorOpen, setFeederSelectorOpen] = useState(false)
+
+    // Daily Trends filters
+    const [trendSeriesMode, setTrendSeriesMode] = useState<"both" | "import" | "export">("both")
+    const [trendFeeders, setTrendFeeders] = useState<Set<string>>(new Set())
+    const [trendCumulative, setTrendCumulative] = useState(false)
+    const [trendSelectorOpen, setTrendSelectorOpen] = useState(false)
+
+    const toggleTrendFeeder = (name: string) => {
+        setTrendFeeders((prev) => {
+            const next = new Set(prev)
+            if (next.has(name)) next.delete(name)
+            else next.add(name)
+            return next
+        })
+    }
 
     const params = useMemo(
         () => {
@@ -147,7 +162,6 @@ export function ExpressFeederTab() {
                 boundaryMeteringPoints: filters.boundaryMeteringPoints || [],
                 voltages: (filters.voltages || []).map(String),
             }
-            console.log("[v0] Express Feeder Tab - Filters applied:", p)
             return p
         },
         [filters],
@@ -176,6 +190,24 @@ export function ExpressFeederTab() {
         })
         return Array.from(dateMap.values()).sort((a, b) => a.date.localeCompare(b.date))
     }, [dailyData])
+
+    // Daily Trends chart data — filtered by feeder selection, cumulative, and series mode
+    const trendChartData = useMemo(() => {
+        const dateMap = new Map<string, { date: string; import: number; export: number; net: number }>()
+        dailyData.forEach((record: any) => {
+            const feederName = record.feeder_name
+            // If feeders are selected, only include matching ones
+            if (trendFeeders.size > 0 && !trendFeeders.has(feederName)) return
+            const date = (record.consumption_date ?? record.group_period)?.split("T")[0]
+            if (!date) return
+            if (!dateMap.has(date)) dateMap.set(date, { date, import: 0, export: 0, net: 0 })
+            const entry = dateMap.get(date)!
+            entry.import += (record.sending_meter?.import_kwh || 0) + (record.receiving_meter?.import_kwh || 0)
+            entry.export += (record.sending_meter?.export_kwh || 0) + (record.receiving_meter?.export_kwh || 0)
+            entry.net = entry.import - entry.export
+        })
+        return Array.from(dateMap.values()).sort((a, b) => a.date.localeCompare(b.date))
+    }, [dailyData, trendFeeders])
 
     // All feeder names for the selector
     const allFeederNames = useMemo(
@@ -299,20 +331,108 @@ export function ExpressFeederTab() {
                 <TabsContent value="overview" className="mt-4 space-y-4">
                     <Card>
                         <CardHeader>
-                            <CardTitle className="flex items-center gap-2">
-                                <TrendingUp className="h-4 w-4" />
-                                Daily Energy Flow Trends
-                            </CardTitle>
-                            <CardDescription>Aggregate import and export across all feeder meters over the selected period</CardDescription>
+                            <div className="flex flex-col gap-3">
+                                <div className="flex items-start justify-between gap-4 flex-wrap">
+                                    <div>
+                                        <CardTitle className="flex items-center gap-2">
+                                            <TrendingUp className="h-4 w-4" />
+                                            Daily Energy Flow Trends
+                                        </CardTitle>
+                                        <CardDescription className="mt-1">
+                                            {trendFeeders.size === 0 ? "All feeders" : `${trendFeeders.size} feeder${trendFeeders.size > 1 ? "s" : ""} selected`}
+                                            {" · "}
+                                            {trendSeriesMode === "both" ? "Import & Export" : trendSeriesMode === "import" ? "Import only" : "Export only"}
+                                        </CardDescription>
+                                    </div>
+                                    <div className="flex items-center gap-2 flex-wrap">
+                                        {/* Import / Export toggle */}
+                                        <div className="flex items-center border rounded-md overflow-hidden text-xs">
+                                            {(["both", "import", "export"] as const).map((mode) => (
+                                                <button
+                                                    key={mode}
+                                                    onClick={() => setTrendSeriesMode(mode)}
+                                                    className={`px-3 py-1.5 font-medium transition-colors ${
+                                                        trendSeriesMode === mode
+                                                            ? "bg-primary text-primary-foreground"
+                                                            : "hover:bg-muted text-muted-foreground"
+                                                    }`}
+                                                >
+                                                    {mode === "both" ? "Both" : mode === "import" ? "Import" : "Export"}
+                                                </button>
+                                            ))}
+                                        </div>
+
+                                        {/* Feeder multi-select */}
+                                        <Popover open={trendSelectorOpen} onOpenChange={setTrendSelectorOpen}>
+                                            <PopoverTrigger asChild>
+                                                <Button variant="outline" size="sm" className="min-w-40 justify-between shrink-0">
+                          <span className="truncate text-xs">
+                            {trendFeeders.size === 0
+                                ? "All feeders"
+                                : trendFeeders.size === 1
+                                    ? Array.from(trendFeeders)[0]
+                                    : `${trendFeeders.size} feeders`}
+                          </span>
+                                                    <ChevronsUpDown className="h-3.5 w-3.5 ml-2 opacity-50 shrink-0" />
+                                                </Button>
+                                            </PopoverTrigger>
+                                            <PopoverContent className="w-72 p-2" align="end">
+                                                <div className="flex items-center justify-between px-2 py-1 mb-1">
+                                                    <span className="text-xs font-semibold text-muted-foreground">Filter feeders</span>
+                                                    {trendFeeders.size > 0 && (
+                                                        <button
+                                                            className="text-xs text-muted-foreground hover:text-foreground underline"
+                                                            onClick={() => setTrendFeeders(new Set())}
+                                                        >
+                                                            Clear all
+                                                        </button>
+                                                    )}
+                                                </div>
+                                                <div className="max-h-64 overflow-y-auto space-y-0.5">
+                                                    {allFeederNames.map((name) => (
+                                                        <div
+                                                            key={name}
+                                                            className="flex items-center gap-2 px-2 py-1.5 rounded hover:bg-muted cursor-pointer"
+                                                            onClick={() => toggleTrendFeeder(name)}
+                                                        >
+                                                            <Checkbox
+                                                                checked={trendFeeders.has(name)}
+                                                                onCheckedChange={() => toggleTrendFeeder(name)}
+                                                                className="shrink-0"
+                                                            />
+                                                            <span className="text-sm truncate">{name}</span>
+                                                            {trendFeeders.has(name) && <Check className="h-3.5 w-3.5 ml-auto shrink-0 text-primary" />}
+                                                        </div>
+                                                    ))}
+                                                </div>
+                                            </PopoverContent>
+                                        </Popover>
+                                    </div>
+                                </div>
+
+                                {/* Cumulative toggle — only when 2+ feeders selected */}
+                                {trendFeeders.size >= 2 && (
+                                    <div className="flex items-center gap-2 border-t pt-3">
+                                        <Checkbox
+                                            id="trend-cumulate"
+                                            checked={trendCumulative}
+                                            onCheckedChange={(checked) => setTrendCumulative(!!checked)}
+                                        />
+                                        <Label htmlFor="trend-cumulate" className="text-sm font-normal cursor-pointer">
+                                            Cumulative — combine selected feeders into a single daily total
+                                        </Label>
+                                    </div>
+                                )}
+                            </div>
                         </CardHeader>
                         <CardContent>
-                            {dailyChartData.length === 0 ? (
+                            {trendChartData.length === 0 ? (
                                 <div className="h-64 flex items-center justify-center text-muted-foreground text-sm">
-                                    No daily data available for the selected period.
+                                    No daily data available for the selected filters.
                                 </div>
                             ) : (
                                 <ResponsiveContainer width="100%" height={300}>
-                                    <AreaChart data={dailyChartData} margin={{ top: 5, right: 20, left: 0, bottom: 5 }}>
+                                    <AreaChart data={trendChartData} margin={{ top: 5, right: 20, left: 0, bottom: 5 }}>
                                         <defs>
                                             <linearGradient id="efImportGrad" x1="0" y1="0" x2="0" y2="1">
                                                 <stop offset="5%" stopColor="#16a34a" stopOpacity={0.2} />
@@ -333,13 +453,7 @@ export function ExpressFeederTab() {
                                             }}
                                             interval="preserveStartEnd"
                                         />
-                                        <YAxis
-                                            className="text-xs"
-                                            tickFormatter={yAxisFormatter}
-                                            tickCount={5}
-                                            domain={["auto", "auto"]}
-                                            type="number"
-                                        />
+                                        <YAxis className="text-xs" tickFormatter={yAxisFormatter} tickCount={5} domain={["auto", "auto"]} type="number" />
                                         <Tooltip
                                             formatter={(value: number, name: string) => [
                                                 `${formatRaw(value)} kWh`,
@@ -351,8 +465,12 @@ export function ExpressFeederTab() {
                                             }}
                                         />
                                         <Legend />
-                                        <Area type="monotone" dataKey="import" name="Import" stroke="#16a34a" strokeWidth={2} fill="url(#efImportGrad)" dot={false} />
-                                        <Area type="monotone" dataKey="export" name="Export" stroke="#2563eb" strokeWidth={2} fill="url(#efExportGrad)" dot={false} />
+                                        {(trendSeriesMode === "both" || trendSeriesMode === "import") && (
+                                            <Area type="monotone" dataKey="import" name="Import" stroke="#16a34a" strokeWidth={2} fill="url(#efImportGrad)" dot={false} />
+                                        )}
+                                        {(trendSeriesMode === "both" || trendSeriesMode === "export") && (
+                                            <Area type="monotone" dataKey="export" name="Export" stroke="#2563eb" strokeWidth={2} fill="url(#efExportGrad)" dot={false} />
+                                        )}
                                     </AreaChart>
                                 </ResponsiveContainer>
                             )}
@@ -442,24 +560,28 @@ export function ExpressFeederTab() {
                             </div>
                         </CardHeader>
                         <CardContent>
-                            {/* Bar chart — always the default: all feeders, filtered selection, or single feeder */}
+                            {/* Horizontal bar chart — feeder names on Y axis, values on X axis */}
                             {!showCumulative && (
                                 feederChartData.length === 0 ? (
                                     <div className="h-64 flex items-center justify-center text-muted-foreground text-sm">
                                         No feeder data available.
                                     </div>
                                 ) : (
-                                    <ResponsiveContainer width="100%" height={Math.max(320, feederChartData.length * 28 + 80)}>
-                                        <BarChart data={feederChartData} margin={{ top: 5, right: 20, left: 0, bottom: feederChartData.length > 4 ? 60 : 20 }}>
-                                            <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
-                                            <XAxis dataKey="name" className="text-xs" angle={feederChartData.length > 4 ? -40 : 0} textAnchor={feederChartData.length > 4 ? "end" : "middle"} interval={0} tick={{ fontSize: 11 }} />
-                                            <YAxis className="text-xs" tickFormatter={yAxisFormatter} tickCount={5} />
+                                    <ResponsiveContainer width="100%" height={Math.max(300, feederChartData.length * 52 + 60)}>
+                                        <BarChart
+                                            data={feederChartData}
+                                            layout="vertical"
+                                            margin={{ top: 5, right: 30, left: 160, bottom: 5 }}
+                                        >
+                                            <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" horizontal={false} />
+                                            <XAxis type="number" className="text-xs" tickFormatter={yAxisFormatter} tickCount={5} />
+                                            <YAxis type="category" dataKey="name" className="text-xs" tick={{ fontSize: 11 }} width={155} />
                                             <Tooltip formatter={(value: number, name: string) => [`${formatRaw(value)} kWh`, name]} />
                                             <Legend />
-                                            <Bar dataKey="Sending Import" fill="#16a34a" radius={[2, 2, 0, 0]} />
-                                            <Bar dataKey="Sending Export" fill="#86efac" radius={[2, 2, 0, 0]} />
-                                            <Bar dataKey="Receiving Import" fill="#2563eb" radius={[2, 2, 0, 0]} />
-                                            <Bar dataKey="Receiving Export" fill="#93c5fd" radius={[2, 2, 0, 0]} />
+                                            <Bar dataKey="Sending Import" fill="#16a34a" radius={[0, 2, 2, 0]} />
+                                            <Bar dataKey="Sending Export" fill="#86efac" radius={[0, 2, 2, 0]} />
+                                            <Bar dataKey="Receiving Import" fill="#2563eb" radius={[0, 2, 2, 0]} />
+                                            <Bar dataKey="Receiving Export" fill="#93c5fd" radius={[0, 2, 2, 0]} />
                                         </BarChart>
                                     </ResponsiveContainer>
                                 )
