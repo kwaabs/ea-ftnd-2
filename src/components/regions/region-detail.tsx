@@ -115,6 +115,7 @@ export function RegionDetail({ region }: RegionDetailProps) {
     const [isBoundaryExportExpanded, setIsBoundaryExportExpanded] = useState(false);
     const [isFeederInboundExpanded, setIsFeederInboundExpanded] = useState(false);
     const [isFeederOutboundExpanded, setIsFeederOutboundExpanded] = useState(false);
+    const [showFootnote, setShowFootnote] = useState(false);
     const [feederPage, setFeederPage] = useState(0);
     const [feederPageSize, setFeederPageSize] = useState(10);
     const [feederSearch, setFeederSearch] = useState("");
@@ -1273,7 +1274,7 @@ export function RegionDetail({ region }: RegionDetailProps) {
                                         </CardTitle>
                                     </CardHeader>
                                     <CardContent>
-                                        <div className="flex items-baseline gap-4">
+                                        <div className="flex items-baseline gap-3 flex-wrap">
                                             <div>
                                                 <div className="flex items-center gap-1.5">
                                                     <ArrowDownIcon className="h-4 w-4 text-green-600" />
@@ -1292,6 +1293,22 @@ export function RegionDetail({ region }: RegionDetailProps) {
                             </span>
                                                 </div>
                                                 <p className="text-[10px] text-muted-foreground">Export (kWh)</p>
+                                            </div>
+                                            <div className="h-8 w-px bg-border" />
+                                            <div>
+                                                <div className="flex items-center gap-1.5">
+                                                    {energyFlow.boundaryNet >= 0 ? (
+                                                        <ArrowDownIcon className="h-4 w-4 text-blue-600" />
+                                                    ) : (
+                                                        <ArrowUpIcon className="h-4 w-4 text-red-500" />
+                                                    )}
+                                                    <span className={`text-xl font-bold ${energyFlow.boundaryNet >= 0 ? "text-blue-600" : "text-red-500"}`}>
+                              {formatNumber(Math.abs(energyFlow.boundaryNet))}
+                            </span>
+                                                </div>
+                                                <p className="text-[10px] text-muted-foreground">
+                                                    Net ({energyFlow.boundaryNet >= 0 ? "Import" : "Export"}) (kWh)
+                                                </p>
                                             </div>
                                         </div>
 
@@ -2296,6 +2313,66 @@ export function RegionDetail({ region }: RegionDetailProps) {
                             </div>
                         </div>
                     </div>
+
+                    {/* Calculation footnote */}
+                    <div className="mt-5 pt-4 border-t border-border/60">
+                        <button
+                            onClick={() => setShowFootnote((v) => !v)}
+                            className="flex items-center gap-1.5 text-xs font-semibold text-muted-foreground uppercase cursor-pointer tracking-wide hover:text-foreground transition-colors w-full text-left"
+                        >
+                            <ChevronDown className={`h-3.5 w-3.5 transition-transform duration-200 ${showFootnote ? "rotate-180" : ""}`} />
+                            How calculations work
+                        </button>
+                        {showFootnote && (
+                            <div className="mt-3 bg-zinc-100 p-2 grid grid-cols-1 md:grid-cols-2 gap-x-8 gap-y-3 text-xs text-muted-foreground">
+                                {/* Pool */}
+                                <div>
+                                    <span className="font-medium text-foreground">Pool — Available Supply</span>
+                                    <p className="mt-0.5 leading-relaxed">
+                                        BSP Import &nbsp;+&nbsp; Boundary Net (Import &minus; Export) &nbsp;+&nbsp; Express Feeder Net (Inbound &minus; Outbound)
+                                    </p>
+                                </div>
+                                {/* Sources */}
+                                <div>
+                                    <span className="font-medium text-foreground">Source — Boundary Import</span>
+                                    <p className="mt-0.5 leading-relaxed">
+                                        Energy received from neighbouring regions through boundary metering points. Measured at the receiving meter on this region&apos;s side of the boundary. Adds to the available pool.
+                                    </p>
+                                </div>
+                                <div>
+                                    <span className="font-medium text-foreground">Source — Express Feeder Inbound</span>
+                                    <p className="mt-0.5 leading-relaxed">
+                                        Energy flowing into this region via express feeder lines from adjacent regions. Measured at the receiving meter of each cross-region feeder. Adds to the available pool.
+                                    </p>
+                                </div>
+                                {/* Distribution */}
+                                <div>
+                                    <span className="font-medium text-foreground">Distribution — DTX Import</span>
+                                    <p className="mt-0.5 leading-relaxed">
+                                        Total kWh drawn from the pool by all Distribution Transformer (DTX) meters in the region, summed across all districts.
+                                    </p>
+                                </div>
+                                <div>
+                                    <span className="font-medium text-foreground">Distribution — Non-DTX Customers</span>
+                                    <p className="mt-0.5 leading-relaxed">
+                                        Direct customers not served through a DTX meter. Currently reported as 0 — no direct customer metering data is ingested yet.
+                                    </p>
+                                </div>
+                                <div>
+                                    <span className="font-medium text-foreground">Distribution — Boundary Export</span>
+                                    <p className="mt-0.5 leading-relaxed">
+                                        Energy leaving this region via boundary meters to neighbouring regions. Reduces the pool available for local consumption and is shown as an outflow in the distribution column.
+                                    </p>
+                                </div>
+                                <div>
+                                    <span className="font-medium text-foreground">Distribution — Express Feeder Outbound</span>
+                                    <p className="mt-0.5 leading-relaxed">
+                                        Energy sent out of this region through express feeder lines to adjacent regions. Measured at the sending meter of each cross-region feeder. Reduces the pool available for local consumption.
+                                    </p>
+                                </div>
+                            </div>
+                        )}
+                    </div>
                 </CardContent>
             </Card>
 
@@ -2489,7 +2566,7 @@ export function RegionDetail({ region }: RegionDetailProps) {
             {/*Tables */}
             <Card>
                 <CardHeader>
-                    <CardTitle>Energy Trading (Regional Boundary Meters)</CardTitle>
+                    <CardTitle>Energy Trading Regions</CardTitle>
                 </CardHeader>
                 <CardContent>
                     <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
@@ -2910,7 +2987,7 @@ export function RegionDetail({ region }: RegionDetailProps) {
                     <CardHeader>
                         <CardTitle className="flex items-center gap-2">
                             <Zap className="h-5 w-5 text-purple-600" />
-                            Energy Trading (Express Feeders)
+                            Express Feeder Trading
                         </CardTitle>
                         <CardDescription>
                             Energy exchanged with other regions via express feeders — inbound (received) and outbound (sent)
