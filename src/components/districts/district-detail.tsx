@@ -439,7 +439,7 @@ export function DistrictDetail({ district }: DistrictDetailProps) {
                 const boundaryPoint = meter.boundary_metering_point || ""
                 const parts = boundaryPoint.split("/").map((p: string) => p.trim())
                 const belongsToDistrict = parts.some((part: string) => part.toLowerCase() === district.toLowerCase())
-                
+
                 if (!belongsToDistrict) {
                     return // Skip this meter - it belongs to the other district in the boundary
                 }
@@ -487,7 +487,7 @@ export function DistrictDetail({ district }: DistrictDetailProps) {
     // Get all DTX meters for this district (client-side filtered)
     const allDtxMeters = useMemo(() => {
         if (!dtxMetersData?.data?.data) return []
-        
+
         // Client-side filter: ensure meters belong to this district
         return dtxMetersData.data.data
             .filter((meter: any) => {
@@ -625,6 +625,71 @@ export function DistrictDetail({ district }: DistrictDetailProps) {
     const availableSupply = totalDtxConsumption + totalBoundaryImport - totalBoundaryExport
 
     const isLoading = dtxAggregateLoading || dtxDailyLoading || boundaryAggregateLoading || boundaryDailyLoading
+
+    if (isLoading) {
+        return (
+            <div className="space-y-6 pb-16">
+                {/* Header */}
+                <div className="flex items-center justify-between">
+                    <div className="space-y-2">
+                        <div className="flex items-center gap-3">
+                            <Skeleton className="h-9 w-9 rounded-md" />
+                            <Skeleton className="h-9 w-48" />
+                        </div>
+                        <Skeleton className="h-4 w-64" />
+                    </div>
+                </div>
+
+                {/* 4 summary metric cards */}
+                <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+                    {Array.from({ length: 4 }).map((_, i) => (
+                        <Card key={i}>
+                            <CardHeader className="pb-3">
+                                <Skeleton className="h-4 w-32" />
+                            </CardHeader>
+                            <CardContent className="space-y-2">
+                                <Skeleton className="h-9 w-40" />
+                                <Skeleton className="h-3 w-24" />
+                            </CardContent>
+                        </Card>
+                    ))}
+                </div>
+
+                {/* Map + chart row */}
+                <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                    <Card>
+                        <CardHeader>
+                            <Skeleton className="h-5 w-32" />
+                        </CardHeader>
+                        <CardContent>
+                            <Skeleton className="h-64 w-full rounded-md" />
+                        </CardContent>
+                    </Card>
+                    <Card>
+                        <CardHeader>
+                            <Skeleton className="h-5 w-40" />
+                            <Skeleton className="h-4 w-56" />
+                        </CardHeader>
+                        <CardContent>
+                            <Skeleton className="h-64 w-full rounded-md" />
+                        </CardContent>
+                    </Card>
+                </div>
+
+                {/* Meters table card */}
+                <Card>
+                    <CardHeader>
+                        <Skeleton className="h-5 w-36" />
+                    </CardHeader>
+                    <CardContent className="space-y-3">
+                        {Array.from({ length: 6 }).map((_, i) => (
+                            <Skeleton key={i} className="h-10 w-full rounded-md" />
+                        ))}
+                    </CardContent>
+                </Card>
+            </div>
+        )
+    }
 
     return (
         <div className="space-y-6 pb-16">
@@ -1247,33 +1312,33 @@ export function DistrictDetail({ district }: DistrictDetailProps) {
                             )}
                         </TabsContent>
 
-                            <TabsContent value="all" className="space-y-3">
-                                {allDtxMeters.length === 0 ? (
-                                    <p className="text-muted-foreground text-sm">No meters found for this district</p>
-                                ) : (
-                                    <div className="space-y-2 max-h-96 overflow-y-auto">
-                                        {allDtxMeters.map((meter, idx) => (
-                                            <div key={meter.meter} className="flex items-center gap-3 p-3 border rounded-lg hover:bg-muted/50 transition-colors">
-                                                <div className="flex h-8 w-8 items-center justify-center rounded-full bg-blue-100 text-blue-600 font-medium text-sm">
-                                                    {idx + 1}
-                                                </div>
-                                                <div className="flex-1 min-w-0">
-                                                    <Link
-                                                        href={`/meters/${meter.meter}`}
-                                                        className="text-sm font-medium hover:underline text-primary truncate block"
-                                                    >
-                                                        {meter.meter}
-                                                    </Link>
-                                                    <p className="text-xs text-muted-foreground">{meter.location}</p>
-                                                </div>
-                                                <div className="text-right">
-                                                    <p className="text-sm text-muted-foreground">{meter.meter_brand}</p>
-                                                </div>
+                        <TabsContent value="all" className="space-y-3">
+                            {allDtxMeters.length === 0 ? (
+                                <p className="text-muted-foreground text-sm">No meters found for this district</p>
+                            ) : (
+                                <div className="space-y-2 max-h-96 overflow-y-auto">
+                                    {allDtxMeters.map((meter, idx) => (
+                                        <div key={meter.meter} className="flex items-center gap-3 p-3 border rounded-lg hover:bg-muted/50 transition-colors">
+                                            <div className="flex h-8 w-8 items-center justify-center rounded-full bg-blue-100 text-blue-600 font-medium text-sm">
+                                                {idx + 1}
                                             </div>
-                                        ))}
-                                    </div>
-                                )}
-                            </TabsContent>
+                                            <div className="flex-1 min-w-0">
+                                                <Link
+                                                    href={`/meters/${meter.meter}`}
+                                                    className="text-sm font-medium hover:underline text-primary truncate block"
+                                                >
+                                                    {meter.meter}
+                                                </Link>
+                                                <p className="text-xs text-muted-foreground">{meter.location}</p>
+                                            </div>
+                                            <div className="text-right">
+                                                <p className="text-sm text-muted-foreground">{meter.meter_brand}</p>
+                                            </div>
+                                        </div>
+                                    ))}
+                                </div>
+                            )}
+                        </TabsContent>
                     </Tabs>
                 </CardContent>
             </Card>

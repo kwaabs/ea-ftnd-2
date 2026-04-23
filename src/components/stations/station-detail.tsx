@@ -475,9 +475,65 @@ export function StationDetail({ station }: StationDetailProps) {
     if (isLoading) {
         return (
             <div className="space-y-6">
-                <Skeleton className="h-10 w-48" />
-                <Skeleton className="h-32 w-full" />
-                <Skeleton className="h-96 w-full" />
+                {/* Header */}
+                <div className="flex items-center justify-between">
+                    <div className="space-y-2">
+                        <Skeleton className="h-8 w-32" />
+                        <Skeleton className="h-9 w-56" />
+                        <Skeleton className="h-4 w-36" />
+                    </div>
+                    <div className="flex items-center gap-3">
+                        <Skeleton className="h-8 w-44 rounded-full" />
+                        <Skeleton className="h-8 w-36 rounded-full" />
+                        <Skeleton className="h-10 w-24 rounded-full" />
+                    </div>
+                </div>
+
+                {/* Summary Metrics Card */}
+                <Card>
+                    <CardContent className="pt-6">
+                        {/* Tab bar */}
+                        <Skeleton className="h-10 w-full rounded-md mb-6" />
+                        {/* 4 metric cards */}
+                        <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
+                            {Array.from({ length: 4 }).map((_, i) => (
+                                <Card key={i}>
+                                    <CardHeader className="pb-2">
+                                        <Skeleton className="h-4 w-28" />
+                                    </CardHeader>
+                                    <CardContent className="space-y-2">
+                                        <Skeleton className="h-8 w-36" />
+                                        <Skeleton className="h-px w-full" />
+                                        <Skeleton className="h-3 w-24" />
+                                    </CardContent>
+                                </Card>
+                            ))}
+                        </div>
+                    </CardContent>
+                </Card>
+
+                {/* Chart card */}
+                <Card>
+                    <CardHeader>
+                        <Skeleton className="h-5 w-40" />
+                        <Skeleton className="h-4 w-56" />
+                    </CardHeader>
+                    <CardContent>
+                        <Skeleton className="h-72 w-full rounded-md" />
+                    </CardContent>
+                </Card>
+
+                {/* Table card */}
+                <Card>
+                    <CardHeader>
+                        <Skeleton className="h-5 w-32" />
+                    </CardHeader>
+                    <CardContent className="space-y-3">
+                        {Array.from({ length: 5 }).map((_, i) => (
+                            <Skeleton key={i} className="h-10 w-full rounded-md" />
+                        ))}
+                    </CardContent>
+                </Card>
             </div>
         )
     }

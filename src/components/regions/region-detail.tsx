@@ -1176,8 +1176,72 @@ export function RegionDetail({ region }: RegionDetailProps) {
     if (aggregateLoading || isBoundaryDataLoading) {
         return (
             <div className="space-y-6">
-                <Skeleton className="h-32 w-full" />
-                <Skeleton className="h-96 w-full" />
+                {/* Header */}
+                <div className="flex items-center justify-between">
+                    <div className="space-y-2">
+                        <Skeleton className="h-8 w-32" />
+                        <Skeleton className="h-9 w-52" />
+                        <Skeleton className="h-4 w-44" />
+                    </div>
+                    <Skeleton className="h-10 w-32 rounded-full" />
+                </div>
+
+                {/* Tabs card */}
+                <Card>
+                    <CardContent className="pt-6">
+                        {/* Tab bar — 3 tabs */}
+                        <Skeleton className="h-10 w-full rounded-md mb-6" />
+                        {/* 4 summary metric cards */}
+                        <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
+                            {Array.from({ length: 4 }).map((_, i) => (
+                                <Card key={i}>
+                                    <CardHeader className="pb-2">
+                                        <Skeleton className="h-4 w-28" />
+                                    </CardHeader>
+                                    <CardContent className="space-y-2">
+                                        <Skeleton className="h-8 w-36" />
+                                        <Skeleton className="h-px w-full" />
+                                        <Skeleton className="h-3 w-24" />
+                                    </CardContent>
+                                </Card>
+                            ))}
+                        </div>
+                    </CardContent>
+                </Card>
+
+                {/* Energy flow diagram card */}
+                <Card>
+                    <CardHeader>
+                        <Skeleton className="h-5 w-44" />
+                        <Skeleton className="h-4 w-64" />
+                    </CardHeader>
+                    <CardContent>
+                        <Skeleton className="h-64 w-full rounded-md" />
+                    </CardContent>
+                </Card>
+
+                {/* Daily trend chart card */}
+                <Card>
+                    <CardHeader>
+                        <Skeleton className="h-5 w-40" />
+                        <Skeleton className="h-4 w-56" />
+                    </CardHeader>
+                    <CardContent>
+                        <Skeleton className="h-72 w-full rounded-md" />
+                    </CardContent>
+                </Card>
+
+                {/* Districts table card */}
+                <Card>
+                    <CardHeader>
+                        <Skeleton className="h-5 w-32" />
+                    </CardHeader>
+                    <CardContent className="space-y-3">
+                        {Array.from({ length: 5 }).map((_, i) => (
+                            <Skeleton key={i} className="h-10 w-full rounded-md" />
+                        ))}
+                    </CardContent>
+                </Card>
             </div>
         );
     }
@@ -2318,31 +2382,34 @@ export function RegionDetail({ region }: RegionDetailProps) {
                     <div className="mt-5 pt-4 border-t border-border/60">
                         <button
                             onClick={() => setShowFootnote((v) => !v)}
-                            className="flex items-center gap-1.5 text-xs font-semibold text-muted-foreground uppercase cursor-pointer tracking-wide hover:text-foreground transition-colors w-full text-left"
+                            className="flex items-center gap-1.5 text-xs font-semibold text-muted-foreground uppercase tracking-wide hover:text-foreground transition-colors w-full text-left"
                         >
                             <ChevronDown className={`h-3.5 w-3.5 transition-transform duration-200 ${showFootnote ? "rotate-180" : ""}`} />
                             How calculations work
                         </button>
                         {showFootnote && (
-                            <div className="mt-3 bg-zinc-100 p-2 grid grid-cols-1 md:grid-cols-2 gap-x-8 gap-y-3 text-xs text-muted-foreground">
+                            <div className="mt-3 grid grid-cols-1 md:grid-cols-2 gap-x-8 gap-y-3 text-xs text-muted-foreground">
                                 {/* Pool */}
-                                <div>
+                                <div className="md:col-span-2">
                                     <span className="font-medium text-foreground">Pool — Available Supply</span>
-                                    <p className="mt-0.5 leading-relaxed">
-                                        BSP Import &nbsp;+&nbsp; Boundary Net (Import &minus; Export) &nbsp;+&nbsp; Express Feeder Net (Inbound &minus; Outbound)
+                                    <p className="mt-0.5 leading-relaxed font-mono bg-muted/50 rounded px-2 py-1 inline-block mt-1">
+                                        BSP Import &nbsp;+&nbsp; (Boundary Import &minus; Boundary Export) &nbsp;+&nbsp; (Express Feeder Inbound &minus; Express Feeder Outbound)
+                                    </p>
+                                    <p className="mt-1 leading-relaxed">
+                                        BSP Import is taken as a gross figure. Boundary and Express Feeder contributions are netted — only the difference between what flows in and what flows out is added to the pool.
                                     </p>
                                 </div>
                                 {/* Sources */}
                                 <div>
                                     <span className="font-medium text-foreground">Source — Boundary Import</span>
                                     <p className="mt-0.5 leading-relaxed">
-                                        Energy received from neighbouring regions through boundary metering points. Measured at the receiving meter on this region&apos;s side of the boundary. Adds to the available pool.
+                                        Energy received from neighbouring regions through boundary metering points. Only the net of Boundary Import minus Boundary Export contributes to the pool — not the gross import figure shown in the diagram.
                                     </p>
                                 </div>
                                 <div>
                                     <span className="font-medium text-foreground">Source — Express Feeder Inbound</span>
                                     <p className="mt-0.5 leading-relaxed">
-                                        Energy flowing into this region via express feeder lines from adjacent regions. Measured at the receiving meter of each cross-region feeder. Adds to the available pool.
+                                        Energy flowing into this region via express feeder lines from adjacent regions. Only the net of Inbound minus Outbound contributes to the pool — not the gross inbound figure shown in the diagram.
                                     </p>
                                 </div>
                                 {/* Distribution */}
@@ -2361,13 +2428,13 @@ export function RegionDetail({ region }: RegionDetailProps) {
                                 <div>
                                     <span className="font-medium text-foreground">Distribution — Boundary Export</span>
                                     <p className="mt-0.5 leading-relaxed">
-                                        Energy leaving this region via boundary meters to neighbouring regions. Reduces the pool available for local consumption and is shown as an outflow in the distribution column.
+                                        Energy leaving this region to neighbouring regions via boundary meters. Shown as a distribution outflow because it is subtracted from gross Boundary Import before the net is added to the pool.
                                     </p>
                                 </div>
                                 <div>
                                     <span className="font-medium text-foreground">Distribution — Express Feeder Outbound</span>
                                     <p className="mt-0.5 leading-relaxed">
-                                        Energy sent out of this region through express feeder lines to adjacent regions. Measured at the sending meter of each cross-region feeder. Reduces the pool available for local consumption.
+                                        Energy sent out of this region to adjacent regions via express feeder lines. Shown as a distribution outflow because it is subtracted from gross Express Feeder Inbound before the net is added to the pool.
                                     </p>
                                 </div>
                             </div>
