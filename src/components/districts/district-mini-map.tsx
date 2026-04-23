@@ -23,11 +23,22 @@
 //         if (!mapContainer.current || !geometry) return
 //         if (map.current) return // Already initialized
 //
-//         // Calculate center from geometry bounds
-//         const coordinates = geometry.coordinates[0]
+//         // Flatten all coordinate rings into [lng, lat] pairs for both
+//         // Polygon (coordinates[ring][point]) and
+//         // MultiPolygon (coordinates[polygon][ring][point]).
+//         const flattenCoords = (geo: any): number[][] => {
+//             if (geo.type === "MultiPolygon") {
+//                 return geo.coordinates.flatMap((polygon: number[][][]) =>
+//                     polygon.flatMap((ring: number[][]) => ring)
+//                 )
+//             }
+//             return geo.coordinates[0] as number[][]
+//         }
+//         const allCoords = flattenCoords(geometry)
+//
 //         let minLng = Infinity, maxLng = -Infinity, minLat = Infinity, maxLat = -Infinity
 //
-//         coordinates.forEach((coord: number[]) => {
+//         allCoords.forEach((coord: number[]) => {
 //             const [lng, lat] = coord
 //             minLng = Math.min(minLng, lng)
 //             maxLng = Math.max(maxLng, lng)
@@ -86,9 +97,9 @@
 //                 },
 //             })
 //
-//             // Fit map to district bounds
+//             // Fit map to district bounds using all flattened coords
 //             const bounds = new maplibregl.LngLatBounds()
-//             coordinates.forEach((coord: number[]) => {
+//             allCoords.forEach((coord: number[]) => {
 //                 bounds.extend(coord as [number, number])
 //             })
 //             map.current.fitBounds(bounds, { padding: 40 })
@@ -177,7 +188,7 @@
 //                     <MapPin className="h-3.5 w-3.5 mt-0.5 shrink-0" />
 //                     <div className="flex-1">
 //                         <p className="font-medium">{districtName} District</p>
-//                         <p>Boundary polygon with {geometry.coordinates[0].length} coordinates</p>
+//                         <p>Boundary {geometry.type === "MultiPolygon" ? `multi-polygon (${geometry.coordinates.length} parts)` : "polygon"}</p>
 //                         {meterCoordinates.length > 0 && (
 //                             <p className="mt-1">
 //                                 {meterCoordinates.filter(m => m.type === 'DTX').length} DTX meters, {' '}
@@ -243,10 +254,10 @@ export function DistrictMiniMap({ districtName, geometry, meterCoordinates = [] 
         const centerLng = (minLng + maxLng) / 2
         const centerLat = (minLat + maxLat) / 2
 
-        // Initialize map
+        // Initialize map with blank style — Google Maps tiles added on load
         map.current = new maplibregl.Map({
             container: mapContainer.current,
-            style: "https://basemaps.cartocdn.com/gl/voyager-gl-style/style.json",
+            style: { version: 8, sources: {}, layers: [] },
             center: [centerLng, centerLat],
             zoom: 11,
             attributionControl: false,
@@ -255,9 +266,26 @@ export function DistrictMiniMap({ districtName, geometry, meterCoordinates = [] 
         // Add navigation controls
         map.current.addControl(new maplibregl.NavigationControl(), "top-right")
 
-        // Wait for map to load, then add district polygon
+        // Wait for map to load, then add Google Maps basemap + district polygon
         map.current.on("load", () => {
             if (!map.current) return
+
+            // Add Google Maps raster tiles as basemap
+            map.current.addSource("google-maps", {
+                type: "raster",
+                tiles: [
+                    "https://mt0.google.com/vt/lyrs=m&x={x}&y={y}&z={z}",
+                    "https://mt1.google.com/vt/lyrs=m&x={x}&y={y}&z={z}",
+                    "https://mt2.google.com/vt/lyrs=m&x={x}&y={y}&z={z}",
+                    "https://mt3.google.com/vt/lyrs=m&x={x}&y={y}&z={z}",
+                ],
+                tileSize: 256,
+            })
+            map.current.addLayer({
+                id: "google-maps-layer",
+                type: "raster",
+                source: "google-maps",
+            })
 
             // Add district boundary source
             map.current.addSource("district", {
