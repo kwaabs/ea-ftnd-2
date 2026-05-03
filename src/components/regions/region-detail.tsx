@@ -111,6 +111,8 @@ export function RegionDetail({ region }: RegionDetailProps) {
     );
     const [isBspFlowExpanded, setIsBspFlowExpanded] = useState(false);
     const [isBoundaryImportExpanded, setIsBoundaryImportExpanded] = useState(false);
+    const [isAvailableSupplyExpanded, setIsAvailableSupplyExpanded] = useState(false);
+    const [isPublicDtExpanded, setIsPublicDtExpanded] = useState(false);
     const [isDtxExpanded, setIsDtxExpanded] = useState(false);
     const [isBoundaryExportExpanded, setIsBoundaryExportExpanded] = useState(false);
     const [isFeederInboundExpanded, setIsFeederInboundExpanded] = useState(false);
@@ -2123,17 +2125,124 @@ export function RegionDetail({ region }: RegionDetailProps) {
                                     POOL
                                 </h3>
                             </div>
-                            <div className="p-6 bg-primary/10 rounded-lg border-4 border-primary text-center">
-                                <div className="text-xs font-medium text-muted-foreground">
-                                    Available Supply
+                            <div className="relative">
+                                {/* Available Supply clickable box */}
+                                <div
+                                    className="p-6 bg-primary/10 rounded-lg border-4 border-primary text-center cursor-pointer hover:bg-primary/15 transition-colors"
+                                    onClick={() => setIsAvailableSupplyExpanded(!isAvailableSupplyExpanded)}
+                                >
+                                    <div className="flex items-center justify-center gap-2">
+                                        <div className="text-xs font-medium text-muted-foreground">
+                                            Available Supply
+                                        </div>
+                                        {isAvailableSupplyExpanded ? (
+                                            <ChevronDown className="h-3 w-3" />
+                                        ) : (
+                                            <ChevronRight className="h-3 w-3" />
+                                        )}
+                                    </div>
+                                    <div className="text-2xl font-bold mt-2 text-primary">
+                                        {formatNumber(energyFlow.availableSupply)}
+                                    </div>
+                                    <div className="text-xs text-muted-foreground">kWh</div>
+                                    <div className="text-xs mt-2 text-muted-foreground font-medium">
+                                        {analytics.netPosition}
+                                    </div>
                                 </div>
-                                <div className="text-2xl font-bold mt-2 text-primary">
-                                    {formatNumber(energyFlow.availableSupply)}
-                                </div>
-                                <div className="text-xs text-muted-foreground">kWh</div>
-                                <div className="text-xs mt-2 text-muted-foreground font-medium">
-                                    {analytics.netPosition}
-                                </div>
+
+                                {/* Supply Breakdown */}
+                                {isAvailableSupplyExpanded && (
+                                    <div className="mt-2 space-y-1 max-h-96 overflow-y-auto bg-background/95 rounded-lg border border-primary/30 p-3">
+                                        <div className="text-xs font-semibold mb-2 text-muted-foreground sticky top-0 bg-background">
+                                            Supply Breakdown:
+                                        </div>
+
+                                        {/* Public DT (DTX) row — clickable to expand districts */}
+                                        <div
+                                            className="cursor-pointer hover:bg-muted/50 rounded transition-colors"
+                                            onClick={() => setIsPublicDtExpanded(!isPublicDtExpanded)}
+                                        >
+                                            <div className="flex items-center justify-between py-2 px-2 text-xs border-b border-border/50">
+                                                <div className="flex items-center gap-1">
+                                                    <div>
+                                                        <span className="font-medium block text-foreground">Public DT</span>
+                                                        <span className="text-muted-foreground text-[10px]">
+                                {dtxMetrics.uniqueMeters.size} meters · {dtxMetrics.byDistrict.size} districts
+                              </span>
+                                                    </div>
+                                                </div>
+                                                <div className="flex items-center gap-2 flex-shrink-0">
+                            <span className="text-muted-foreground">
+                              {formatNumber(energyFlow.dtxConsumption)} kWh
+                            </span>
+                                                    <div className="flex items-center gap-1">
+                              <span className="font-semibold text-primary min-w-[40px] text-right">
+                                {energyFlow.availableSupply > 0
+                                    ? formatNumber((energyFlow.dtxConsumption / energyFlow.availableSupply) * 100, 1)
+                                    : "0"}
+                                  %
+                              </span>
+                                                        {isPublicDtExpanded ? (
+                                                            <ChevronDown className="h-3 w-3" />
+                                                        ) : (
+                                                            <ChevronRight className="h-3 w-3" />
+                                                        )}
+                                                    </div>
+                                                </div>
+                                            </div>
+
+                                            {/* District breakdown */}
+                                            {isPublicDtExpanded && dtxMetrics.byDistrict.size > 0 && (
+                                                <div className="space-y-0.5 py-1 px-2 bg-muted/20 rounded-b">
+                                                    {Array.from(dtxMetrics.byDistrict.entries())
+                                                        .sort((a, b) => b[1].consumption - a[1].consumption)
+                                                        .map(([district, data]) => {
+                                                            const percentage =
+                                                                energyFlow.dtxConsumption > 0
+                                                                    ? (data.consumption / energyFlow.dtxConsumption) * 100
+                                                                    : 0;
+                                                            return (
+                                                                <div
+                                                                    key={district}
+                                                                    className="flex items-center justify-between py-1 px-2 hover:bg-muted/50 rounded text-xs ml-2 border-l-2 border-primary/30"
+                                                                >
+                                    <span className="font-medium text-muted-foreground truncate flex-1">
+                                      {district}
+                                    </span>
+                                                                    <div className="flex items-center gap-1 flex-shrink-0">
+                                      <span className="text-muted-foreground text-right">
+                                        {formatNumber(data.consumption)} kWh
+                                      </span>
+                                                                        <span className="font-semibold text-primary/70 min-w-[35px] text-right text-[10px]">
+                                        {formatNumber(percentage, 1)}%
+                                      </span>
+                                                                    </div>
+                                                                </div>
+                                                            );
+                                                        })}
+                                                </div>
+                                            )}
+                                        </div>
+
+                                        {/* Private DT (Non-DTX) Customers row */}
+                                        <div className="flex items-center justify-between py-2 px-2 hover:bg-muted/50 rounded text-xs">
+                                            <div>
+                                                <span className="font-medium block text-foreground">Private DT</span>
+                                                <span className="text-muted-foreground text-[10px]">
+                            Direct customers
+                          </span>
+                                            </div>
+                                            <div className="flex items-center gap-2 flex-shrink-0">
+                          <span className="text-muted-foreground">
+                            0 kWh
+                          </span>
+                                                <span className="font-semibold text-primary min-w-[45px] text-right">
+                            0%
+                          </span>
+                                            </div>
+                                        </div>
+                                    </div>
+                                )}
                             </div>
                         </div>
 
@@ -2145,93 +2254,6 @@ export function RegionDetail({ region }: RegionDetailProps) {
                                 </h3>
                             </div>
                             <div className="grid grid-cols-1 gap-4">
-                                <div className="relative">
-                                    {/* Flow arrow */}
-                                    <div
-                                        className="absolute top-1/2 -left-8 w-8 h-1 bg-purple-500"
-                                        style={{ transform: "translateY(-50%)" }}
-                                    />
-                                    <div
-                                        className="p-4 bg-purple-500/20 rounded-lg border-2 border-purple-500 text-center cursor-pointer hover:bg-purple-500/30 transition-colors"
-                                        onClick={() => setIsDtxExpanded(!isDtxExpanded)}
-                                    >
-                                        <div className="flex items-center justify-center gap-2">
-                                            <div className="text-xs font-medium text-muted-foreground">
-                                                DTX Import
-                                            </div>
-                                            {isDtxExpanded ? (
-                                                <ChevronDown className="h-3 w-3" />
-                                            ) : (
-                                                <ChevronRight className="h-3 w-3" />
-                                            )}
-                                        </div>
-                                        <div className="text-lg font-bold mt-1">
-                                            {formatNumber(energyFlow.dtxConsumption)}
-                                        </div>
-                                        <div className="text-xs text-muted-foreground">kWh</div>
-                                        <div className="text-xs text-muted-foreground mt-1">
-                                            {dtxMetrics.uniqueMeters.size} meters · {dtxMetrics.byDistrict.size} districts
-                                        </div>
-                                    </div>
-
-                                    {/* District Breakdown */}
-                                    {isDtxExpanded && dtxMetrics.byDistrict.size > 0 && (
-                                        <div className="mt-2 space-y-1 max-h-60 overflow-y-auto bg-background/95 rounded-lg border border-purple-500/30 p-3">
-                                            <div className="text-xs font-semibold mb-2 text-muted-foreground sticky top-0 bg-background">
-                                                Consumption by District:
-                                            </div>
-                                            {Array.from(dtxMetrics.byDistrict.entries())
-                                                .sort((a, b) => b[1].consumption - a[1].consumption)
-                                                .map(([district, data]) => {
-                                                    const percentage =
-                                                        energyFlow.dtxConsumption > 0
-                                                            ? (data.consumption / energyFlow.dtxConsumption) * 100
-                                                            : 0;
-                                                    return (
-                                                        <div
-                                                            key={district}
-                                                            className="flex items-center justify-between py-1 px-2 hover:bg-muted/50 rounded text-xs"
-                                                        >
-                                                            <span className="font-medium truncate flex-1">{district}</span>
-                                                            <div className="flex items-center gap-2 flex-shrink-0">
-                                        <span className="text-muted-foreground">
-                                          {formatNumber(data.consumption)} kWh
-                                        </span>
-                                                                <span className="font-semibold text-purple-600 min-w-[45px] text-right">
-                                          {formatNumber(percentage, 1)}%
-                                        </span>
-                                                            </div>
-                                                        </div>
-                                                    );
-                                                })}
-                                        </div>
-                                    )}
-                                </div>
-
-                                {/* Non-DTX Customers */}
-                                {energyFlow.availableSupply - energyFlow.dtxConsumption > 0 && (
-                                    <div className="relative">
-                                        {/* Flow arrow */}
-                                        <div
-                                            className="absolute top-1/2 -left-8 w-8 h-1 bg-amber-500"
-                                            style={{ transform: "translateY(-50%)" }}
-                                        />
-                                        <div className="p-4 bg-amber-500/20 rounded-lg border-2 border-amber-500 text-center">
-                                            <div className="text-xs font-medium text-muted-foreground">
-                                                Non-DTX Customers
-                                            </div>
-                                            {/*<div className="text-lg font-bold mt-1 text-amber-600">{formatNumber(energyFlow.availableSupply - energyFlow.dtxConsumption)}</div>*/}
-                                            <div className="text-lg font-bold mt-1 text-amber-600">
-                                                0
-                                            </div>
-                                            <div className="text-xs text-muted-foreground">kWh</div>
-                                            <div className="text-xs text-muted-foreground mt-1">
-                                                Direct customers
-                                            </div>
-                                        </div>
-                                    </div>
-                                )}
-
                                 {/* Express Feeder Outbound */}
                                 {expressFeederMetrics.outbound.length > 0 && (
                                     <div className="relative">
@@ -2414,13 +2436,13 @@ export function RegionDetail({ region }: RegionDetailProps) {
                                 </div>
                                 {/* Distribution */}
                                 <div>
-                                    <span className="font-medium text-foreground">Distribution — DTX Import</span>
+                                    <span className="font-medium text-foreground">Distribution — Public DT (DTX Import)</span>
                                     <p className="mt-0.5 leading-relaxed">
-                                        Total kWh drawn from the pool by all Distribution Transformer (DTX) meters in the region, summed across all districts.
+                                        Total kWh drawn from the pool by all public Distribution Transformer (DTX) meters in the region, summed across all districts.
                                     </p>
                                 </div>
                                 <div>
-                                    <span className="font-medium text-foreground">Distribution — Non-DTX Customers</span>
+                                    <span className="font-medium text-foreground">Distribution — Private DT (Non-DTX Customers)</span>
                                     <p className="mt-0.5 leading-relaxed">
                                         Direct customers not served through a DTX meter. Currently reported as 0 — no direct customer metering data is ingested yet.
                                     </p>
