@@ -396,12 +396,12 @@ export function DistrictMiniMap({ districtName, geometry, meterCoordinates = [] 
             <CardHeader className="pb-3">
                 <div className="flex items-center justify-between">
                     <CardTitle className="text-base">District Map</CardTitle>
-                    <Button variant="ghost" size="sm" asChild className="h-8 text-xs">
-                        <Link href={`/map?district=${encodeURIComponent(districtName)}`} className="flex items-center gap-1">
-                            <ExternalLink className="h-3 w-3" />
-                            Full Map
-                        </Link>
-                    </Button>
+                    {/*<Button variant="ghost" size="sm" asChild className="h-8 text-xs">*/}
+                    {/*    <Link href={`/map?district=${encodeURIComponent(districtName)}`} className="flex items-center gap-1">*/}
+                    {/*        <ExternalLink className="h-3 w-3" />*/}
+                    {/*        Full Map*/}
+                    {/*    </Link>*/}
+                    {/*</Button>*/}
                 </div>
             </CardHeader>
             <CardContent>

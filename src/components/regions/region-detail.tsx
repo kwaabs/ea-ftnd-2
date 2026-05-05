@@ -1889,14 +1889,31 @@ export function RegionDetail({ region }: RegionDetailProps) {
                     </p>
                 </CardHeader>
                 <CardContent>
-                    <div className="flex items-center justify-between gap-4">
+                    {/* Column Headers - Fixed at top */}
+                    <div className="flex items-center gap-0 pt-2">
+                        <div className="flex-1 pr-6">
+                            <h3 className="font-semibold text-sm text-muted-foreground text-center">
+                                SOURCES
+                            </h3>
+                        </div>
+                        <div className="w-1"></div>
+                        <div className="flex-1 px-6">
+                            <h3 className="font-semibold text-sm text-muted-foreground text-center">
+                                POOL
+                            </h3>
+                        </div>
+                        <div className="w-1"></div>
+                        <div className="flex-1 pl-6">
+                            <h3 className="font-semibold text-sm text-muted-foreground text-center">
+                                OUT OF REGION
+                            </h3>
+                        </div>
+                    </div>
+
+                    {/* Diagram Content - Centered vertically */}
+                    <div className="flex items-center gap-0 min-h-[500px]">
                         {/* Left: Sources */}
-                        <div className="flex-1">
-                            <div className="text-center mb-4">
-                                <h3 className="font-semibold text-sm text-muted-foreground mb-2">
-                                    SOURCES
-                                </h3>
-                            </div>
+                        <div className="flex-1 pr-6 flex flex-col justify-center">
                             <div className="grid grid-cols-1 gap-4">
                                 <div className="relative">
                                     <div
@@ -2118,13 +2135,11 @@ export function RegionDetail({ region }: RegionDetailProps) {
                             </div>
                         </div>
 
+                        {/* Divider 1 */}
+                        <div className="w-1 bg-border/40 rounded-full self-center h-96"></div>
+
                         {/* Center: Pool */}
-                        <div className="flex-1">
-                            <div className="text-center mb-4">
-                                <h3 className="font-semibold text-sm text-muted-foreground mb-2">
-                                    POOL
-                                </h3>
-                            </div>
+                        <div className="flex-1 px-6 flex flex-col justify-center">
                             <div className="relative">
                                 {/* Available Supply clickable box */}
                                 <div
@@ -2154,7 +2169,7 @@ export function RegionDetail({ region }: RegionDetailProps) {
                                 {isAvailableSupplyExpanded && (
                                     <div className="mt-2 space-y-1 max-h-96 overflow-y-auto bg-background/95 rounded-lg border border-primary/30 p-3">
                                         <div className="text-xs font-semibold mb-2 text-muted-foreground sticky top-0 bg-background">
-                                            Supply Breakdown:
+                                            Regional distribution:
                                         </div>
 
                                         {/* Public DT (DTX) row — clickable to expand districts */}
@@ -2246,13 +2261,11 @@ export function RegionDetail({ region }: RegionDetailProps) {
                             </div>
                         </div>
 
-                        {/* Right: Uses */}
-                        <div className="flex-1">
-                            <div className="text-center mb-4">
-                                <h3 className="font-semibold text-sm text-muted-foreground mb-2">
-                                    DISTRIBUTION
-                                </h3>
-                            </div>
+                        {/* Divider 2 */}
+                        <div className="w-1 bg-border/40 rounded-full self-center h-96"></div>
+
+                        {/* Right: Out of Region */}
+                        <div className="flex-1 pl-6 flex flex-col justify-center">
                             <div className="grid grid-cols-1 gap-4">
                                 {/* Express Feeder Outbound */}
                                 {expressFeederMetrics.outbound.length > 0 && (
