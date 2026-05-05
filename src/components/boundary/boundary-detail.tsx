@@ -736,7 +736,7 @@ export function BoundaryDetail({ boundaryMeteringPoint, type }: BoundaryDetailPr
                                                         const date = new Date(meter.last_reading_time);
 
                                                         if (date.getFullYear() <= 1900) {
-                                                            return <span className="text-muted-foreground italic">Not yet available</span>;
+                                                            return <span className="text-muted-foreground italic">Not available</span>;
                                                         }
 
                                                         return date.toLocaleDateString("en-GB", {
