@@ -598,7 +598,7 @@ export function FeedersTrafoTab({ meterTypes = ["BSP"] }: FeedersTrafoTabProps) 
                                                 <ArrowUpDown className="ml-2 h-4 w-4" />
                                             </Button>
                                         </TableHead>
-                                        <TableHead className="sticky left-[180px] z-10 bg-background">Region</TableHead>
+                                        <TableHead className="sticky left-[180px] z-10 bg-background">Region/Station</TableHead>
                                         <TableHead className="sticky left-[360px] z-10 bg-background">
                                             <Button variant="ghost" onClick={() => handleStatusSort("status")} className="h-8 px-2">
                                                 Status
@@ -650,7 +650,15 @@ export function FeedersTrafoTab({ meterTypes = ["BSP"] }: FeedersTrafoTabProps) 
                                                     <div className="flex items-center gap-2">
                                                         <span>{meter.region || "—"}</span>
                                                         <span className="font-bold text-muted-foreground">•</span>
-                                                        <span>{meter.station || "—"}</span>
+                                                        <span>
+                                                          <Link
+                                                              href={`/stations/${encodeURIComponent(meter.station?.toLowerCase() ?? "")}`}
+                                                              className="font-medium truncate flex-1 text-primary hover:underline"
+                                                          >
+                                                            {meter.station || "—"}
+                                                          </Link>
+                                                        </span>
+
                                                     </div>
                                                 </TableCell>
                                                 <TableCell className="sticky left-[360px] z-10 bg-background">
@@ -659,20 +667,32 @@ export function FeedersTrafoTab({ meterTypes = ["BSP"] }: FeedersTrafoTabProps) 
                                                     </Badge>
                                                 </TableCell>
                                                 <TableCell>
-                                                    <div>
-                                                        {meter.last_reading_time
-                                                            ? new Date(meter.last_reading_time).toLocaleDateString()
-                                                            : "-"}
-                                                    </div>
-                                                    <div className="text-xs text-muted-foreground">
-                                                        {meter.last_reading_time
-                                                            ? new Date(meter.last_reading_time).toLocaleTimeString()
-                                                            : "-"}
-                                                    </div>
+                                                    {(() => {
+                                                        const date = meter.last_reading_time ? new Date(meter.last_reading_time) : null;
+
+                                                        // Check if date is missing or is the year 1900
+                                                        if (!date || date.getFullYear() === 1900) {
+                                                            return <span className="text-muted-foreground italic">Not available</span>;
+                                                        }
+
+                                                        return (
+                                                            <>
+                                                                <div>{date.toLocaleDateString()}</div>
+                                                                <div className="text-xs text-muted-foreground">
+                                                                    {date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                                                                </div>
+                                                            </>
+                                                        );
+                                                    })()}
                                                 </TableCell>
+
                                                 <TableCell>
-                                                    {meter.total_consumption?.toFixed(2).toLocaleString() ?? '0'} kWh
+                                                    {(meter.total_consumption ?? 0).toLocaleString(undefined, {
+                                                        minimumFractionDigits: 2,
+                                                        maximumFractionDigits: 2
+                                                    })} kWh
                                                 </TableCell>
+
                                                 <TableCell>
                                                     <span
                                                         className={
@@ -911,7 +931,19 @@ export function FeedersTrafoTab({ meterTypes = ["BSP"] }: FeedersTrafoTabProps) 
                                         {expandedRegions.has(regionData.region) &&
                                             regionData.stations?.map((stationData: any) => (
                                                 <TableRow key={`${regionData.region}-${stationData.station}`} className="bg-muted/30">
-                                                    <TableCell className="pl-8">{toProperCase(stationData.station)}</TableCell>
+                                                    <TableCell className="pl-8">
+
+
+
+                                                        <Link
+                                                            href={`/stations/${encodeURIComponent(stationData.station?.toLowerCase())}`}
+                                                            className="font-medium truncate flex-1 text-primary hover:underline"
+                                                        >
+                                                            {toProperCase(stationData.station)}
+                                                        </Link>
+
+
+                                                    </TableCell>
                                                     <TableCell className="text-green-600 text-right">{formatNumber(stationData.supplyKwh || 0)}</TableCell>
                                                     <TableCell className="text-blue-600 text-right">
                                                         {formatNumber(stationData.reverseFlowKwh || 0)}
@@ -1151,7 +1183,18 @@ export function FeedersTrafoTab({ meterTypes = ["BSP"] }: FeedersTrafoTabProps) 
                                                     </Link>
                                                 </TableCell>
                                                 <TableCell>{toProperCase(meter.region)}</TableCell>
-                                                <TableCell>{toProperCase(meter.station)}</TableCell>
+                                                <TableCell>
+
+
+
+                                                    <Link
+                                                        href={`/stations/${encodeURIComponent(meter.station?.toLowerCase())}`}
+                                                        className="font-medium truncate flex-1 text-primary hover:underline"
+                                                    >
+                                                        {toProperCase(meter.station)}
+                                                    </Link>
+
+                                                </TableCell>
                                                 <TableCell>{meter.feeder_panel_name}</TableCell>
                                                 <TableCell className="text-right text-green-600">
                                                     {importValue > 0 ? formatNumber(importValue,2) : "—"}
