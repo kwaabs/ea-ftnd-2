@@ -730,13 +730,21 @@ export function BoundaryDetail({ boundaryMeteringPoint, type }: BoundaryDetailPr
                                                     </Badge>
                                                 </TableCell>
                                                 <TableCell>
-                                                    {meter.last_reading_time
-                                                        ? new Date(meter.last_reading_time).toLocaleDateString("en-GB", {
+                                                    {(() => {
+                                                        if (!meter.last_reading_time) return "—";
+
+                                                        const date = new Date(meter.last_reading_time);
+
+                                                        if (date.getFullYear() <= 1900) {
+                                                            return <span className="text-muted-foreground italic">Not yet available</span>;
+                                                        }
+
+                                                        return date.toLocaleDateString("en-GB", {
                                                             day: "2-digit",
                                                             month: "short",
                                                             year: "numeric",
-                                                        })
-                                                        : "-"}
+                                                        });
+                                                    })()}
                                                 </TableCell>
                                                 <TableCell className="text-right">
                                                     {formatNumber(meter.total_consumption_kwh ?? 0)}
