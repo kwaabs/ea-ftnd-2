@@ -29,6 +29,14 @@ export function Header() {
     const fromDate = formatDisplayDate(dateRange.start)
     const toDate = formatDisplayDate(dateRange.end)
 
+    // Check if end date is today
+    const today = new Date()
+    const endDateObj = new Date(dateRange.end)
+    const isEndDateToday =
+        endDateObj.getFullYear() === today.getFullYear() &&
+        endDateObj.getMonth() === today.getMonth() &&
+        endDateObj.getDate() === today.getDate()
+
     return (
         <header className="sticky top-0 z-50 w-full border-b border-border bg-card">
             <div className="flex h-16 items-center px-6 gap-4">
@@ -49,14 +57,21 @@ export function Header() {
 
                 {/* Right section - Date and Filters */}
                 <div className="flex items-center gap-4 shrink-0">
-                    <div
-                        className="flex items-center gap-2 px-3 py-1.5 rounded-md text-sm"
-                        style={{ backgroundColor: 'hsl(0, 100%, 97%)' }}
-                    >
-                        <Calendar className="h-4 w-4 text-rose-600"/>
-                        <span className="font-semibold whitespace-nowrap text-rose-900">
-                            {fromDate} <span className="mx-1">to</span> {toDate}
-                        </span>
+                    <div className="flex flex-col gap-1">
+                        <div
+                            className="flex items-center gap-2 px-3 py-1.5 rounded-md text-sm"
+                            style={{ backgroundColor: 'hsl(0, 100%, 97%)' }}
+                        >
+                            <Calendar className="h-4 w-4 text-rose-600"/>
+                            <span className="font-semibold whitespace-nowrap text-rose-900">
+                                {fromDate} <span className="mx-1">to</span> {toDate}
+                            </span>
+                        </div>
+                        {isEndDateToday && (
+                            <span className="text-xs text-amber-600 font-medium px-3">
+                                Today&apos;s data not included
+                            </span>
+                        )}
                     </div>
 
 
