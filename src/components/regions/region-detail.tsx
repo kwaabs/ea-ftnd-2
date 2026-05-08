@@ -2180,7 +2180,7 @@ export function RegionDetail({ region }: RegionDetailProps) {
                                             <div className="flex items-center justify-between py-2 px-2 text-xs border-b border-border/50">
                                                 <div className="flex items-center gap-1">
                                                     <div>
-                                                        <span className="font-medium block text-foreground">Public DT</span>
+                                                        <span className="font-medium block text-foreground">Public DTs</span>
                                                         <span className="text-muted-foreground text-[10px]">
                                 {dtxMetrics.uniqueMeters.size} meters · {dtxMetrics.byDistrict.size} districts
                               </span>
@@ -2242,7 +2242,7 @@ export function RegionDetail({ region }: RegionDetailProps) {
                                         {/* Private DT (Non-DTX) Customers row */}
                                         <div className="flex items-center justify-between py-2 px-2 hover:bg-muted/50 rounded text-xs">
                                             <div>
-                                                <span className="font-medium block text-foreground">Private DT</span>
+                                                <span className="font-medium block text-foreground">Customers with dedicated DTs or Circuits</span>
                                                 <span className="text-muted-foreground text-[10px]">
                             Direct customers
                           </span>
