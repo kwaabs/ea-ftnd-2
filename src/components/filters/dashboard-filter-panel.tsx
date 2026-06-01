@@ -19,18 +19,9 @@ interface FilterOption {
 }
 
 interface DashboardFilterPanelProps {
-  preset: "last_day" | "last_week" | "last_month" | "custom"
-  dateRange: { start: string; end: string }
-  regions: string[]
-  districts: string[]
-  locations: string[]
-  boundaryMeteringPoints: string[]
-  meterTypes: string[]
-  voltageKvs: string[]
-  stations: string[]
-  activeTab?: string
+  preset: "last_week" | "last_month" | "custom"
   onApplyFilters: (filters: {
-    preset: "last_day" | "last_week" | "last_month" | "custom"
+    preset: "last_week" | "last_month" | "custom"
     dateRange: { start: string; end: string }
     regions: string[]
     districts: string[]
@@ -59,7 +50,7 @@ export function DashboardFilterPanel({
                                      }: DashboardFilterPanelProps) {
   const [isOpen, setIsOpen] = useState(false)
 
-  const [pendingPreset, setPendingPreset] = useState<"last_day" | "last_week" | "last_month" | "custom">(preset)
+  const [pendingPreset, setPendingPreset] = useState<"last_week" | "last_month" | "custom">(preset as "last_week" | "last_month" | "custom")
   const [pendingDateRange, setPendingDateRange] = useState(dateRange)
   const [pendingRegions, setPendingRegions] = useState<FilterOption[]>(
       (regions || []).map((r) => ({ value: r, label: r })),
@@ -211,24 +202,24 @@ export function DashboardFilterPanel({
     }),
   }
 
-  const handlePresetClick = (newPreset: "last_day" | "last_week" | "last_month") => {
+  const handlePresetClick = (newPreset: "last_week" | "last_month") => {
     setPendingPreset(newPreset)
     const today = new Date()
     let start: Date
-    const end = today
+    // End date is yesterday (exclude today)
+    const end = new Date(today)
+    end.setDate(end.getDate() - 1)
 
     switch (newPreset) {
-      case "last_day":
-        start = new Date(today)
-        start.setDate(start.getDate() - 1)
-        break
       case "last_week":
-        start = new Date(today)
-        start.setDate(start.getDate() - 7)
+        // Last 6 days (excluding today)
+        start = new Date(end)
+        start.setDate(start.getDate() - 6)
         break
       case "last_month":
-        start = new Date(today)
-        start.setMonth(start.getMonth() - 1)
+        // Last 30 days (excluding today)
+        start = new Date(end)
+        start.setDate(start.getDate() - 30)
         break
     }
 
@@ -425,14 +416,6 @@ export function DashboardFilterPanel({
                 <Label className="text-sm font-medium">Date Range</Label>
                 <div className="flex flex-wrap items-center gap-2">
                   <div className="flex gap-2">
-                    <Button
-                        variant={pendingPreset === "last_day" ? "default" : "outline"}
-                        size="sm"
-                        onClick={() => handlePresetClick("last_day")}
-                        type="button"
-                    >
-                      Last Day
-                    </Button>
                     <Button
                         variant={pendingPreset === "last_week" ? "default" : "outline"}
                         size="sm"

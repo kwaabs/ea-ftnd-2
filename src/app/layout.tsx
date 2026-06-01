@@ -6,6 +6,7 @@ import "./globals.css"
 import "./nprogress.css"
 import { QueryProvider } from "@/components/providers/query-provider"
 import { AuthProvider } from "@/components/providers/auth-provider"
+import Providers from "@/components/providers/msal-provider" // adjust path as needed
 import { ProgressProvider } from "@/components/providers/progress-provider"
 import { DesktopWarningBanner } from "@/components/layout/desktop-warning-banner"
 
@@ -49,18 +50,32 @@ export default function RootLayout({
   children: React.ReactNode
 }>) {
   return (
+    // <html lang="en">
+    //   <body className={`font-sans antialiased min-w-[1200px]`}>
+    //     <DesktopWarningBanner />
+    //     <QueryProvider>
+    //       <AuthProvider>
+    //         <ProgressProvider>
+    //           {children}
+    //         </ProgressProvider>
+    //       </AuthProvider>
+    //     </QueryProvider>
+    //     {/*<Analytics />*/}
+    //   </body>
+    // </html>
     <html lang="en">
-      <body className={`font-sans antialiased min-w-[1200px]`}>
-        <DesktopWarningBanner />
-        <QueryProvider>
-          <AuthProvider>
-            <ProgressProvider>
-              {children}
-            </ProgressProvider>
-          </AuthProvider>
-        </QueryProvider>
-        {/*<Analytics />*/}
-      </body>
-    </html>
+  <body className={`font-sans antialiased min-w-[1200px]`}>
+    <DesktopWarningBanner />
+    <Providers>
+      <QueryProvider>
+        <AuthProvider>
+          <ProgressProvider>
+            {children}
+          </ProgressProvider>
+        </AuthProvider>
+      </QueryProvider>
+    </Providers>
+  </body>
+</html>
   )
 }

@@ -184,14 +184,14 @@ export interface ConsumptionHeatmapResponse {
 }
 
 export type MeterType =
-  | "BSP"
-  | "PSS"
-  | "Switching Station"
-  | "Regional Boundary Metering"
-  | "District Boundary Metering"
-  | "Distribution Transformers"
+    | "BSP"
+    | "PSS"
+    | "Switching Station"
+    | "Regional Boundary Metering"
+    | "District Boundary Metering"
+    | "Distribution Transformers"
 
-export type DateRangePreset = "last_day" | "last_week" | "last_month" | "custom"
+export type DateRangePreset = "last_week" | "last_month" | "custom"
 
 export interface MeterDetails {
   id: string

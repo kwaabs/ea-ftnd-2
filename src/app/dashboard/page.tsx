@@ -4,13 +4,13 @@ import { useEffect } from "react"
 import { AppLayout } from "@/components/layout/app-layout"
 import { useDashboardStore } from "@/stores/dashboard-store"
 import { useAppStore } from "@/stores/app-store"
-import { OverviewMainTabV2 } from "@/components/dashboard/overview-main-tab-v2"
+import { OverviewMainTabV3 } from "@/components/dashboard/overview-main-tab-v3"
 import { TrendingUp, TrendingDown, Users, Activity } from "lucide-react"
 import { useQuery } from "@tanstack/react-query"
 
 export default function DashboardPage() {
   const { metrics, setMetrics, setLoading } = useDashboardStore()
-  const { filters, clearFilters, clearNonDateFilters } = useAppStore()
+  const { filters, applyFilters, clearFilters, clearNonDateFilters } = useAppStore()
 
   // Clear non-date filters when user leaves the page
   useEffect(() => {
@@ -19,7 +19,9 @@ export default function DashboardPage() {
     }
   }, [clearNonDateFilters])
 
-
+  const handleApplyFilters = (newFilters: any) => {
+    applyFilters(newFilters)
+  }
 
   const handleResetFilters = () => {
     clearFilters()
@@ -124,21 +126,21 @@ export default function DashboardPage() {
     stations: filters.stations || [],
     boundaryMeteringPoints: filters.boundaryMeteringPoints || [],
     meterTypes: filters.meterTypes || [],
-    voltages: (filters.voltages || []).map((v: string) => Number.parseInt(v)),
+    voltages: (filters.voltageKvs || []).map((v: string) => Number.parseInt(v)),
     locations: filters.locations || [],
-    feeders: filters?.feeders || [],
+    feeders: filters.feeders || [],
   }
 
   return (
-    <AppLayout>
-      <div className="space-y-6">
-        <div>
-          <h2 className="text-3xl font-semibold tracking-tight text-foreground">Dashboard Overview</h2>
-          <p className="text-muted-foreground mt-1">Monitor your electricity consumption and meter performance</p>
-        </div>
+      <AppLayout>
+        <div className="space-y-6">
+          <div>
+            <h2 className="text-3xl font-semibold tracking-tight text-foreground">Dashboard Overview</h2>
+            <p className="text-muted-foreground mt-1">Monitor your electricity consumption and meter performance</p>
+          </div>
 
-        <OverviewMainTabV2 dateRange={dateRange} filters={componentFilters} />
-      </div>
-    </AppLayout>
+          <OverviewMainTabV3 dateRange={dateRange} filters={componentFilters} />
+        </div>
+      </AppLayout>
   )
 }
