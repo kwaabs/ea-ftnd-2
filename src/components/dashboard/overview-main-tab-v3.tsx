@@ -6742,9 +6742,9 @@ export function OverviewMainTabV3({
                                 <div className="flex items-center justify-between py-2.5 bg-muted/30 rounded-md px-2 mb-2">
                                     <span className="text-xs font-semibold text-foreground">All Meters</span>
                                     <div className="flex items-center gap-4 text-xs font-semibold">
-                                        <span className="text-green-600">{meterHealthAnalytics.onlineMeters} Online</span>
-                                        <span className="text-red-500">{meterHealthAnalytics.offlineMeters} Offline</span>
-                                        <span className="text-muted-foreground">{meterHealthAnalytics.totalMeters} Total</span>
+                                        <span className="text-green-600">{onlineMeters} Online</span>
+                                        <span className="text-red-500">{totalMeters - onlineMeters} Offline</span>
+                                        <span className="text-muted-foreground">{totalMeters} Total</span>
                                     </div>
                                 </div>
                                 {meterHealthAnalytics.byMeterType.map((mt) => {
@@ -6775,10 +6775,6 @@ export function OverviewMainTabV3({
                     </CardContent>
                 </Card>
             </div>
-
-
-        
-
 
 
 </div>
