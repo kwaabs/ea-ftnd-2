@@ -184,12 +184,12 @@ export interface ConsumptionHeatmapResponse {
 }
 
 export type MeterType =
-    | "BSP"
-    | "PSS"
-    | "Switching Station"
-    | "Regional Boundary Metering"
-    | "District Boundary Metering"
-    | "Distribution Transformers"
+  | "BSP"
+  | "PSS"
+  | "Switching Station"
+  | "Regional Boundary Metering"
+  | "District Boundary Metering"
+  | "Distribution Transformers"
 
 export type DateRangePreset = "last_week" | "last_month" | "custom"
 
@@ -412,4 +412,168 @@ export interface RegionalMapResponse {
   data: {
     districts: DistrictMapData[]
   }
+}
+
+export interface CustomerConsumptionAggregateItem {
+  regionname: string
+  customer_count: number
+  sum_lastbillamount: number
+  sum_lastbillconsumption: number | null
+  sum_currentbalance: number
+  data_src?: string | null
+}
+
+export interface CustomerConsumptionAggregateResponse {
+  data: CustomerConsumptionAggregateItem[]
+  total: number
+}
+
+export interface CustomerConsumptionDetail {
+  regionname: string
+  districtname: string
+  servicetype: string
+  serviceclass: string
+  tariffclasscode: string
+  tariffclassname: string
+  fullname: string
+  servicepointnumber: string
+  accountnumber: string
+  contractstatus: string
+  activity: string
+  subactivity: string
+  customertype: string
+  lastreadingvalue: number | null
+  geocode: string
+  plotcode: string
+  ministry: string | null
+  mda: string
+  lastreadingdate: string | null
+  lastbillamount: number
+  lastbillconsumption: number | null
+  lastpaymentdate: string | null
+  lastpaymentamount: number | null
+  currentbalance: number | null
+  accounttype: string
+  isamr: boolean
+  ministrycode: string | null
+  ministryname: string | null
+  mdacode: string | null
+  mdaname: string | null
+  lastbilldate: string | null
+  billmonth: string
+  createdat: string
+  data_src?: string
+}
+
+// ─────────────────────────────────────────────────
+// MMS Customer Sales Types
+// ─────────────────────────────────────────────────
+
+export interface MmsCustomerSalesAggregateItem {
+  data_src: string
+  region?: string | null
+  district?: string | null
+  customer_count: number
+  sum_credit_balance_remaining: number
+  sum_last_month_credit_read: number
+  sum_last_month_kwh_read: number | null
+}
+
+export interface MmsCustomerSalesAggregateResponse {
+  data: MmsCustomerSalesAggregateItem[]
+  total: number
+}
+
+export interface MmsCustomerSalesDetail {
+  meter_number: string
+  manufacturer: string
+  model: string
+  installation_date: string
+  removal_date: string | null
+  customer_name: string
+  contract_code: string
+  contract_type: string
+  service_commencement_date: string
+  service_termination_date: string | null
+  account_number: string
+  tariff: string
+  usage_point: string
+  geocode: string
+  region: string
+  district: string
+  address: string
+  latitude: number | null
+  longitude: number | null
+  meter_serial_number: string
+  sts_credit_balance_remaining: number
+  sts_last_month_credit_read: number
+  sts_last_month_kwh_read: number
+  date_time: string
+  data_src: string
+}
+
+export interface MmsCustomerSalesDetailResponse {
+  data: MmsCustomerSalesDetail[]
+  total: number
+  page: number
+  limit: number
+  total_pages: number
+}
+
+export interface CustomerConsumptionDetailResponse {
+  data: CustomerConsumptionDetail[]
+  total: number
+  page: number
+  limit: number
+  total_pages: number
+}
+
+// ─────────────────────────────────────────────────
+// AMR Consumption Types (Automated Meter Reading)
+// ─────────────────────────────────────────────────
+
+export interface AmrConsumptionAggregateItem {
+  group_period: string
+  system_name: "export_kwh" | "import_kwh"
+  region: string
+  total_consumption: number
+  active_meters: number
+  total_meter_count: number
+  data_src?: "AMR"
+}
+
+export interface AmrConsumptionAggregateResponse {
+  data: AmrConsumptionAggregateItem[]
+}
+
+export interface AmrConsumptionDaily {
+  consumption_date: string
+  meter_number: string
+  day_start_reading: number
+  day_end_reading: number
+  consumed_energy: number
+  system_name: "export_kwh" | "import_kwh"
+  region: string
+  district: string
+  community: string
+  customer_name: string
+  account_no: string
+  spn: string
+  tariff_class: string
+  customer_type: string
+  account_type: string
+  contract_status: string
+  meter_phase: string
+  service_type: string
+  slt_type: string
+  multiply_factor: number
+  data_src?: "AMR"
+}
+
+export interface AmrConsumptionDailyResponse {
+  data: AmrConsumptionDaily[]
+  page?: number
+  limit?: number
+  total?: number
+  total_pages?: number
 }

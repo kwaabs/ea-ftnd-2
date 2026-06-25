@@ -149,3 +149,19 @@
     @apply bg-background text-foreground;
   }
 }
+
+@keyframes energyFlowDash {
+  to {
+    stroke-dashoffset: -200;
+  }
+}
+
+.energy-flow-pipe {
+  animation: energyFlowDash 2.4s linear infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .energy-flow-pipe {
+    animation: none;
+  }
+}

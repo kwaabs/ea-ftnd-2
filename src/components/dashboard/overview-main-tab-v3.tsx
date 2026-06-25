@@ -54,6 +54,8 @@ import {
     useTopBottomConsumers,
 } from "@/hooks/api/use-consumption-api"
 import { useRegionalBoundaryDaily } from "@/hooks/api/use-regional-boundary-api"
+import { useCustomerConsumptionAggregate } from "@/hooks/api/use-customer-consumption-aggregate-api"
+import { useMmsCustomerSalesAggregate } from "@/hooks/api/use-mms-customer-sales-aggregate-api"
 import { formatNumber } from "@/lib/utils"
 import {
     ResponsiveContainer,
@@ -240,6 +242,20 @@ export function OverviewMainTabV3({
 
     const { data: rawBoundaryMeterData, isLoading: isBoundaryDataLoading } = useRegionalBoundaryDaily(boundaryDataParams)
 
+    const customerSalesParams = {
+        dateFrom: dateRange.start,
+        dateTo: dateRange.end,
+        region: filters.regions && filters.regions.length > 0 ? filters.regions?.[0] : undefined,
+    }
+
+    const { data: customerConsumptionDataArray, isLoading: customerConsumptionLoading } = useCustomerConsumptionAggregate(customerSalesParams)
+
+    const { data: mmsAggregateData, isLoading: mmsAggregateLoading } = useMmsCustomerSalesAggregate({
+        groupBy: "region",
+        dateFrom: dateRange.start,
+        dateTo: dateRange.end,
+    })
+
     const energyPurchases = useMemo(() => {
         if (!aggregateData?.rawData || aggregateData.rawData.length === 0) {
             return 0
@@ -251,11 +267,21 @@ export function OverviewMainTabV3({
     }, [aggregateData?.rawData])
 
     const energySales = useMemo(() => {
-        return null
-    }, [])
+        const zeusKwh = customerConsumptionDataArray && customerConsumptionDataArray.length > 0
+            ? customerConsumptionDataArray.reduce((sum: number, item: any) => sum + (item.sum_lastbillconsumption || 0), 0)
+            : 0
+
+        const mmsKwh = mmsAggregateData && mmsAggregateData.length > 0
+            ? mmsAggregateData.reduce((sum: number, item: any) => sum + (item.sum_last_month_kwh_read || 0), 0)
+            : 0
+
+        if (zeusKwh === 0 && mmsKwh === 0) return null
+
+        return zeusKwh + mmsKwh
+    }, [customerConsumptionDataArray, mmsAggregateData])
 
     const systemLosses = useMemo(() => {
-        if (energySales === null || energySales === 0) {
+        if (energySales === null || energyPurchases === 0) {
             return {
                 kwh: null,
                 percentage: null,
@@ -263,7 +289,7 @@ export function OverviewMainTabV3({
         }
 
         const lossKwh = energyPurchases - energySales
-        const lossPercentage = (lossKwh / energySales) * 100
+        const lossPercentage = (lossKwh / energyPurchases) * 100
 
         return {
             kwh: lossKwh,
@@ -1688,7 +1714,6 @@ export function OverviewMainTabV3({
         if (text === "DTX") return "Distribution Transformer"
         if (text === "REGIONAL_BOUNDARY") return "Regional Boundary"
         if (text === "DISTRICT_BOUNDARY") return "District Boundary"
-        if (text === "EXPRESS_FEEDER") return "Express Feeder"
         return text
     }
 
@@ -6132,12 +6157,12 @@ export function OverviewMainTabV3({
                                         {groupBy === "none"
                                             ? sortedMeters.map((meter, index) => {
                                                 const getRankBadgeClass = (rank: number) => {
-                                                    if (rank === 1) return "bg-amber-500 text-white border-amber-600"
-                                                    if (rank === 2) return "bg-gray-400 text-white border-gray-500"
-                                                    if (rank === 3) return "bg-amber-700 text-white border-amber-800"
-                                                    if (rank <= 10) return "bg-green-600 text-white border-green-700"
-                                                    if (rank <= 20) return "bg-blue-600 text-white border-blue-700"
-                                                    return "bg-muted text-muted-foreground border-border"
+                                                    if (rank === 1) return "bg-amber-500 text-white border-amber-600" 
+                                                    if (rank === 2) return "bg-gray-400 text-white border-gray-500" 
+                                                    if (rank === 3) return "bg-amber-700 text-white border-amber-800" 
+                                                    if (rank <= 10) return "bg-green-600 text-white border-green-700" 
+                                                    if (rank <= 20) return "bg-blue-600 text-white border-blue-700" 
+                                                    return "bg-muted text-muted-foreground border-border" 
                                                 }
 
                                                 const getLocationString = () => {
@@ -6241,7 +6266,7 @@ export function OverviewMainTabV3({
                                                 }))
                                                 const importRanked = allGroupTotals.sort((a, b) => b.totalImport - a.totalImport)
                                                 const exportRanked = allGroupTotals.sort((a, b) => b.totalExport - a.totalExport)
-
+                                                
                                                 const groupImportRank = importRanked.findIndex((g) => g.key === groupKey) + 1
                                                 const groupExportRank = exportRanked.findIndex((g) => g.key === groupKey) + 1
 
@@ -6311,14 +6336,14 @@ export function OverviewMainTabV3({
                                                         {isExpanded && meters.map((meter, groupIndex) => {
                                                             const groupImportRank = groupIndex + 1
                                                             const groupExportRank = groupIndex + 1
-
+                                                            
                                                             const getRankBadgeClass = (rank: number) => {
-                                                                if (rank === 1) return "bg-amber-500 text-white border-amber-600"
-                                                                if (rank === 2) return "bg-gray-400 text-white border-gray-500"
-                                                                if (rank === 3) return "bg-amber-700 text-white border-amber-800"
-                                                                if (rank <= 10) return "bg-green-600 text-white border-green-700"
-                                                                if (rank <= 20) return "bg-blue-600 text-white border-blue-700"
-                                                                return "bg-muted text-muted-foreground border-border"
+                                                                if (rank === 1) return "bg-amber-500 text-white border-amber-600" 
+                                                                if (rank === 2) return "bg-gray-400 text-white border-gray-500" 
+                                                                if (rank === 3) return "bg-amber-700 text-white border-amber-800" 
+                                                                if (rank <= 10) return "bg-green-600 text-white border-green-700" 
+                                                                if (rank <= 20) return "bg-blue-600 text-white border-blue-700" 
+                                                                return "bg-muted text-muted-foreground border-border" 
                                                             }
 
                                                             const getLocationString = () => {
@@ -6467,7 +6492,7 @@ export function OverviewMainTabV3({
                 <Card>
                     <CardHeader className="pb-2">
                         <CardTitle className="text-sm font-medium text-muted-foreground">
-                            Energy Sales (Aggregate of individual consumption)
+                            Energy Sales (Zeus + MMS)
                         </CardTitle>
                     </CardHeader>
                     <CardContent>
@@ -6776,7 +6801,8 @@ export function OverviewMainTabV3({
                 </Card>
             </div>
 
+                {}
+            </div>
 
-</div>
-)
+    )
 }
