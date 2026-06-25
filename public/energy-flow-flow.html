@@ -1,0 +1,205 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Energy Flow — flowing mockup</title>
+<script src="https://cdn.tailwindcss.com"></script>
+<style>
+  body { font-family: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; }
+  .card { background:#fff; border:1px solid #e2e8f0; border-radius:0.75rem; box-shadow:0 1px 2px rgba(0,0,0,.04); }
+  .muted { color:#64748b; }
+  @keyframes flow { to { stroke-dashoffset: -240; } }
+  .flowline { animation: flow 3s linear infinite; }
+  .ribbon { transition: fill-opacity .15s ease; cursor: pointer; }
+  .node-rect { cursor: pointer; }
+</style>
+</head>
+<body class="bg-slate-100 text-slate-900">
+<div class="max-w-6xl mx-auto px-6 py-10 space-y-6">
+
+  <header class="space-y-2">
+    <h1 class="text-2xl font-bold">Energy Flow — does it flow now?</h1>
+    <p class="muted text-sm max-w-4xl">
+      A connected, proportional flow you can trace end-to-end. Energy enters from <b>BSP, boundary &amp; express
+      feeders</b>, pools as <b>Available Supply</b>, branches into <b>in-region distribution (DTX)</b> and
+      <b>exports that leave the region</b>, and distribution is delivered to <b>Customer Sales</b>.
+      Ribbon thickness = energy volume; dashes animate in the direction of flow.
+    </p>
+  </header>
+
+  <div class="card p-2 sm:p-4">
+    <div id="flow" class="w-full"></div>
+  </div>
+
+  <div class="flex flex-wrap items-center gap-x-6 gap-y-2 text-xs muted px-2">
+    <span class="flex items-center gap-1.5"><i class="w-3 h-3 rounded-sm" style="background:#10b981"></i>Supply / sales</span>
+    <span class="flex items-center gap-1.5"><i class="w-3 h-3 rounded-sm" style="background:#3b82f6"></i>Boundary</span>
+    <span class="flex items-center gap-1.5"><i class="w-3 h-3 rounded-sm" style="background:#8b5cf6"></i>Express feeder</span>
+    <span class="flex items-center gap-1.5"><i class="w-3 h-3 rounded-sm" style="background:#64748b"></i>Distribution (DTX)</span>
+    <span class="ml-auto flex items-center gap-1.5"><span class="px-1.5 py-0.5 rounded bg-amber-50 border border-dashed border-amber-300 text-amber-700 font-semibold">↗ leaves region</span></span>
+  </div>
+
+  <footer class="muted text-xs">Mockup only — balanced sample data. Hover a ribbon to highlight its path. Real build would keep node-click drill-downs (stations, partners, feeders, districts).</footer>
+</div>
+
+<script>
+const fmt = (n)=>Math.round(n).toLocaleString("en-US");
+
+// ---- balanced, direction-aware sample model ----
+const VAL = {
+  bsp:4250000, bnd:820000, exp:180000,         // sources  -> 5,250,000
+  pool:5250000,
+  dtx:4845000, bexp:310000, xexp:95000,         // pool out -> 5,250,000
+  cust:3900000,                                 // dtx -> customers (gap = unbilled, not drawn)
+};
+
+// nodes: col index, value, color, label, group flag for "leaves"
+const N = {
+  bsp:  { col:0, v:VAL.bsp,  c:"#10b981", t:"BSP Import",        s:"3 stations" },
+  bnd:  { col:0, v:VAL.bnd,  c:"#3b82f6", t:"Boundary Import",   s:"2 partners" },
+  exp:  { col:0, v:VAL.exp,  c:"#8b5cf6", t:"Express Inbound",   s:"1 feeder" },
+  pool: { col:1, v:VAL.pool, c:"#0f172a", t:"Available Supply",  s:"net position: Exporter", big:true },
+  dtx:  { col:2, v:VAL.dtx,  c:"#64748b", t:"DTX Distribution",  s:"812 meters · 18 districts" },
+  bexp: { col:2, v:VAL.bexp, c:"#3b82f6", t:"Boundary Export",   s:"to neighbours", leaves:true },
+  xexp: { col:2, v:VAL.xexp, c:"#8b5cf6", t:"Express Export",    s:"to neighbours", leaves:true },
+  cust: { col:3, v:VAL.cust, c:"#10b981", t:"Customer Sales",    s:"billed" },
+};
+// links in vertical order per source (top -> bottom)
+const L = [
+  ["bsp","pool"],["bnd","pool"],["exp","pool"],
+  ["pool","dtx"],["pool","bexp"],["pool","xexp"],
+  ["dtx","cust"],
+];
+
+// ---- layout constants ----
+const NODE_W=150, MINH=46, PAD=24, GAP_X=190, AREA_TOP=70, USABLE=330, LEFT=40, GROUP_GAP=22;
+const colX = [LEFT, LEFT+NODE_W+GAP_X, LEFT+(NODE_W+GAP_X)*2, LEFT+(NODE_W+GAP_X)*3];
+const W = colX[3]+NODE_W+LEFT;
+
+const colSums = [0,1,2,3].map(ci => Object.values(N).filter(n=>n.col===ci).reduce((s,n)=>s+n.v,0));
+const scale = USABLE / Math.max(...colSums);
+
+// compute display heights
+Object.values(N).forEach(n => n.h = Math.max(MINH, n.v*scale));
+
+// stack columns
+function stack(ci){
+  const ids = Object.keys(N).filter(k=>N[k].col===ci);
+  let y = AREA_TOP;
+  ids.forEach((k,i)=>{
+    if (N[k].leaves && i>0 && !N[ids[i-1]].leaves) y += GROUP_GAP; // gap before exports group
+    N[k].x = colX[ci];
+    N[k].y = y;
+    y += N[k].h + PAD;
+  });
+}
+[0,1,2,3].forEach(stack);
+const H = Math.max(...Object.values(N).map(n=>n.y+n.h)) + 30;
+
+// assign id back-ref, then centered band offsets
+Object.keys(N).forEach(k=>N[k].id=k);
+Object.values(N).forEach(n=>{
+  const outs = L.filter(l=>l[0]===n.id);
+  const ins  = L.filter(l=>l[1]===n.id);
+  const outTot = outs.reduce((s,l)=>s + (linkVal(l))*scale, 0);
+  const inTot  = ins.reduce((s,l)=>s + (linkVal(l))*scale, 0);
+  n.outUsed = (n.h - outTot)/2;
+  n.inUsed  = (n.h - inTot)/2;
+});
+function linkVal(l){
+  // a link carries the value of its smaller-defining endpoint; here use target value share.
+  // For our balanced model, link value = full value of the "narrower" semantic; we use:
+  const map = {
+    "bsp-pool":VAL.bsp, "bnd-pool":VAL.bnd, "exp-pool":VAL.exp,
+    "pool-dtx":VAL.dtx, "pool-bexp":VAL.bexp, "pool-xexp":VAL.xexp,
+    "dtx-cust":VAL.cust, "dtx-loss":VAL.loss,
+  };
+  return map[l[0]+"-"+l[1]];
+}
+
+// build defs gradients
+let defs = "";
+L.forEach((l,i)=>{
+  const a=N[l[0]], b=N[l[1]];
+  defs += `<linearGradient id="g${i}" x1="0" x2="1" y1="0" y2="0">
+    <stop offset="0%" stop-color="${a.c}"/><stop offset="100%" stop-color="${b.c}"/></linearGradient>`;
+});
+
+// build ribbons + flowlines
+let ribbons="", flows="";
+L.forEach((l,i)=>{
+  const S=N[l[0]], T=N[l[1]];
+  const w = linkVal(l)*scale;
+  const sx = S.x + NODE_W;
+  const tx = T.x;
+  const sy0 = S.y + S.outUsed; S.outUsed += w;
+  const ty0 = T.y + T.inUsed;  T.inUsed  += w;
+  const sy1 = sy0 + w, ty1 = ty0 + w;
+  const mx = (sx+tx)/2;
+  ribbons += `<path class="ribbon" data-i="${i}" fill="url(#g${i})" fill-opacity="0.32"
+     d="M${sx},${sy0} C${mx},${sy0} ${mx},${ty0} ${tx},${ty0} L${tx},${ty1} C${mx},${ty1} ${mx},${sy1} ${sx},${sy1} Z">
+     <title>${S.t} → ${T.t}: ${fmt(linkVal(l))} kWh</title></path>`;
+  const cy0=(sy0+sy1)/2, cy1=(ty0+ty1)/2;
+  const sw = Math.max(1.5, Math.min(6, w*0.4));
+  flows += `<path class="flowline" stroke="${S.c}" stroke-width="${sw}" fill="none" stroke-opacity="0.85"
+     stroke-dasharray="2 16" stroke-linecap="round"
+     d="M${sx},${cy0} C${mx},${cy0} ${mx},${cy1} ${tx},${cy1}"/>`;
+});
+
+// nodes
+function nodeSvg(n){
+  const tint = n.big ? "#0f172a" : "#fff";
+  const txtName = n.big ? "#fff" : "#0f172a";
+  const txtVal  = n.big ? "#fff" : "#0f172a";
+  const txtSub  = n.big ? "#cbd5e1" : "#64748b";
+  const leavesTag = n.leaves ? `<text x="${n.x+NODE_W-8}" y="${n.y+16}" text-anchor="end" font-size="9" font-weight="700" fill="#b45309">↗ OUT</text>` : "";
+  const dashed = n.leaves ? `stroke-dasharray="5 4"` : "";
+  return `
+    <g>
+      <rect class="node-rect" x="${n.x}" y="${n.y}" width="${NODE_W}" height="${n.h}" rx="10"
+            fill="${tint}" stroke="${n.c}" stroke-width="${n.big?3:2}" ${dashed}>
+        <title>${n.t}: ${fmt(n.v)} kWh</title>
+      </rect>
+      <rect x="${n.x}" y="${n.y}" width="5" height="${n.h}" rx="2.5" fill="${n.c}"/>
+      ${leavesTag}
+      <text x="${n.x+14}" y="${n.y + n.h/2 - 6}" font-size="12" font-weight="700" fill="${txtName}">${n.t}</text>
+      <text x="${n.x+14}" y="${n.y + n.h/2 + 12}" font-size="${n.big?16:13}" font-weight="800" fill="${txtVal}">${fmt(n.v)}<tspan font-size="9" font-weight="500" fill="${txtSub}"> kWh</tspan></text>
+      ${n.h>52 ? `<text x="${n.x+14}" y="${n.y + n.h/2 + 28}" font-size="9.5" fill="${txtSub}">${n.s}</text>`:""}
+    </g>`;
+}
+const nodes = Object.values(N).map(nodeSvg).join("");
+
+// exports group background
+const ex = [N.bexp, N.xexp];
+const gx = ex[0].x - 10, gy = ex[0].y - 24, gw = NODE_W + 20, gh = (ex[1].y+ex[1].h) - ex[0].y + 34;
+const groupBox = `
+  <rect x="${gx}" y="${gy}" width="${gw}" height="${gh}" rx="12" fill="#fffbeb" stroke="#fcd34d" stroke-dasharray="6 5"/>
+  <text x="${gx+gw/2}" y="${gy+15}" text-anchor="middle" font-size="9.5" font-weight="800" letter-spacing="1" fill="#b45309">↗ LEAVES REGION</text>`;
+
+// column headers
+const heads = [
+  ["SOURCES", colX[0]],
+  ["AVAILABLE SUPPLY", colX[1]],
+  ["DISTRIBUTION / EXPORT", colX[2]],
+  ["END USE", colX[3]],
+].map(([t,x])=>`<text x="${x+NODE_W/2}" y="44" text-anchor="middle" font-size="10.5" font-weight="800" letter-spacing="1.5" fill="#94a3b8">${t}</text>`).join("");
+
+document.getElementById("flow").innerHTML = `
+  <svg viewBox="0 0 ${W} ${H}" class="w-full" style="max-height:520px">
+    <defs>${defs}</defs>
+    ${groupBox}
+    ${heads}
+    ${ribbons}
+    ${flows}
+    ${nodes}
+  </svg>`;
+
+// hover highlight
+document.querySelectorAll(".ribbon").forEach(r=>{
+  r.addEventListener("mouseenter",()=>{ document.querySelectorAll(".ribbon").forEach(x=>x.setAttribute("fill-opacity","0.12")); r.setAttribute("fill-opacity","0.7"); });
+  r.addEventListener("mouseleave",()=>{ document.querySelectorAll(".ribbon").forEach(x=>x.setAttribute("fill-opacity","0.32")); });
+});
+</script>
+</body>
+</html>

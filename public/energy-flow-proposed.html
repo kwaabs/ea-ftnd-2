@@ -1,0 +1,228 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Energy Flow Diagram — proposed build</title>
+<script src="https://cdn.tailwindcss.com"></script>
+<style>
+  body { font-family: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; }
+  .card { background:#fff; border:1px solid #e2e8f0; border-radius:0.75rem; box-shadow:0 1px 2px rgba(0,0,0,.04); }
+  .muted { color:#64748b; }
+  .conn { color:#cbd5e1; }
+  details > summary { list-style:none; }
+  details > summary::-webkit-details-marker { display:none; }
+  .chev { transition: transform .15s ease; }
+  details[open] .chev { transform: rotate(90deg); }
+</style>
+</head>
+<body class="bg-slate-100 text-slate-900">
+<div class="max-w-6xl mx-auto px-6 py-10 space-y-8">
+
+  <header class="space-y-2">
+    <h1 class="text-2xl font-bold">Energy Flow Diagram — proposed build</h1>
+    <p class="muted text-sm max-w-3xl">
+      This is the actual component I'd build: your commented 3-column drill-down, modernized and extracted
+      into a standalone <code>&lt;EnergyFlowDiagram energyFlow={...} /&gt;</code>. Every card with a
+      <span class="muted">▸</span> is clickable to expand a breakdown. Sample region: <b>Ashanti</b>. Data math untouched.
+    </p>
+    <p class="text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded px-3 py-2 inline-block">
+      Toggle the view ↓ to compare a <b>card</b> style vs a more <b>compact list</b> style for the source/output items.
+    </p>
+    <div class="flex gap-2 text-sm">
+      <button onclick="setStyle('card')"  id="btn-card"  class="px-3 py-1.5 rounded-md border font-medium">Card style</button>
+      <button onclick="setStyle('list')"  id="btn-list"  class="px-3 py-1.5 rounded-md border font-medium">Compact style</button>
+    </div>
+  </header>
+
+  <!-- ============ THE COMPONENT ============ -->
+  <div class="card">
+    <!-- header -->
+    <div class="flex items-start justify-between p-5 border-b border-slate-100">
+      <div>
+        <h2 class="text-lg font-semibold">Energy Flow Diagram</h2>
+        <p class="muted text-sm">Energy sources, the available-supply pool, and how it's distributed</p>
+      </div>
+      <span id="net-badge" class="text-sm font-semibold text-emerald-700 bg-emerald-50 border border-emerald-200 px-3 py-1.5 rounded-lg">Net Exporter</span>
+    </div>
+
+    <!-- body -->
+    <div class="p-6">
+      <div class="grid grid-cols-[1fr_36px_1.05fr_36px_1fr] items-stretch">
+
+        <!-- SOURCES -->
+        <div class="space-y-3">
+          <h3 class="text-center text-[11px] font-bold tracking-widest uppercase muted">Sources</h3>
+          <div id="col-sources" class="space-y-3"></div>
+        </div>
+
+        <!-- connector -->
+        <div class="flex items-center justify-center"><div class="conn text-2xl">→</div></div>
+
+        <!-- POOL -->
+        <div class="flex flex-col">
+          <h3 class="text-center text-[11px] font-bold tracking-widest uppercase muted mb-3">Available Supply</h3>
+          <div id="col-pool" class="flex-1 flex"></div>
+        </div>
+
+        <!-- connector -->
+        <div class="flex items-center justify-center"><div class="conn text-2xl">→</div></div>
+
+        <!-- OUTPUTS -->
+        <div class="space-y-3">
+          <h3 class="text-center text-[11px] font-bold tracking-widest uppercase muted">Where it goes</h3>
+          <div id="col-outputs" class="space-y-4"></div>
+        </div>
+      </div>
+
+      <!-- legend -->
+      <div class="flex flex-wrap items-center gap-x-5 gap-y-2 mt-7 pt-4 border-t border-slate-100 text-xs muted">
+        <span class="flex items-center gap-1.5"><i class="w-3 h-3 rounded-sm bg-emerald-500 inline-block"></i>Supply / sales</span>
+        <span class="flex items-center gap-1.5"><i class="w-3 h-3 rounded-sm bg-blue-500 inline-block"></i>Boundary exchange</span>
+        <span class="flex items-center gap-1.5"><i class="w-3 h-3 rounded-sm bg-purple-500 inline-block"></i>Express feeder</span>
+        <span class="flex items-center gap-1.5"><i class="w-3 h-3 rounded-sm bg-slate-500 inline-block"></i>Distribution (DTX)</span>
+        <span class="flex items-center gap-1.5"><i class="w-3 h-3 rounded-sm bg-rose-500 inline-block"></i>System losses</span>
+        <span class="ml-auto">Bar width = share of available supply · click ▸ rows to drill in</span>
+      </div>
+    </div>
+  </div>
+
+  <footer class="muted text-xs">Mockup only — sample data, not wired to the API.</footer>
+</div>
+
+<script>
+const energyFlow = {
+  bspImport: 4250000, boundaryImport: 820000, boundaryExport: 310000, boundaryNet: 510000,
+  expressFeederInbound: 180000, expressFeederOutbound: 95000, expressFeederExport: 95000, expressNet: 85000,
+  availableSupply: 4845000, dtxConsumption: 3920000, customerSales: 4180000, systemLosses: 665000,
+};
+const breakdowns = {
+  bsp:  [ {n:"Kumasi BSP",v:2100000},{n:"Obuasi BSP",v:1250000},{n:"Konongo BSP",v:900000} ],
+  bnd:  [ {n:"Tafo / Ashanti (Eastern)",v:480000},{n:"Ejura / Ashanti (Bono East)",v:340000} ],
+  exp:  [ {n:"Feeder F12 · Brong → Ashanti",v:85000} ],
+  pool: [ {n:"Public DTs (DTX)",v:3920000,sub:"812 meters · 18 districts"},{n:"Customer Sales (billed)",v:4180000,sub:"metered accounts"} ],
+  cust: [ {n:"Postpaid",v:2680000},{n:"Prepaid",v:1500000} ],
+  dtx:  [ {n:"Kumasi Metro",v:1450000},{n:"Obuasi",v:980000},{n:"Ejisu",v:760000},{n:"Other (15 districts)",v:730000} ],
+};
+const fmt = (n)=>Math.round(n).toLocaleString("en-US");
+const pct = (a,b)=>(b>0?(a/b)*100:0).toFixed(1);
+const palettes = {
+  emerald:{bg:"bg-emerald-50",bd:"border-emerald-300",tx:"text-emerald-700",bar:"bg-emerald-500"},
+  blue:{bg:"bg-blue-50",bd:"border-blue-300",tx:"text-blue-700",bar:"bg-blue-500"},
+  purple:{bg:"bg-purple-50",bd:"border-purple-300",tx:"text-purple-700",bar:"bg-purple-500"},
+  slate:{bg:"bg-slate-50",bd:"border-slate-300",tx:"text-slate-700",bar:"bg-slate-500"},
+  rose:{bg:"bg-rose-50",bd:"border-rose-300",tx:"text-rose-700",bar:"bg-rose-500"},
+  amber:{bg:"bg-amber-50",bd:"border-amber-300",tx:"text-amber-700",bar:"bg-amber-500"},
+};
+
+let STYLE = "card";
+
+function rows(items, color){
+  return items.map(it=>`
+    <div class="flex items-center justify-between py-1.5 px-2 rounded hover:bg-white/70 text-[11px]">
+      <div class="min-w-0">
+        <span class="font-medium truncate block">${it.n}</span>
+        ${it.sub?`<span class="muted text-[10px]">${it.sub}</span>`:""}
+      </div>
+      <div class="flex items-center gap-2 shrink-0 ml-2">
+        <span class="muted">${fmt(it.v)}</span>
+        <span class="font-semibold ${palettes[color].tx} w-12 text-right">${pct(it.v, items.reduce((s,d)=>s+d.v,0))}%</span>
+      </div>
+    </div>`).join("");
+}
+
+function item({ key, label, value, color, sub, hasBreakdown, leaves }){
+  const p = palettes[color];
+  const width = Math.min(100, Math.max(2,(value/energyFlow.availableSupply)*100));
+  const leaveTag = leaves ? `<span class="text-[9px] font-semibold ${p.tx} bg-white border ${p.bd} rounded px-1 py-0.5 ml-1">↗ out</span>` : "";
+  const bd = hasBreakdown ? `
+    <div class="mt-2 pt-2 border-t border-dashed ${p.bd} space-y-0.5">
+      ${rows(breakdowns[key]||[], color)}
+    </div>` : "";
+
+  if (STYLE === "list") {
+    return `
+    <details class="rounded-lg border ${p.bd} ${p.bg} px-3 py-2 ${hasBreakdown?"":"opacity-100"}">
+      <summary class="flex items-center justify-between cursor-pointer">
+        <span class="flex items-center gap-1.5">
+          ${hasBreakdown?`<span class="chev ${p.tx} text-xs">▸</span>`:`<span class="w-3"></span>`}
+          <span class="text-xs font-semibold ${p.tx}">${label}</span>${leaveTag}
+        </span>
+        <span class="text-sm font-bold">${fmt(value)}<span class="text-[10px] font-normal muted ml-1">kWh</span></span>
+      </summary>
+      <div class="h-1 rounded-full bg-white/70 mt-2 overflow-hidden"><div class="${p.bar} h-full" style="width:${width}%"></div></div>
+      ${bd}
+    </details>`;
+  }
+  // card style
+  return `
+    <details class="rounded-lg border-2 ${p.bd} ${p.bg} p-3 ${hasBreakdown?"open:shadow-sm":""}">
+      <summary class="cursor-pointer ${hasBreakdown?"":"cursor-default"}">
+        <div class="flex items-center justify-between">
+          <span class="text-xs font-semibold ${p.tx}">${label}${leaveTag}</span>
+          ${hasBreakdown?`<span class="chev ${p.tx} text-[10px]">▸</span>`:""}
+        </div>
+        <div class="text-lg font-bold mt-0.5">${fmt(value)} <span class="text-xs font-normal muted">kWh</span></div>
+        <div class="h-1.5 rounded-full bg-white/70 mt-2 overflow-hidden"><div class="${p.bar} h-full" style="width:${width}%"></div></div>
+        ${sub?`<div class="text-[10px] muted mt-1">${sub}</div>`:""}
+      </summary>
+      ${bd}
+    </details>`;
+}
+
+function render(){
+  document.getElementById("col-sources").innerHTML =
+    item({key:"bsp",label:"BSP Import",value:energyFlow.bspImport,color:"emerald",sub:"3 stations",hasBreakdown:true}) +
+    item({key:"bnd",label:"Boundary Import",value:energyFlow.boundaryImport,color:"blue",sub:"2 exchange partners",hasBreakdown:true}) +
+    item({key:"exp",label:"Express Inbound (net)",value:energyFlow.expressNet,color:"purple",sub:"1 feeder",hasBreakdown:true});
+
+  document.getElementById("col-pool").innerHTML = `
+    <details class="w-full rounded-xl border-[3px] border-slate-800 bg-slate-50 p-5 self-center">
+      <summary class="cursor-pointer text-center">
+        <div class="text-xs font-semibold muted flex items-center justify-center gap-1.5">Available Supply <span class="chev text-[10px]">▸</span></div>
+        <div class="text-3xl font-extrabold mt-1">${fmt(energyFlow.availableSupply)}</div>
+        <div class="text-xs muted">kWh</div>
+        <div class="text-[11px] mt-2 muted">BSP + Boundary&nbsp;net + Express&nbsp;net</div>
+      </summary>
+      <div class="mt-3 pt-3 border-t border-dashed border-slate-300 space-y-0.5">
+        ${rows(breakdowns.pool, "slate")}
+      </div>
+    </details>`;
+
+  const groupHeader = (icon, text, hint) => `
+    <div class="flex items-center gap-2 px-1">
+      <span class="text-sm">${icon}</span>
+      <span class="text-[11px] font-bold tracking-wide uppercase muted">${text}</span>
+      ${hint?`<span class="text-[10px] muted ml-auto">${hint}</span>`:""}
+    </div>`;
+
+  const inRegion =
+    item({key:"dtx",label:"DTX Consumption",value:energyFlow.dtxConsumption,color:"slate",sub:"distribution transformers",hasBreakdown:true}) +
+    item({key:"cust",label:"Customer Sales",value:energyFlow.customerSales,color:"emerald",sub:"billed",hasBreakdown:true}) +
+    item({key:"loss",label:"System Losses",value:energyFlow.systemLosses,color:"rose",sub:pct(energyFlow.systemLosses,energyFlow.availableSupply)+"% of supply",hasBreakdown:false});
+
+  const exported =
+    item({key:"xout",label:"Express Export",value:energyFlow.expressFeederExport,color:"amber",sub:"to neighbouring region",hasBreakdown:false,leaves:true}) +
+    item({key:"bexp",label:"Boundary Export",value:energyFlow.boundaryExport,color:"blue",sub:"across regional boundary",hasBreakdown:false,leaves:true});
+
+  document.getElementById("col-outputs").innerHTML = `
+    <div class="space-y-3 rounded-xl bg-slate-50/70 border border-slate-200 p-3">
+      ${groupHeader("⤓","Stays in region","consumed / lost")}
+      ${inRegion}
+    </div>
+    <div class="space-y-3 rounded-xl bg-amber-50/40 border border-dashed border-amber-300 p-3">
+      ${groupHeader("↗","Leaves region","crosses boundary")}
+      ${exported}
+    </div>`;
+}
+
+function setStyle(s){
+  STYLE = s;
+  document.getElementById("btn-card").className = "px-3 py-1.5 rounded-md border font-medium " + (s==="card"?"bg-slate-900 text-white border-slate-900":"bg-white");
+  document.getElementById("btn-list").className = "px-3 py-1.5 rounded-md border font-medium " + (s==="list"?"bg-slate-900 text-white border-slate-900":"bg-white");
+  render();
+}
+setStyle("card");
+</script>
+</body>
+</html>

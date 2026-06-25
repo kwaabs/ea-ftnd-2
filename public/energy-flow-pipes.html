@@ -1,0 +1,166 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Energy Flow — flow without sankey</title>
+<script src="https://cdn.tailwindcss.com"></script>
+<style>
+  body { font-family: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; }
+  .card { background:#fff; border:1px solid #e2e8f0; border-radius:0.75rem; box-shadow:0 1px 2px rgba(0,0,0,.04); }
+  .muted { color:#64748b; }
+  @keyframes flow { to { stroke-dashoffset: -200; } }
+  .pipe-flow { animation: flow 2.4s linear infinite; }
+  .node { position:relative; z-index:10; }
+</style>
+</head>
+<body class="bg-slate-100 text-slate-900">
+<div class="max-w-6xl mx-auto px-6 py-10 space-y-6">
+
+  <header class="space-y-2">
+    <h1 class="text-2xl font-bold">Flow without a Sankey</h1>
+    <p class="muted text-sm max-w-4xl">
+      Same readable cards (with drill-downs) — but energy <b>moves between them</b> through animated directional
+      pipes. Motion + arrows create the sense of flow; pipe thickness still hints at volume, without the heavy
+      Sankey ribbons. Trace a stream from any source through Available Supply to where it ends up.
+    </p>
+  </header>
+
+  <div class="card p-6">
+    <div id="stage" class="relative">
+      <!-- SVG connector layer (behind cards) -->
+      <svg id="pipes" class="absolute inset-0 w-full h-full" style="z-index:0; pointer-events:none"></svg>
+
+      <!-- Card grid -->
+      <div class="grid items-center gap-x-24" style="grid-template-columns: 1fr 1fr 1.15fr 1fr;">
+        <!-- col headers -->
+        <div class="text-center text-[11px] font-bold tracking-widest uppercase muted col-span-1">Sources</div>
+        <div class="text-center text-[11px] font-bold tracking-widest uppercase muted col-span-1">Available supply</div>
+        <div class="text-center text-[11px] font-bold tracking-widest uppercase muted col-span-1">Distribution / export</div>
+        <div class="text-center text-[11px] font-bold tracking-widest uppercase muted col-span-1">End use</div>
+
+        <!-- SOURCES -->
+        <div class="space-y-4 py-2">
+          <div id="bsp" class="node"></div>
+          <div id="bnd" class="node"></div>
+          <div id="exp" class="node"></div>
+        </div>
+
+        <!-- POOL -->
+        <div class="flex justify-center">
+          <div id="pool" class="node w-full"></div>
+        </div>
+
+        <!-- DISTRIBUTION / EXPORT -->
+        <div class="space-y-3 py-2">
+          <div id="dtx" class="node"></div>
+          <div class="rounded-xl bg-amber-50/50 border border-dashed border-amber-300 p-2.5 space-y-2.5">
+            <div class="text-[9.5px] font-bold tracking-wide uppercase text-amber-700 text-center">↗ leaves region</div>
+            <div id="bexp" class="node"></div>
+            <div id="xexp" class="node"></div>
+          </div>
+        </div>
+
+        <!-- END USE -->
+        <div class="flex justify-center">
+          <div id="cust" class="node w-full"></div>
+        </div>
+      </div>
+    </div>
+
+    <div class="flex flex-wrap items-center gap-x-6 gap-y-2 mt-6 pt-4 border-t border-slate-100 text-xs muted">
+      <span class="flex items-center gap-1.5"><i class="w-3 h-3 rounded-sm" style="background:#10b981"></i>Supply / sales</span>
+      <span class="flex items-center gap-1.5"><i class="w-3 h-3 rounded-sm" style="background:#3b82f6"></i>Boundary</span>
+      <span class="flex items-center gap-1.5"><i class="w-3 h-3 rounded-sm" style="background:#8b5cf6"></i>Express feeder</span>
+      <span class="flex items-center gap-1.5"><i class="w-3 h-3 rounded-sm" style="background:#64748b"></i>Distribution (DTX)</span>
+      <span class="ml-auto">Pipe thickness ≈ volume · dashes show direction</span>
+    </div>
+  </div>
+
+  <footer class="muted text-xs">Mockup only. Cards keep their drill-down chevrons (pipes re-align on expand in the real build).</footer>
+</div>
+
+<script>
+const fmt = (n)=>Math.round(n).toLocaleString("en-US");
+const VAL = { bsp:4250000, bnd:820000, exp:180000, pool:5250000, dtx:4845000, bexp:310000, xexp:95000, cust:3900000 };
+const COLORS = { emerald:"#10b981", blue:"#3b82f6", purple:"#8b5cf6", slate:"#64748b" };
+
+const cards = {
+  bsp:  { v:VAL.bsp,  color:"emerald", t:"BSP Import",       s:"3 stations",  drill:true },
+  bnd:  { v:VAL.bnd,  color:"blue",    t:"Boundary Import",  s:"2 partners",  drill:true },
+  exp:  { v:VAL.exp,  color:"purple",  t:"Express Inbound",  s:"1 feeder",    drill:true },
+  pool: { v:VAL.pool, color:"slate",   t:"Available Supply", s:"net: Exporter", big:true },
+  dtx:  { v:VAL.dtx,  color:"slate",   t:"DTX Distribution", s:"812 meters",  drill:true },
+  bexp: { v:VAL.bexp, color:"blue",    t:"Boundary Export",  s:"out",         leaves:true },
+  xexp: { v:VAL.xexp, color:"purple",  t:"Express Export",   s:"out",         leaves:true },
+  cust: { v:VAL.cust, color:"emerald", t:"Customer Sales",   s:"billed",      big:true },
+};
+
+const tints = {
+  emerald:["bg-emerald-50","border-emerald-300","text-emerald-700"],
+  blue:["bg-blue-50","border-blue-300","text-blue-700"],
+  purple:["bg-purple-50","border-purple-300","text-purple-700"],
+  slate:["bg-slate-50","border-slate-300","text-slate-700"],
+};
+
+function renderCard(id){
+  const c = cards[id], [bg,bd,tx] = tints[c.color];
+  const el = document.getElementById(id);
+  if (c.big){
+    el.className = "node rounded-xl border-[3px] border-slate-800 bg-slate-50 p-4 text-center";
+    el.innerHTML = `
+      <div class="text-[11px] font-semibold muted flex items-center justify-center gap-1">${c.t} ${c.drill?'<span class="text-[9px]">▸</span>':''}</div>
+      <div class="text-2xl font-extrabold mt-0.5">${fmt(c.v)}</div>
+      <div class="text-[10px] muted">kWh · ${c.s}</div>`;
+    return;
+  }
+  el.className = `node rounded-lg border-2 ${bd} ${bg} p-3 ${c.leaves?'border-dashed':''}`;
+  el.innerHTML = `
+    <div class="flex items-center justify-between">
+      <span class="text-xs font-semibold ${tx}">${c.t}</span>
+      ${c.drill?`<span class="${tx} text-[10px]">▸</span>`:(c.leaves?`<span class="text-[9px] font-bold text-amber-700">↗ OUT</span>`:'')}
+    </div>
+    <div class="text-base font-bold mt-0.5">${fmt(c.v)} <span class="text-[10px] font-normal muted">kWh</span></div>
+    <div class="text-[10px] muted">${c.s}</div>`;
+}
+Object.keys(cards).forEach(renderCard);
+
+const links = [
+  ["bsp","pool","emerald",VAL.bsp],["bnd","pool","blue",VAL.bnd],["exp","pool","purple",VAL.exp],
+  ["pool","dtx","slate",VAL.dtx],["pool","bexp","blue",VAL.bexp],["pool","xexp","purple",VAL.xexp],
+  ["dtx","cust","emerald",VAL.cust],
+];
+const maxV = Math.max(...links.map(l=>l[3]));
+
+function draw(){
+  const stage = document.getElementById("stage");
+  const svg = document.getElementById("pipes");
+  const cont = stage.getBoundingClientRect();
+  svg.setAttribute("viewBox", `0 0 ${cont.width} ${cont.height}`);
+  const anchor = (id, side) => {
+    const r = document.getElementById(id).getBoundingClientRect();
+    return { x:(side==="r"?r.right:r.left)-cont.left, y:r.top-cont.top + r.height/2 };
+  };
+  let out = "";
+  links.forEach((l,i)=>{
+    const [from,to,colorKey,v] = l;
+    const a = anchor(from,"r"), b = anchor(to,"l");
+    const dx = Math.max(40,(b.x-a.x)*0.45);
+    const d = `M${a.x},${a.y} C${a.x+dx},${a.y} ${b.x-dx},${b.y} ${b.x},${b.y}`;
+    const col = COLORS[colorKey];
+    const w = 3 + (v/maxV)*13;
+    out += `
+      <path d="${d}" fill="none" stroke="${col}" stroke-opacity="0.18" stroke-width="${w}" stroke-linecap="round"/>
+      <path d="${d}" fill="none" stroke="${col}" stroke-opacity="0.9" stroke-width="${Math.max(2,w*0.5)}"
+            stroke-dasharray="${Math.max(3,w*0.5)} ${10+w}" stroke-linecap="round" class="pipe-flow"/>
+      <polygon points="0,-${3+w*0.3} ${6+w*0.3},0 0,${3+w*0.3}" fill="${col}"
+               transform="translate(${b.x},${b.y})"/>`;
+  });
+  svg.innerHTML = out;
+}
+window.addEventListener("load", draw);
+window.addEventListener("resize", draw);
+setTimeout(draw, 60);
+</script>
+</body>
+</html>
