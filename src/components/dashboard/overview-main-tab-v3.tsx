@@ -56,6 +56,7 @@ import {
 import { useRegionalBoundaryDaily } from "@/hooks/api/use-regional-boundary-api"
 import { useCustomerConsumptionAggregate } from "@/hooks/api/use-customer-consumption-aggregate-api"
 import { useMmsCustomerSalesAggregate } from "@/hooks/api/use-mms-customer-sales-aggregate-api"
+import { useAmrConsumptionAggregate } from "@/hooks/api/use-amr-consumption-aggregate-api"
 import { formatNumber } from "@/lib/utils"
 import {
     ResponsiveContainer,
@@ -256,6 +257,11 @@ export function OverviewMainTabV3({
         dateTo: dateRange.end,
     })
 
+    const { data: amrAggregateData, isLoading: amrAggregateLoading } = useAmrConsumptionAggregate({
+        dateFrom: dateRange.start,
+        dateTo: dateRange.end,
+    })
+
     const energyPurchases = useMemo(() => {
         if (!aggregateData?.rawData || aggregateData.rawData.length === 0) {
             return 0
@@ -275,10 +281,14 @@ export function OverviewMainTabV3({
             ? mmsAggregateData.reduce((sum: number, item: any) => sum + (item.sum_last_month_kwh_read || 0), 0)
             : 0
 
-        if (zeusKwh === 0 && mmsKwh === 0) return null
+        const amrKwh = amrAggregateData && amrAggregateData.length > 0
+            ? amrAggregateData.reduce((sum: number, item: any) => sum + (item.total_consumption || 0), 0)
+            : 0
 
-        return zeusKwh + mmsKwh
-    }, [customerConsumptionDataArray, mmsAggregateData])
+        if (zeusKwh === 0 && mmsKwh === 0 && amrKwh === 0) return null
+
+        return zeusKwh + mmsKwh + amrKwh
+    }, [customerConsumptionDataArray, mmsAggregateData, amrAggregateData])
 
     const systemLosses = useMemo(() => {
         if (energySales === null || energyPurchases === 0) {
@@ -6157,12 +6167,12 @@ export function OverviewMainTabV3({
                                         {groupBy === "none"
                                             ? sortedMeters.map((meter, index) => {
                                                 const getRankBadgeClass = (rank: number) => {
-                                                    if (rank === 1) return "bg-amber-500 text-white border-amber-600" 
-                                                    if (rank === 2) return "bg-gray-400 text-white border-gray-500" 
-                                                    if (rank === 3) return "bg-amber-700 text-white border-amber-800" 
-                                                    if (rank <= 10) return "bg-green-600 text-white border-green-700" 
-                                                    if (rank <= 20) return "bg-blue-600 text-white border-blue-700" 
-                                                    return "bg-muted text-muted-foreground border-border" 
+                                                    if (rank === 1) return "bg-amber-500 text-white border-amber-600"
+                                                    if (rank === 2) return "bg-gray-400 text-white border-gray-500"
+                                                    if (rank === 3) return "bg-amber-700 text-white border-amber-800"
+                                                    if (rank <= 10) return "bg-green-600 text-white border-green-700"
+                                                    if (rank <= 20) return "bg-blue-600 text-white border-blue-700"
+                                                    return "bg-muted text-muted-foreground border-border"
                                                 }
 
                                                 const getLocationString = () => {
@@ -6266,7 +6276,7 @@ export function OverviewMainTabV3({
                                                 }))
                                                 const importRanked = allGroupTotals.sort((a, b) => b.totalImport - a.totalImport)
                                                 const exportRanked = allGroupTotals.sort((a, b) => b.totalExport - a.totalExport)
-                                                
+
                                                 const groupImportRank = importRanked.findIndex((g) => g.key === groupKey) + 1
                                                 const groupExportRank = exportRanked.findIndex((g) => g.key === groupKey) + 1
 
@@ -6336,14 +6346,14 @@ export function OverviewMainTabV3({
                                                         {isExpanded && meters.map((meter, groupIndex) => {
                                                             const groupImportRank = groupIndex + 1
                                                             const groupExportRank = groupIndex + 1
-                                                            
+
                                                             const getRankBadgeClass = (rank: number) => {
-                                                                if (rank === 1) return "bg-amber-500 text-white border-amber-600" 
-                                                                if (rank === 2) return "bg-gray-400 text-white border-gray-500" 
-                                                                if (rank === 3) return "bg-amber-700 text-white border-amber-800" 
-                                                                if (rank <= 10) return "bg-green-600 text-white border-green-700" 
-                                                                if (rank <= 20) return "bg-blue-600 text-white border-blue-700" 
-                                                                return "bg-muted text-muted-foreground border-border" 
+                                                                if (rank === 1) return "bg-amber-500 text-white border-amber-600"
+                                                                if (rank === 2) return "bg-gray-400 text-white border-gray-500"
+                                                                if (rank === 3) return "bg-amber-700 text-white border-amber-800"
+                                                                if (rank <= 10) return "bg-green-600 text-white border-green-700"
+                                                                if (rank <= 20) return "bg-blue-600 text-white border-blue-700"
+                                                                return "bg-muted text-muted-foreground border-border"
                                                             }
 
                                                             const getLocationString = () => {
@@ -6492,7 +6502,7 @@ export function OverviewMainTabV3({
                 <Card>
                     <CardHeader className="pb-2">
                         <CardTitle className="text-sm font-medium text-muted-foreground">
-                            Energy Sales (Zeus + MMS)
+                            Energy Sales (Zeus + MMS + AMR)
                         </CardTitle>
                     </CardHeader>
                     <CardContent>
@@ -6802,7 +6812,575 @@ export function OverviewMainTabV3({
             </div>
 
                 {}
+                {}
+                {}
+                {}
+                {}
+                {}
+                {}
+                {}
+                {}
+                {}
+                {}
+                {}
+                {}
+                {}
+                {}
+                {}
+                {}
+                {}
+                {}
+                {}
+                {}
+                {}
+                {}
+                {}
+                {}
+                {}
+                {}
+                {}
+                {}
+                {}
+                {}
+                {}
+                {}
+                {}
             </div>
 
+            {}
+            {}
+            {}
+            {}
+            {}
+            {}
+            {}
+            {}
+            {}
+            {}
+            {}
+            {}
+            {}
+            {}
+            {}
+            {}
+            {}
+            {}
+            {}
+            {}
+            {}
+            {}
+            {}
+            {}
+            {}
+            {}
+            {}
+            {}
+            {}
+            {}
+            {}
+            {}
+            {}
+            {}
+            {}
+            {}
+            {}
+            {}
+            {}
+            {}
+            {}
+            {}
+            {}
+            {}
+            {}
+            {}
+            {}
+            {}
+            {}
+            {}
+            {}
+            {}
+            {}
+            {}
+            {}
+            {}
+            {}
+            {}
+            {}
+
+            {}
+            {}
+            {}
+            {}
+            {}
+            {}
+            {}
+            {}
+            {}
+            {}
+            {}
+            {}
+            {}
+            {}
+            {}
+            {}
+            {}
+            {}
+            {}
+            {}
+            {}
+            {}
+            {}
+            {}
+            {}
+            {}
+            {}
+            {}
+            {}
+            {}
+            {}
+            {}
+            {}
+            {}
+            {}
+            {}
+            {}
+            {}
+            {}
+            {}
+            {}
+            {}
+            {}
+            {}
+            {}
+            {}
+            {}
+            {}
+            {}
+            {}
+            {}
+            {}
+            {}
+            {}
+            {}
+            {}
+            {}
+            {}
+            {}
+            {}
+            {}
+            {}
+            {}
+            {}
+            {}
+            {}
+            {}
+            {}
+            {}
+            {}
+            {}
+            {}
+            {}
+            {}
+            {}
+            {}
+            {}
+            {}
+            {}
+            {}
+            {}
+            {}
+            {}
+            {}
+            {}
+            {}
+            {}
+            {}
+            {}
+            {}
+            {}
+            {}
+            {}
+            {}
+            {}
+            {}
+            {}
+            {}
+            {}
+
+            {}
+            {}
+            {}
+            {}
+            {}
+            {}
+            {}
+            {}
+            {}
+            {}
+            {}
+            {}
+            {}
+            {}
+            {}
+            {}
+            {}
+            {}
+            {}
+            {}
+            {}
+            {}
+            {}
+            {}
+            {}
+            {}
+            {}
+            {}
+            {}
+            {}
+
+            {}
+            {}
+            {}
+            {}
+            {}
+            {}
+            {}
+            {}
+            {}
+            {}
+            {}
+            {}
+            {}
+            {}
+            {}
+            {}
+            {}
+            {}
+            {}
+            {}
+            {}
+            {}
+            {}
+            {}
+            {}
+            {}
+            {}
+            {}
+            {}
+            {}
+            {}
+            {}
+            {}
+            {}
+            {}
+            {}
+            {}
+            {}
+            {}
+            {}
+            {}
+            {}
+
+            {}
+            {}
+            {}
+            {}
+            {}
+            {}
+            {}
+            {}
+            {}
+            {}
+            {}
+            {}
+            {}
+            {}
+            {}
+
+            {}
+            {}
+            {}
+            {}
+            {}
+            {}
+            {}
+            {}
+            {}
+            {}
+            {}
+            {}
+            {}
+            {}
+            {}
+            {}
+            {}
+            {}
+            {}
+            {}
+            {}
+            {}
+            {}
+            {}
+            {}
+            {}
+            {}
+            {}
+            {}
+            {}
+            {}
+            {}
+            {}
+            {}
+            {}
+            {}
+            {}
+            {}
+            {}
+            {}
+            {}
+            {}
+
+            {}
+            {}
+            {}
+            {}
+            {}
+
+            {}
+            {}
+            {}
+            {}
+            {}
+            {}
+            {}
+            {}
+            {}
+            {}
+            {}
+            {}
+            {}
+            {}
+            {}
+            {}
+            {}
+            {}
+            {}
+            {}
+            {}
+            {}
+            {}
+            {}
+
+            {}
+            {}
+            {}
+            {}
+            {}
+            {}
+            {}
+            {}
+            {}
+            {}
+            {}
+            {}
+            {}
+            {}
+            {}
+            {}
+            {}
+            {}
+            {}
+            {}
+            {}
+            {}
+            {}
+            {}
+
+            {}
+            {}
+            {}
+            {}
+            {}
+            {}
+            {}
+
+            {}
+            {}
+            {}
+            {}
+            {}
+            {}
+
+            {}
+            {}
+            {}
+            {}
+            {}
+            {}
+            {}
+            {}
+            {}
+            {}
+            {}
+            {}
+            {}
+            {}
+            {}
+            {}
+
+            {}
+            {}
+            {}
+            {}
+            {}
+            {}
+            {}
+            {}
+            {}
+            {}
+            {}
+            {}
+            {}
+            {}
+            {}
+
+            {}
+            {}
+            {}
+            {}
+            {}
+            {}
+            {}
+            {}
+            {}
+            {}
+            {}
+            {}
+            {}
+            {}
+            {}
+
+            {}
+            {}
+            {}
+            {}
+            {}
+            {}
+            {}
+            {}
+            {}
+            {}
+            {}
+
+            {}
+            {}
+            {}
+            {}
+            {}
+            {}
+            {}
+            {}
+            {}
+            {}
+            {}
+            {}
+            {}
+            {}
+            {}
+            {}
+            {}
+
+            {}
+            {}
+            {}
+            {}
+            {}
+            {}
+
+            {}
+            {}
+            {}
+            {}
+            {}
+            {}
+
+            {}
+            {}
+            {}
+            {}
+            {}
+            {}
+
+            {}
+            {}
+            {}
+
+            {}
+            {}
+            {}
+            {}
+            {}
+            {}
+            {}
+            {}
+            {}
+            {}
+            {}
+            {}
+            {}
+            {}
+
+            {}
+            {}
+            {}
+            {}
+            {}
+            {}
+            {}
+            {}
+            {}
+            {}
+            {}
+            {}
+            {}
+            {}
+            {}
+
+            {}
+            {}
+            {}
+            {}
+            {}
+            {}
+            {}
+            {}
+            {}
+            {}
+            {}
+            {}
+            {}
+            {}
+            {}
+
+            {}
+            {}
+            {}
+            {}
+            {}
+            {}
+            {}
+            {}
+            {}
+            {}
+            {}
+            {}
+            {}
+            {}
+            {}
+            {}
+            {}
+            {}
+
+        </div>
     )
 }
