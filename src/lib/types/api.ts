@@ -216,13 +216,24 @@ export interface Meter {
 export interface MeterHealthSummaryResponse {
   success: boolean
   data: {
-    excellent: number
-    good: number
-    fair: number
-    poor: number
-    critical: number
-    total: number
-    avg_health_score: number
+    total_meters: number
+    online_meters: number
+    offline_meters: number
+    health_percentage: number
+    average_uptime_percentage: number
+    by_meter_type?: Array<{
+      meter_type: string
+      total: number
+      online: number
+      offline: number
+      avg_uptime: number
+    }>
+    uptime_distribution: {
+      excellent: number
+      good: number
+      poor: number
+      critical: number
+    }
   }
 }
 

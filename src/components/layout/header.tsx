@@ -2,7 +2,6 @@
 import Image from "next/image"
 import { Filter, Calendar } from "lucide-react"
 import { useState, Suspense } from "react"
-import { usePathname } from "next/navigation"
 import { Button } from "@/components/ui/button"
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
 import { useAppStore } from "@/stores/app-store"
@@ -13,9 +12,6 @@ import { Breadcrumbs } from "./breadcrumbs"
 export function Header() {
     const [isFilterOpen, setIsFilterOpen] = useState(false)
     const { filters } = useAppStore()
-    const pathname = usePathname()
-
-    const isMapPage = pathname === "/map"
 
     const dateRange = {
         start: filters.dateRange?.start || new Date(new Date().setDate(new Date().getDate() - 30)).toISOString(),
@@ -81,7 +77,6 @@ export function Header() {
                                 variant="outline"
                                 size="sm"
                                 className="gap-2 bg-transparent"
-                                disabled={isMapPage}
                             >
                                 <Filter className="h-4 w-4"/>
                                 Filters

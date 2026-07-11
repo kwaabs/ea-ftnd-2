@@ -443,7 +443,7 @@ export function EnergyFlowDiagram({
                     {/* Sources (external) */}
                     <div className="flex-1 min-w-[190px] flex flex-col">
                         <div className="text-center text-[11px] font-bold tracking-widest uppercase text-muted-foreground pb-3">
-                            External sources
+                            sources
                         </div>
                         <div className="space-y-6 flex-1 flex flex-col justify-center">
                             {isVisible("bsp") && <NodeCard node={nodeMap.bsp} />}

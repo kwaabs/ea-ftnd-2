@@ -496,7 +496,13 @@ export function HeaderFilterDropdown() {
     const isDistrictDetailsPage = pathname?.startsWith("/districts/") && pathname.split("/").length === 3
     const isExpressFeederDetailPage = (pathname?.startsWith("/express-feeders/") && pathname.split("/").length === 3)
         || (pathname?.startsWith("/meter-category/express-feeder/"))
-    const isDateOnlyPage = isMeterDetailsPage || isStationDetailsPage || isBoundaryDetailsPage || isRegionDetailsPage || isDistrictDetailsPage || isExpressFeederDetailPage
+    // Map and Customer Sales pages build their own region/source breakdowns
+    // client-side rather than filtering server-side by region/district/etc,
+    // so only the date range applies there — the rest of the filter grid
+    // wouldn't do anything on these pages.
+    const isMapPage = pathname === "/map"
+    const isCustomerSalesPage = pathname === "/customer-sales"
+    const isDateOnlyPage = isMeterDetailsPage || isStationDetailsPage || isBoundaryDetailsPage || isRegionDetailsPage || isDistrictDetailsPage || isExpressFeederDetailPage || isMapPage || isCustomerSalesPage
 
     // Regions overview page — show only date + region filters
     const isRegionsOverviewPage = pathname === "/regions"

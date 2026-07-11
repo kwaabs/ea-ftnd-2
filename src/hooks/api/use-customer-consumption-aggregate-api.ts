@@ -17,14 +17,14 @@ interface CustomerConsumptionAggregateParams {
 export function useCustomerConsumptionAggregate(params: CustomerConsumptionAggregateParams) {
   const queryString = new URLSearchParams()
 
-  if (params.dateFrom) queryString.append("dateFrom", params.dateFrom)
-  if (params.dateTo) queryString.append("dateTo", params.dateTo)
+  if (params.dateFrom) queryString.append("lastBillDateFrom", params.dateFrom)
+  if (params.dateTo) queryString.append("lastBillDateTo", params.dateTo)
   if (params.region) queryString.append("region", params.region)
   if (params.district) queryString.append("district", params.district)
-  if (params.serviceType) queryString.append("servicetype", params.serviceType)
-  if (params.serviceClass) queryString.append("serviceclass", params.serviceClass)
-  if (params.customerType) queryString.append("customertype", params.customerType)
-  if (params.accountType) queryString.append("accounttype", params.accountType)
+  if (params.serviceType) queryString.append("serviceType", params.serviceType)
+  if (params.serviceClass) queryString.append("serviceClass", params.serviceClass)
+  if (params.customerType) queryString.append("customerType", params.customerType)
+  if (params.accountType) queryString.append("accountType", params.accountType)
 
   return useQuery<CustomerConsumptionAggregateItem[]>({
     queryKey: [

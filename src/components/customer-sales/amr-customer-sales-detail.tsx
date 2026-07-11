@@ -73,9 +73,10 @@ export function AmrCustomerSalesDetail({
     limit: pageSize,
   });
 
-  const rawRecords = detailData || [];
+  const rawRecords = detailData?.data || [];
 
-  // Filter by search term
+  // Search filters within the current page only — the search box doesn't
+  // re-query the server, so results outside this page won't show up.
   const filteredRecords = useMemo(() => {
     if (!searchTerm.trim()) return rawRecords;
     const term = searchTerm.toLowerCase();
@@ -88,8 +89,10 @@ export function AmrCustomerSalesDetail({
     );
   }, [rawRecords, searchTerm]);
 
-  const totalRecords = filteredRecords.length;
-  const totalPages = Math.ceil(totalRecords / pageSize) || 1;
+  // Total/pages come from the server now — reflects the whole matching
+  // dataset, not just what's on this page.
+  const totalRecords = detailData?.total ?? filteredRecords.length;
+  const totalPages = detailData?.total_pages ?? 1;
 
   return (
     <Card>
@@ -150,9 +153,9 @@ export function AmrCustomerSalesDetail({
           </div>
         ) : (
           <div className="space-y-4">
-            <div className="overflow-x-auto border rounded-lg">
+            <div className="overflow-x-auto overflow-y-auto max-h-[600px] border rounded-lg">
               <table className="w-full text-sm">
-                <thead>
+                <thead className="sticky top-0 z-10 bg-background">
                   <tr className="border-b bg-muted/40">
                     <th className="text-left py-3 px-4 font-medium text-muted-foreground">
                       Customer

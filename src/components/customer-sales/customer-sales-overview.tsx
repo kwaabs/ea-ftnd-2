@@ -244,27 +244,54 @@ export function CustomerSalesOverview({
   );
 
   // ── AMR by region (import + export) ──
+  // active_meters is a per-day count from the backend (already correctly
+  // deduplicated within that day). Summing it across every day in the range
+  // — like the old code did — inflates "meters" by roughly the number of
+  // days selected, and double-counts again since both the import_kwh and
+  // export_kwh rows for the same day carry their own active_meters value.
+  // Average across days instead, counted once (off the import_kwh axis
+  // only) so the two system_name rows per day don't double it.
   const amrByRegion = useMemo(() => {
     const map = new Map<
       string,
-      { region: string; importKwh: number; exportKwh: number; meters: number }
+      {
+        region: string;
+        importKwh: number;
+        exportKwh: number;
+        meterSum: number;
+        meterDays: number;
+      }
     >();
     amrItems.forEach((i) => {
       const r = i.region || "Unknown";
       if (!map.has(r)) {
-        map.set(r, { region: r, importKwh: 0, exportKwh: 0, meters: 0 });
+        map.set(r, {
+          region: r,
+          importKwh: 0,
+          exportKwh: 0,
+          meterSum: 0,
+          meterDays: 0,
+        });
       }
       const entry = map.get(r)!;
       if (i.system_name === "import_kwh") {
         entry.importKwh += i.total_consumption || 0;
+        entry.meterSum += i.active_meters || 0;
+        entry.meterDays += 1;
       } else if (i.system_name === "export_kwh") {
         entry.exportKwh += i.total_consumption || 0;
       }
-      entry.meters += i.active_meters || 0;
     });
-    return [...map.values()].sort(
-      (a, b) => b.importKwh + b.exportKwh - (a.importKwh + a.exportKwh),
-    );
+    return [...map.values()]
+      .map((e) => ({
+        region: e.region,
+        importKwh: e.importKwh,
+        exportKwh: e.exportKwh,
+        meters: e.meterDays > 0 ? Math.round(e.meterSum / e.meterDays) : 0,
+      }))
+      .sort(
+        (a, b) => b.importKwh + b.exportKwh - (a.importKwh + a.exportKwh),
+      );
   }, [amrItems]);
 
   // ── Combined chart: Zeus vs MMS vs AMR kWh by region ──

@@ -29,7 +29,7 @@ export function useAmrConsumptionDaily(params: AmrConsumptionDailyParams) {
   if (params.page) queryString.append("page", params.page.toString());
   if (params.limit) queryString.append("limit", params.limit.toString());
 
-  return useQuery<AmrConsumptionDaily[]>({
+  return useQuery<AmrConsumptionDailyResponse>({
     queryKey: [
       "amr-consumption-daily",
       params.dateFrom,
@@ -46,8 +46,10 @@ export function useAmrConsumptionDaily(params: AmrConsumptionDailyParams) {
       const response = await fetch(url);
       if (!response.ok)
         throw new Error(`Failed to fetch AMR daily: ${response.status}`);
-      const data: AmrConsumptionDailyResponse = await response.json();
-      return data.data || [];
+      const body: { data: AmrConsumptionDailyResponse } = await response.json();
+      return (
+        body.data || { data: [], total: 0, page: 1, limit: 100, total_pages: 0 }
+      );
     },
     staleTime: 5 * 60 * 1000,
     refetchOnMount: false,

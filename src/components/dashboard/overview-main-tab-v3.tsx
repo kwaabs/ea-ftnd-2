@@ -449,6 +449,20 @@ export function OverviewMainTabV3({
   const totalMeters = meterHealthSummary.data?.data?.total_meters || 0;
   const isLoadingSummary = meterHealthSummary.isLoading;
 
+  // Server-side aggregate, grouped over ALL meters — unlike
+  // meterHealthAnalytics.byMeterType (below), which is computed client-side
+  // from a status/details call capped at 200 rows and so undercounts badly
+  // once there are more meters than that.
+  const byMeterTypeFromSummary = useMemo(
+    () =>
+      (meterHealthSummary.data?.data?.by_meter_type || []).map((mt) => ({
+        type: mt.meter_type,
+        online: mt.online,
+        offline: mt.offline,
+      })),
+    [meterHealthSummary.data],
+  );
+
   const meterHealthAnalytics = useMemo(() => {
     const meters = allMetersForHealth.data?.data || [];
 
@@ -2077,6 +2091,7 @@ export function OverviewMainTabV3({
     if (text === "DTX") return "Distribution Transformer";
     if (text === "REGIONAL_BOUNDARY") return "Regional Boundary";
     if (text === "DISTRICT_BOUNDARY") return "District Boundary";
+    if (text === "EXPRESS_FEEDER") return "Express Feeder";
     return text;
   };
 
@@ -2126,7 +2141,7 @@ export function OverviewMainTabV3({
     const bottomMeterType = sortedMeterTypes[sortedMeterTypes.length - 1];
 
     return (
-      <div className="space-y-6">
+      <div className="space-y-3">
         <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
           <Card>
             <CardHeader className="pb-1">
@@ -2915,7 +2930,7 @@ export function OverviewMainTabV3({
                 <p>No trend data available</p>
               </div>
             ) : (
-              <div className="w-full h-[400px]">
+              <div className="w-full h-[260px]">
                 <ResponsiveContainer width="100%" height="100%">
                   <AreaChart
                     data={filteredConsumptionTrendData}
@@ -3176,7 +3191,7 @@ export function OverviewMainTabV3({
     ];
 
     return (
-      <div className="space-y-6">
+      <div className="space-y-3">
         {}
         <div className="grid gap-4 md:grid-cols-4">
           <Card>
@@ -3287,9 +3302,9 @@ export function OverviewMainTabV3({
           </CardHeader>
           <CardContent>
             {isLoadingTimeline ? (
-              <Skeleton className="h-[300px] w-full" />
+              <Skeleton className="h-[200px] w-full" />
             ) : statusTimelineData && statusTimelineData.length > 0 ? (
-              <ResponsiveContainer width="100%" height={300}>
+              <ResponsiveContainer width="100%" height={200}>
                 <RechartsBarChart data={statusTimelineData}>
                   <CartesianGrid
                     strokeDasharray="3 3"
@@ -3362,7 +3377,7 @@ export function OverviewMainTabV3({
                 </RechartsBarChart>
               </ResponsiveContainer>
             ) : (
-              <div className="flex h-[300px] items-center justify-center text-muted-foreground">
+              <div className="flex h-[200px] items-center justify-center text-muted-foreground">
                 No timeline data available
               </div>
             )}
@@ -3654,7 +3669,7 @@ export function OverviewMainTabV3({
         : 0;
 
     return (
-      <div className="space-y-6">
+      <div className="space-y-3">
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-4">
             <Button
@@ -3675,7 +3690,7 @@ export function OverviewMainTabV3({
           </div>
         </div>
 
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
           {}
           <Card className="border-t-4 border-t-green-500">
             <CardHeader className="pb-4">
@@ -3684,7 +3699,7 @@ export function OverviewMainTabV3({
               </CardDescription>
             </CardHeader>
 
-            <CardContent className="space-y-6">
+            <CardContent className="space-y-3">
               {meterTypeBreakdown.map((meterType) => (
                 <div key={meterType.meterType}>
                   {}
@@ -3720,7 +3735,7 @@ export function OverviewMainTabV3({
               </CardDescription>
             </CardHeader>
 
-            <CardContent className="space-y-6">
+            <CardContent className="space-y-3">
               {meterTypeBreakdown.map((meterType) => (
                 <div key={meterType.meterType}>
                   {}
@@ -3756,7 +3771,7 @@ export function OverviewMainTabV3({
               </CardDescription>
             </CardHeader>
 
-            <CardContent className="space-y-6">
+            <CardContent className="space-y-3">
               {}
               {meterTypeBreakdown.map((meterType) => (
                 <div key={meterType.meterType}>
@@ -4024,7 +4039,7 @@ export function OverviewMainTabV3({
                   bspImport - exportsToOthers + importsFromOthers;
 
                 return (
-                  <div className="flex items-center justify-between p-6 rounded-lg bg-gradient-to-r from-primary/10 to-background border-2 border-primary">
+                  <div className="flex items-center justify-between p-4 rounded-lg bg-gradient-to-r from-primary/10 to-background border-2 border-primary">
                     <div className="flex items-center gap-3">
                       <div className="h-12 w-12 rounded-full bg-primary flex items-center justify-center text-white font-bold text-lg">
                         =
@@ -4142,7 +4157,7 @@ export function OverviewMainTabV3({
             </div>
           </CardHeader>
           <CardContent>
-            <ResponsiveContainer width="100%" height={350}>
+            <ResponsiveContainer width="100%" height={220}>
               <AreaChart data={regionData.dataPoints}>
                 <defs>
                   <linearGradient
@@ -4281,7 +4296,7 @@ export function OverviewMainTabV3({
                   color: "hsl(221, 83%, 53%)",
                 },
               }}
-              className="h-[300px] w-full"
+              className="h-[200px] w-full"
             >
               <ResponsiveContainer width="100%" height="100%">
                 <BarChart
@@ -4311,7 +4326,7 @@ export function OverviewMainTabV3({
           </CardContent>
         </Card>
 
-        <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
+        <div className="grid grid-cols-1 gap-3 lg:grid-cols-2">
           {}
           <Card>
             <CardHeader>
@@ -4384,7 +4399,7 @@ export function OverviewMainTabV3({
               <CardDescription>Consumption by meter category</CardDescription>
             </CardHeader>
             <CardContent>
-              <ResponsiveContainer width="100%" height={250}>
+              <ResponsiveContainer width="100%" height={170}>
                 <BarChart data={meterTypeBreakdown} layout="vertical">
                   <CartesianGrid
                     strokeDasharray="3 3"
@@ -4478,7 +4493,7 @@ export function OverviewMainTabV3({
 
         {}
         {singleRegionBoundaryPoints.length > 0 && (
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-3">
             {}
             <Card>
               <CardHeader>
@@ -4502,7 +4517,7 @@ export function OverviewMainTabV3({
                       color: "hsl(221, 83%, 53%)",
                     },
                   }}
-                  className="h-[400px] w-full"
+                  className="h-[260px] w-full"
                 >
                   <ResponsiveContainer width="100%" height="100%">
                     <BarChart
@@ -5160,7 +5175,7 @@ export function OverviewMainTabV3({
 
   const renderMapView = () => {
     return (
-      <div className="space-y-6 p-6">
+      <div className="space-y-3 p-4">
         <div className="flex items-center justify-between">
           <div>
             <h2 className="text-2xl font-bold">Consumption Map</h2>
@@ -5184,7 +5199,7 @@ export function OverviewMainTabV3({
 
     if (!selectedMeter) {
       return (
-        <div className="space-y-6 p-6">
+        <div className="space-y-3 p-4">
           <div className="flex items-center justify-between">
             <div>
               <h2 className="text-2xl font-bold">Meter Not Found</h2>
@@ -5205,7 +5220,7 @@ export function OverviewMainTabV3({
     const daysInPeriod = selectedMeter.days_online + selectedMeter.days_offline;
 
     return (
-      <div className="space-y-6 p-6">
+      <div className="space-y-3 p-4">
         {}
         <div className="flex items-center justify-between">
           <div>
@@ -5229,7 +5244,7 @@ export function OverviewMainTabV3({
             </CardTitle>
           </CardHeader>
           <CardContent>
-            <div className="grid grid-cols-2 md:grid-cols-4 gap-6">
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
               <div>
                 <div className="text-sm text-muted-foreground mb-1">
                   Meter Number
@@ -5387,7 +5402,7 @@ export function OverviewMainTabV3({
 
               {}
               <div className="pt-4 border-t">
-                <ResponsiveContainer width="100%" height={250}>
+                <ResponsiveContainer width="100%" height={170}>
                   <PieChart>
                     <Pie
                       data={[
@@ -5602,7 +5617,7 @@ export function OverviewMainTabV3({
     };
 
     return (
-      <div className="space-y-6">
+      <div className="space-y-3">
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-4">
             <Button
@@ -5953,7 +5968,7 @@ export function OverviewMainTabV3({
                     </DropdownMenuTrigger>
                     <DropdownMenuContent
                       align="end"
-                      className="w-56 max-h-80 overflow-y-auto"
+                      className="w-56 max-h-56 overflow-y-auto"
                     >
                       <DropdownMenuLabel>Select Regions</DropdownMenuLabel>
                       <DropdownMenuSeparator />
@@ -6320,7 +6335,7 @@ export function OverviewMainTabV3({
               }
 
               return barChartData.length > 0 ? (
-                <div className="h-80">
+                <div className="h-56">
                   <ResponsiveContainer width="100%" height="100%">
                     <RechartsBarChart data={barChartData} layout="vertical">
                       <CartesianGrid strokeDasharray="3 3" />
@@ -6750,7 +6765,7 @@ export function OverviewMainTabV3({
     const allMeterTypes = meterTypeDetailedBreakdown || [];
 
     return (
-      <div className="space-y-6 p-6">
+      <div className="space-y-3 p-4">
         <div className="flex items-center justify-between">
           <div>
             <h2 className="text-2xl font-bold">Category Breakdown</h2>
@@ -7039,7 +7054,7 @@ export function OverviewMainTabV3({
           <CardContent>
             {allMeterTypes.length > 0 &&
             allMeterTypes[0].dailyData.length > 0 ? (
-              <div className="h-80">
+              <div className="h-56">
                 <ResponsiveContainer width="100%" height="100%">
                   <LineChart>
                     <CartesianGrid strokeDasharray="3 3" />
@@ -7378,10 +7393,10 @@ export function OverviewMainTabV3({
 
           <CardContent>
             {rankingsLoading ? (
-              <Skeleton className="h-[400px] w-full" />
+              <Skeleton className="h-[260px] w-full" />
             ) : !meterRankings?.rankings ||
               meterRankings.rankings.length === 0 ? (
-              <div className="h-[400px] flex items-center justify-center border border-dashed rounded-lg">
+              <div className="h-[260px] flex items-center justify-center border border-dashed rounded-lg">
                 <div className="text-center">
                   <p className="text-muted-foreground mb-2">
                     No ranking data available
@@ -7870,7 +7885,7 @@ export function OverviewMainTabV3({
 
   if (drillDownView === "meters") {
     return (
-      <div className="space-y-6 p-6">
+      <div className="space-y-3 p-4">
         <div className="flex items-center justify-between">
           <div>
             <h2 className="text-2xl font-bold">Meter Health Details</h2>
@@ -7897,7 +7912,7 @@ export function OverviewMainTabV3({
   }
 
   return (
-    <div className="space-y-8 p-6">
+    <div className="space-y-4 p-4">
       {}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-4">
         <Card>
@@ -8190,7 +8205,7 @@ export function OverviewMainTabV3({
                 <Progress value={healthPercentage} className="h-2" />
                 {}
                 <div className="space-y-1 pt-1">
-                  {meterHealthAnalytics.byMeterType.slice(0, 4).map((mt) => (
+                  {byMeterTypeFromSummary.slice(0, 4).map((mt) => (
                     <div
                       key={mt.type}
                       className="flex items-center justify-between text-xs"
@@ -8236,9 +8251,9 @@ export function OverviewMainTabV3({
           </CardHeader>
           <CardContent className="space-y-0 pt-0">
             <Separator className="mb-3" />
-            {allMetersForHealth.isLoading ? (
+            {isLoadingSummary ? (
               <Skeleton className="h-40 w-full" />
-            ) : meterHealthAnalytics.byMeterType.length === 0 ? (
+            ) : byMeterTypeFromSummary.length === 0 ? (
               <p className="text-sm text-muted-foreground text-center py-6">
                 No meter data available
               </p>
@@ -8261,7 +8276,7 @@ export function OverviewMainTabV3({
                     </span>
                   </div>
                 </div>
-                {meterHealthAnalytics.byMeterType.map((mt) => {
+                {byMeterTypeFromSummary.map((mt) => {
                   const pct =
                     mt.online + mt.offline > 0
                       ? Math.round((mt.online / (mt.online + mt.offline)) * 100)

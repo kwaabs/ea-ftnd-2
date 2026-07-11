@@ -3690,6 +3690,8 @@ import { useMeterStatusSummary } from "@/hooks/api/use-meter-status-api";
 import { useExpressFeederAggregate } from "@/hooks/api/use-express-feeder-api";
 import { useAppStore } from "@/stores/app-store";
 import { RegionalCustomerSalesKpis } from "@/components/regions/regional-customer-sales-kpis";
+import { RegionalMmsCustomerSalesKpis } from "@/components/regions/regional-mms-customer-sales-kpis";
+import { RegionalAmrConsumptionKpis } from "@/components/regions/regional-amr-consumption-kpis";
 import { RegionalCustomerSalesTrend } from "@/components/regions/regional-customer-sales-trend";
 import { RegionalCustomerSalesTable } from "@/components/regions/regional-customer-sales-table";
 import { MmsCustomerSalesDetail } from "@/components/customer-sales/mms-customer-sales-detail";
@@ -5841,81 +5843,42 @@ export function RegionDetail({ region }: RegionDetailProps) {
             {/* Tab 4: Customer Sales */}
             <TabsContent
               value="customer-sales"
-              className="border-2 border-green-600 bg-green-50 rounded-md p-4 space-y-6"
+              className="space-y-6"
             >
-              {/* MMS summary banner */}
-              {mmsAggData &&
-                mmsAggData.length > 0 &&
-                (() => {
-                  const row = mmsAggData[0];
-                  const mmsKwh = row.sum_last_month_kwh_read || 0;
-                  const mmsCustomers = row.customer_count || 0;
-                  const mmsCredit = row.sum_last_month_credit_read || 0;
-                  const mmsBalance = row.sum_credit_balance_remaining || 0;
-                  return (
-                    <div className="rounded-lg border border-green-300 bg-white p-4">
-                      <div className="flex items-center gap-2 mb-3">
-                        <span className="text-xs font-semibold uppercase tracking-wider text-green-700">
-                          MMS — Prepaid Meters
-                        </span>
-                        <Badge
-                          variant="outline"
-                          className="border-green-400 text-green-700 text-xs"
-                        >
-                          {mmsAggData.length} district
-                          {mmsAggData.length !== 1 ? "s" : ""}
-                        </Badge>
-                      </div>
-                      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-                        <div>
-                          <div className="text-xs text-muted-foreground">
-                            kWh Read (Last Month)
-                          </div>
-                          <div className="text-lg font-bold text-green-700">
-                            {formatNumber(mmsKwh)}
-                          </div>
-                        </div>
-                        <div>
-                          <div className="text-xs text-muted-foreground">
-                            Customers
-                          </div>
-                          <div className="text-lg font-bold text-green-700">
-                            {formatNumber(mmsCustomers)}
-                          </div>
-                        </div>
-                        <div>
-                          <div className="text-xs text-muted-foreground">
-                            Credit Purchased
-                          </div>
-                          <div className="text-lg font-bold text-green-700">
-                            ₵{formatNumber(mmsCredit)}
-                          </div>
-                        </div>
-                        <div>
-                          <div className="text-xs text-muted-foreground">
-                            Balance Remaining
-                          </div>
-                          <div className="text-lg font-bold text-emerald-700">
-                            ₵{formatNumber(mmsBalance)}
-                          </div>
-                        </div>
-                      </div>
-                      {/* District breakdown */}
-                      <p className="mt-3 text-xs text-muted-foreground">
-                        See the MMS tab below for individual meter records in
-                        this region.
-                      </p>
-                    </div>
-                  );
-                })()}
+              {/* Zeus — Postpaid */}
+              <div className="space-y-3">
+                <span className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+                  Zeus — Postpaid Meters
+                </span>
+                <RegionalCustomerSalesKpis
+                  region={regionProperCase}
+                  dateRange={dateRange}
+                />
+              </div>
 
-              {/* KPI Cards by Source (Zeus) */}
-              <RegionalCustomerSalesKpis
-                region={regionProperCase}
-                dateRange={dateRange}
-              />
+              {/* MMS — Prepaid */}
+              <div className="space-y-3">
+                <span className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+                  MMS — Prepaid Meters
+                </span>
+                <RegionalMmsCustomerSalesKpis
+                  region={regionProperCase}
+                  dateRange={dateRange}
+                />
+              </div>
 
-              {/* Consumption Trend Chart */}
+              {/* AMR — Daily Metering */}
+              <div className="space-y-3">
+                <span className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+                  AMR — Daily Metering
+                </span>
+                <RegionalAmrConsumptionKpis
+                  region={regionProperCase}
+                  dateRange={dateRange}
+                />
+              </div>
+
+              {/* Consumption Trend Chart (Zeus) */}
               <RegionalCustomerSalesTrend
                 region={regionProperCase}
                 dateRange={dateRange}
