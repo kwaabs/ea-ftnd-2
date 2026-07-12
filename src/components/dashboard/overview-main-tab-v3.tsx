@@ -2094,7 +2094,6 @@ export function OverviewMainTabV3({
     if (text === "EXPRESS_FEEDER") return "Express Feeder";
     return text;
   };
-
   useEffect(() => {
     setIsLoadingTimeline(meterHealthSummary.isLoading);
   }, [meterHealthSummary.isLoading]);
@@ -2141,8 +2140,8 @@ export function OverviewMainTabV3({
     const bottomMeterType = sortedMeterTypes[sortedMeterTypes.length - 1];
 
     return (
-      <div className="space-y-3">
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+      <div className="space-y-2">
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-2">
           <Card>
             <CardHeader className="pb-1">
               <CardTitle className="text-sm font-medium">Import</CardTitle>
@@ -2154,12 +2153,12 @@ export function OverviewMainTabV3({
                 {meterTypeBreakdownData.map((item, index) => (
                   <div key={item.meter_type}>
                     <div className="text-right">
-                      <div className="text-3xl font-bold text-green-600 tracking-tight">
+                      <div className="text-xl font-bold text-green-600 tracking-tight">
                         {formatNumber(item.total_import_kwh, 2)}
                       </div>
                     </div>
 
-                    <hr className="border-t border-gray-200 my-2" />
+                    <hr className="border-t border-gray-200 my-1" />
 
                     <div className="flex justify-between text-xs text-muted-foreground">
                       <span>{formatMeterType(item.meter_type)}</span>
@@ -2181,7 +2180,7 @@ export function OverviewMainTabV3({
                 {meterTypeBreakdownData.map((item, index) => (
                   <div key={item.meter_type}>
                     <div className="text-right">
-                      <div className="text-3xl font-bold text-blue-600 tracking-tight">
+                      <div className="text-xl font-bold text-blue-600 tracking-tight">
                         {formatNumber(item.total_export_kwh, 2)}
                       </div>
                     </div>
@@ -2208,7 +2207,7 @@ export function OverviewMainTabV3({
                 {meterTypeBreakdownData.map((item, index) => (
                   <div key={item.meter_type}>
                     <div className="text-right">
-                      <div className="text-3xl font-bold text-red-600 tracking-tight">
+                      <div className="text-xl font-bold text-red-600 tracking-tight">
                         {formatNumber(item.net_kwh, 2)}
                       </div>
                     </div>
@@ -2283,19 +2282,19 @@ export function OverviewMainTabV3({
             </div>
           </CardHeader>
           <CardContent>
-            <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+            <div className="grid grid-cols-1 md:grid-cols-4 gap-2">
               <div className="space-y-2">
                 <div className="text-sm text-muted-foreground">
                   Daily Average
                 </div>
-                <div className="text-2xl font-bold">
+                <div className="text-lg font-bold">
                   {formatNumber(dailyAverage, 0)}
                 </div>
                 <p className="text-xs text-muted-foreground">kWh per day</p>
                 <p className="text-xs text-muted-foreground italic">
                   Baseline for comparison
                 </p>
-                <div className="mt-3 pt-3 border-t space-y-1">
+                <div className="mt-2 pt-2 border-t space-y-1">
                   <p className="text-xs font-medium text-muted-foreground mb-1.5">
                     By Meter Type:
                   </p>
@@ -2342,7 +2341,7 @@ export function OverviewMainTabV3({
                     : "N/A"}
                   % above average
                 </div>
-                <div className="mt-3 pt-3 border-t space-y-1">
+                <div className="mt-2 pt-2 border-t space-y-1">
                   <p className="text-xs font-medium text-muted-foreground mb-1.5">
                     By Meter Type:
                   </p>
@@ -2387,7 +2386,7 @@ export function OverviewMainTabV3({
                     : "N/A"}
                   % below average
                 </div>
-                <div className="mt-3 pt-3 border-t space-y-1">
+                <div className="mt-2 pt-2 border-t space-y-1">
                   <p className="text-xs font-medium text-muted-foreground mb-1.5">
                     By Meter Type:
                   </p>
@@ -2449,7 +2448,7 @@ export function OverviewMainTabV3({
                     </div>
                   </div>
                 </div>
-                <div className="flex items-center gap-3 text-xs">
+                <div className="flex items-center gap-2 text-xs">
                   <div className="flex items-center gap-1">
                     <div className="w-2 h-2 rounded-full bg-green-500" />
                     <span className="font-medium">{daysAboveAverage} days</span>
@@ -2467,7 +2466,7 @@ export function OverviewMainTabV3({
                   % of days exceeded average
                 </p>
 
-                <div className="mt-3 pt-3 border-t space-y-2">
+                <div className="mt-2 pt-2 border-t space-y-2">
                   <p className="text-xs font-medium text-muted-foreground">
                     Day Distribution by Meter Type
                   </p>
@@ -2526,7 +2525,7 @@ export function OverviewMainTabV3({
                 Loading...
               </div>
             ) : topBottomConsumersData && topBottomConsumersData.length > 0 ? (
-              <div className="flex gap-4 overflow-x-auto pb-4 snap-x snap-mandatory scrollbar-thin scrollbar-thumb-muted scrollbar-track-muted/20">
+              <div className="flex gap-2 overflow-x-auto pb-2 snap-x snap-mandatory scrollbar-thin scrollbar-thumb-muted scrollbar-track-muted/20">
                 {topBottomConsumersData.map((meterTypeData) => {
                   const getLocationText = (consumer: any) => {
                     if (!consumer) return "N/A";
@@ -2547,13 +2546,13 @@ export function OverviewMainTabV3({
                   return (
                     <div
                       key={meterTypeData.meter_type}
-                      className="min-w-[400px] snap-start border rounded-lg p-4 space-y-4"
+                      className="min-w-[400px] snap-start border rounded-lg p-3 space-y-2"
                     >
                       <div className="font-semibold text-lg border-b pb-2">
                         {formatMeterType(meterTypeData.meter_type)}
                       </div>
 
-                      <div className="grid grid-cols-2 gap-3">
+                      <div className="grid grid-cols-2 gap-2">
                         <div className="border rounded-lg p-3 bg-green-50">
                           <div className="flex items-center gap-2 mb-2">
                             <div className="w-2 h-2 rounded-full bg-green-600" />
@@ -2930,7 +2929,7 @@ export function OverviewMainTabV3({
                 <p>No trend data available</p>
               </div>
             ) : (
-              <div className="w-full h-[260px]">
+              <div className="w-full h-[170px]">
                 <ResponsiveContainer width="100%" height="100%">
                   <AreaChart
                     data={filteredConsumptionTrendData}
@@ -3191,9 +3190,9 @@ export function OverviewMainTabV3({
     ];
 
     return (
-      <div className="space-y-3">
+      <div className="space-y-2">
         {}
-        <div className="grid gap-4 md:grid-cols-4">
+        <div className="grid gap-2 md:grid-cols-4">
           <Card>
             <CardHeader className="pb-2">
               <CardTitle className="text-sm font-medium text-muted-foreground">
@@ -3201,7 +3200,7 @@ export function OverviewMainTabV3({
               </CardTitle>
             </CardHeader>
             <CardContent>
-              <div className="text-3xl font-bold">
+              <div className="text-xl font-bold">
                 {summaryData.total_meters.toLocaleString()}
               </div>
             </CardContent>
@@ -3214,7 +3213,7 @@ export function OverviewMainTabV3({
               </CardTitle>
             </CardHeader>
             <CardContent>
-              <div className="text-3xl font-bold text-green-600">
+              <div className="text-xl font-bold text-green-600">
                 {summaryData.online_meters.toLocaleString()}
               </div>
               <p className="text-xs text-muted-foreground mt-1">
@@ -3230,7 +3229,7 @@ export function OverviewMainTabV3({
               </CardTitle>
             </CardHeader>
             <CardContent>
-              <div className="text-3xl font-bold text-red-600">
+              <div className="text-xl font-bold text-red-600">
                 {summaryData.offline_meters.toLocaleString()}
               </div>
               <p className="text-xs text-muted-foreground mt-1">
@@ -3246,7 +3245,7 @@ export function OverviewMainTabV3({
               </CardTitle>
             </CardHeader>
             <CardContent>
-              <div className="text-3xl font-bold">
+              <div className="text-xl font-bold">
                 {summaryData.average_uptime_percentage.toFixed(1)}%
               </div>
               <p className="text-xs text-muted-foreground mt-1">
@@ -3265,7 +3264,7 @@ export function OverviewMainTabV3({
             </CardDescription>
           </CardHeader>
           <CardContent>
-            <div className="space-y-4">
+            <div className="space-y-2">
               {summaryData.by_meter_type.map((type) => (
                 <div key={type.meter_type} className="space-y-2">
                   <div className="flex items-center justify-between text-sm">
@@ -3302,9 +3301,9 @@ export function OverviewMainTabV3({
           </CardHeader>
           <CardContent>
             {isLoadingTimeline ? (
-              <Skeleton className="h-[200px] w-full" />
+              <Skeleton className="h-[140px] w-full" />
             ) : statusTimelineData && statusTimelineData.length > 0 ? (
-              <ResponsiveContainer width="100%" height={200}>
+              <ResponsiveContainer width="100%" height={140}>
                 <RechartsBarChart data={statusTimelineData}>
                   <CartesianGrid
                     strokeDasharray="3 3"
@@ -3377,7 +3376,7 @@ export function OverviewMainTabV3({
                 </RechartsBarChart>
               </ResponsiveContainer>
             ) : (
-              <div className="flex h-[200px] items-center justify-center text-muted-foreground">
+              <div className="flex h-[140px] items-center justify-center text-muted-foreground">
                 No timeline data available
               </div>
             )}
@@ -3409,7 +3408,7 @@ export function OverviewMainTabV3({
             </div>
           </CardHeader>
           <CardContent>
-            <div className="grid grid-cols-4 gap-4">
+            <div className="grid grid-cols-4 gap-2">
               {uptimeDistribution.map((item) => (
                 <button
                   key={item.category}
@@ -3421,14 +3420,14 @@ export function OverviewMainTabV3({
                     );
                     setHealthPage(1);
                   }}
-                  className={`p-4 rounded-lg border-2 transition-all ${
+                  className={`p-3 rounded-lg border-2 transition-all ${
                     healthCategoryFilter === item.category
                       ? "border-primary shadow-lg"
                       : "border-border hover:border-primary/50"
                   }`}
                 >
                   <div
-                    className={`text-2xl font-bold ${item.color.replace("bg-", "text-")}`}
+                    className={`text-lg font-bold ${item.color.replace("bg-", "text-")}`}
                   >
                     {item.count.toLocaleString()}
                   </div>
@@ -3475,16 +3474,16 @@ export function OverviewMainTabV3({
               <table className="w-full text-sm">
                 <thead className="sticky top-0 bg-zinc-50 border-b border-zinc-200">
                   <tr className="text-left text-xs uppercase tracking-wide text-zinc-600">
-                    <th className="px-3 py-3 font-semibold">Meter #</th>
-                    <th className="px-3 py-3 font-semibold">Type</th>
-                    <th className="px-3 py-3 font-semibold">location</th>
-                    <th className="px-3 py-3 font-semibold">Status</th>
-                    <th className="px-3 py-3 font-semibold">Health</th>
-                    <th className="px-3 py-3 font-semibold">Uptime %</th>
-                    <th className="px-3 py-3 font-semibold">
+                    <th className="px-3 py-1\.5 font-semibold">Meter #</th>
+                    <th className="px-3 py-1\.5 font-semibold">Type</th>
+                    <th className="px-3 py-1\.5 font-semibold">location</th>
+                    <th className="px-3 py-1\.5 font-semibold">Status</th>
+                    <th className="px-3 py-1\.5 font-semibold">Health</th>
+                    <th className="px-3 py-1\.5 font-semibold">Uptime %</th>
+                    <th className="px-3 py-1\.5 font-semibold">
                       Days Online / Offline
                     </th>
-                    <th className="px-3 py-3 font-semibold">Last Seen</th>
+                    <th className="px-3 py-1\.5 font-semibold">Last Seen</th>
                   </tr>
                 </thead>
 
@@ -3614,7 +3613,7 @@ export function OverviewMainTabV3({
 
             {}
             {pagination && pagination.total_pages > 1 && (
-              <div className="flex items-center justify-between mt-4">
+              <div className="flex items-center justify-between mt-2">
                 <div className="text-sm text-muted-foreground">
                   Page {pagination.page} of {pagination.total_pages}
                 </div>
@@ -3669,9 +3668,9 @@ export function OverviewMainTabV3({
         : 0;
 
     return (
-      <div className="space-y-3">
+      <div className="space-y-2">
         <div className="flex items-center justify-between">
-          <div className="flex items-center gap-4">
+          <div className="flex items-center gap-2">
             <Button
               variant="outline"
               size="sm"
@@ -3682,7 +3681,7 @@ export function OverviewMainTabV3({
               Back to All Regions
             </Button>
             <div>
-              <h2 className="text-2xl font-bold">{regionData.region}</h2>
+              <h2 className="text-lg font-bold">{regionData.region}</h2>
               <p className="text-sm text-muted-foreground">
                 Detailed regional consumption analysis
               </p>
@@ -3690,21 +3689,21 @@ export function OverviewMainTabV3({
           </div>
         </div>
 
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-2">
           {}
           <Card className="border-t-4 border-t-green-500">
-            <CardHeader className="pb-4">
+            <CardHeader className="pb-2">
               <CardDescription className="text-sm font-medium text-black">
                 Imports
               </CardDescription>
             </CardHeader>
 
-            <CardContent className="space-y-3">
+            <CardContent className="space-y-2">
               {meterTypeBreakdown.map((meterType) => (
                 <div key={meterType.meterType}>
                   {}
                   <div className="text-right">
-                    <div className="text-3xl font-bold text-green-600 leading-none tabular-nums">
+                    <div className="text-xl font-bold text-green-600 leading-none tabular-nums">
                       {meterType.totalImport.toLocaleString("en-US", {
                         minimumFractionDigits: 2,
                         maximumFractionDigits: 2,
@@ -3729,18 +3728,18 @@ export function OverviewMainTabV3({
 
           {}
           <Card className="border-t-4 border-t-blue-500">
-            <CardHeader className="pb-4">
+            <CardHeader className="pb-2">
               <CardDescription className="text-sm font-medium text-black">
                 Exports
               </CardDescription>
             </CardHeader>
 
-            <CardContent className="space-y-3">
+            <CardContent className="space-y-2">
               {meterTypeBreakdown.map((meterType) => (
                 <div key={meterType.meterType}>
                   {}
                   <div className="text-right">
-                    <div className="text-3xl font-bold text-blue-600 leading-none tabular-nums">
+                    <div className="text-xl font-bold text-blue-600 leading-none tabular-nums">
                       {meterType.totalExport.toLocaleString("en-US", {
                         minimumFractionDigits: 2,
                         maximumFractionDigits: 2,
@@ -3771,12 +3770,12 @@ export function OverviewMainTabV3({
               </CardDescription>
             </CardHeader>
 
-            <CardContent className="space-y-3">
+            <CardContent className="space-y-2">
               {}
               {meterTypeBreakdown.map((meterType) => (
                 <div key={meterType.meterType}>
                   <div className="text-right">
-                    <div className="text-3xl font-bold tabular-nums">
+                    <div className="text-xl font-bold tabular-nums">
                       {(meterType.totalNet / daysDifference).toLocaleString(
                         "en-US",
                         {
@@ -3807,7 +3806,7 @@ export function OverviewMainTabV3({
             <div className="flex items-center justify-between">
               <div>
                 <CardTitle className="text-lg flex items-center gap-2">
-                  <Zap className="h-5 w-5 text-primary" />
+                  <Zap className="h-4 w-4 text-primary" />
                   Energy Flow Breakdown for {regionData.region}
                 </CardTitle>
                 <CardDescription>
@@ -3817,7 +3816,7 @@ export function OverviewMainTabV3({
               <TooltipProvider>
                 <Tooltip>
                   <TooltipTrigger asChild>
-                    <Info className="h-5 w-5 text-muted-foreground cursor-help" />
+                    <Info className="h-4 w-4 text-muted-foreground cursor-help" />
                   </TooltipTrigger>
                   <TooltipContent className="max-w-md">
                     <p className="text-sm">
@@ -3832,11 +3831,11 @@ export function OverviewMainTabV3({
             </div>
           </CardHeader>
           <CardContent>
-            <div className="space-y-4">
+            <div className="space-y-2">
               {}
               {}
-              <div className="flex items-center justify-between p-4 rounded-lg bg-green-50 border-2 border-green-200">
-                <div className="flex items-center gap-3">
+              <div className="flex items-center justify-between p-3 rounded-lg bg-green-50 border-2 border-green-200">
+                <div className="flex items-center gap-2">
                   <div className="h-10 w-10 rounded-full bg-green-500 flex items-center justify-center text-white font-bold">
                     1
                   </div>
@@ -3850,7 +3849,7 @@ export function OverviewMainTabV3({
                   </div>
                 </div>
                 <div className="text-right">
-                  <div className="text-2xl font-bold text-green-600">
+                  <div className="text-lg font-bold text-green-600">
                     {(() => {
                       const bspImport = singleRegionMeterTypeBreakdown
                         .filter((mt) => mt.meterType === "BSP")
@@ -3883,8 +3882,8 @@ export function OverviewMainTabV3({
 
                 return (
                   <div className="space-y-2">
-                    <div className="flex items-center justify-between p-4 rounded-lg bg-red-50 border-2 border-red-200">
-                      <div className="flex items-center gap-3">
+                    <div className="flex items-center justify-between p-3 rounded-lg bg-red-50 border-2 border-red-200">
+                      <div className="flex items-center gap-2">
                         <div className="h-10 w-10 rounded-full bg-red-500 flex items-center justify-center text-white font-bold">
                           2
                         </div>
@@ -3898,7 +3897,7 @@ export function OverviewMainTabV3({
                         </div>
                       </div>
                       <div className="text-right">
-                        <div className="text-2xl font-bold text-red-600">
+                        <div className="text-lg font-bold text-red-600">
                           -{" "}
                           {exportsToOthers.toLocaleString("en-US", {
                             minimumFractionDigits: 4,
@@ -3956,8 +3955,8 @@ export function OverviewMainTabV3({
 
                 return (
                   <div className="space-y-2">
-                    <div className="flex items-center justify-between p-4 rounded-lg bg-blue-50 border-2 border-blue-200">
-                      <div className="flex items-center gap-3">
+                    <div className="flex items-center justify-between p-3 rounded-lg bg-blue-50 border-2 border-blue-200">
+                      <div className="flex items-center gap-2">
                         <div className="h-10 w-10 rounded-full bg-blue-500 flex items-center justify-center text-white font-bold">
                           3
                         </div>
@@ -3971,7 +3970,7 @@ export function OverviewMainTabV3({
                         </div>
                       </div>
                       <div className="text-right">
-                        <div className="text-2xl font-bold text-blue-600">
+                        <div className="text-lg font-bold text-blue-600">
                           +{" "}
                           {importsFromOthers.toLocaleString("en-US", {
                             minimumFractionDigits: 4,
@@ -4039,8 +4038,8 @@ export function OverviewMainTabV3({
                   bspImport - exportsToOthers + importsFromOthers;
 
                 return (
-                  <div className="flex items-center justify-between p-4 rounded-lg bg-gradient-to-r from-primary/10 to-background border-2 border-primary">
-                    <div className="flex items-center gap-3">
+                  <div className="flex items-center justify-between p-3 rounded-lg bg-gradient-to-r from-primary/10 to-background border-2 border-primary">
+                    <div className="flex items-center gap-2">
                       <div className="h-12 w-12 rounded-full bg-primary flex items-center justify-center text-white font-bold text-lg">
                         =
                       </div>
@@ -4067,7 +4066,7 @@ export function OverviewMainTabV3({
                       </div>
                     </div>
                     <div className="text-right">
-                      <div className="text-3xl font-bold text-primary">
+                      <div className="text-xl font-bold text-primary">
                         {actualConsumption.toLocaleString("en-US", {
                           minimumFractionDigits: 4,
                           maximumFractionDigits: 4,
@@ -4080,7 +4079,7 @@ export function OverviewMainTabV3({
               })()}
 
               {}
-              <div className="mt-4 p-3 bg-muted/30 rounded-lg text-xs text-muted-foreground">
+              <div className="mt-2 p-3 bg-muted/30 rounded-lg text-xs text-muted-foreground">
                 <p className="font-medium mb-2">
                   📊 Understanding the Calculation:
                 </p>
@@ -4157,7 +4156,7 @@ export function OverviewMainTabV3({
             </div>
           </CardHeader>
           <CardContent>
-            <ResponsiveContainer width="100%" height={220}>
+            <ResponsiveContainer width="100%" height={150}>
               <AreaChart data={regionData.dataPoints}>
                 <defs>
                   <linearGradient
@@ -4296,7 +4295,7 @@ export function OverviewMainTabV3({
                   color: "hsl(221, 83%, 53%)",
                 },
               }}
-              className="h-[200px] w-full"
+              className="h-[140px] w-full"
             >
               <ResponsiveContainer width="100%" height="100%">
                 <BarChart
@@ -4326,7 +4325,7 @@ export function OverviewMainTabV3({
           </CardContent>
         </Card>
 
-        <div className="grid grid-cols-1 gap-3 lg:grid-cols-2">
+        <div className="grid grid-cols-1 gap-2 lg:grid-cols-2">
           {}
           <Card>
             <CardHeader>
@@ -4337,7 +4336,7 @@ export function OverviewMainTabV3({
             </CardHeader>
             <CardContent className="space-y-5">
               {}
-              <div className="flex items-center gap-4 text-xs text-muted-foreground">
+              <div className="flex items-center gap-2 text-xs text-muted-foreground">
                 <div className="flex items-center gap-1.5">
                   <span className="inline-block h-2.5 w-2.5 rounded-sm bg-green-500" />
                   Import
@@ -4361,7 +4360,7 @@ export function OverviewMainTabV3({
                       <span className="text-sm font-semibold uppercase tracking-wide text-muted-foreground">
                         {meterType.meterType}
                       </span>
-                      <div className="flex items-center gap-4 text-xs">
+                      <div className="flex items-center gap-2 text-xs">
                         <span className="text-green-600 font-bold tabular-nums">
                           {formatNumber(meterType.totalImport)} kWh
                         </span>
@@ -4399,7 +4398,7 @@ export function OverviewMainTabV3({
               <CardDescription>Consumption by meter category</CardDescription>
             </CardHeader>
             <CardContent>
-              <ResponsiveContainer width="100%" height={170}>
+              <ResponsiveContainer width="100%" height={120}>
                 <BarChart data={meterTypeBreakdown} layout="vertical">
                   <CartesianGrid
                     strokeDasharray="3 3"
@@ -4493,7 +4492,7 @@ export function OverviewMainTabV3({
 
         {}
         {singleRegionBoundaryPoints.length > 0 && (
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-3">
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-2">
             {}
             <Card>
               <CardHeader>
@@ -4517,7 +4516,7 @@ export function OverviewMainTabV3({
                       color: "hsl(221, 83%, 53%)",
                     },
                   }}
-                  className="h-[260px] w-full"
+                  className="h-[170px] w-full"
                 >
                   <ResponsiveContainer width="100%" height="100%">
                     <BarChart
@@ -4585,7 +4584,7 @@ export function OverviewMainTabV3({
                 </ChartContainer>
 
                 {}
-                <div className="mt-4 text-sm text-muted-foreground">
+                <div className="mt-2 text-sm text-muted-foreground">
                   Showing {singleRegionBoundaryPoints.length} boundary metering
                   point(s) connected to {regionData.region}
                 </div>
@@ -4820,7 +4819,7 @@ export function OverviewMainTabV3({
                         >
                           <tr className="border-b">
                             <th
-                              className="py-3 px-4 text-left font-semibold border-r bg-background"
+                              className="py-1\.5 px-4 text-left font-semibold border-r bg-background"
                               style={{
                                 position: "sticky",
                                 left: 0,
@@ -4832,7 +4831,7 @@ export function OverviewMainTabV3({
                               Boundary Point
                             </th>
                             <th
-                              className="py-3 px-4 text-left font-semibold border-r bg-background"
+                              className="py-1\.5 px-4 text-left font-semibold border-r bg-background"
                               style={{
                                 position: "sticky",
                                 left: "180px",
@@ -4844,13 +4843,13 @@ export function OverviewMainTabV3({
                               Location
                             </th>
                             <th
-                              className="py-3 px-4 text-right font-semibold bg-background"
+                              className="py-1\.5 px-4 text-right font-semibold bg-background"
                               style={{ minWidth: "80px", width: "80px" }}
                             >
                               Meters
                             </th>
                             <th
-                              className="py-3 px-4 text-right font-semibold bg-background"
+                              className="py-1\.5 px-4 text-right font-semibold bg-background"
                               style={{ minWidth: "130px", width: "130px" }}
                             >
                               <span className="text-green-600">
@@ -4858,7 +4857,7 @@ export function OverviewMainTabV3({
                               </span>
                             </th>
                             <th
-                              className="py-3 px-4 text-right font-semibold bg-background"
+                              className="py-1\.5 px-4 text-right font-semibold bg-background"
                               style={{ minWidth: "130px", width: "130px" }}
                             >
                               <span className="text-blue-600">
@@ -4866,7 +4865,7 @@ export function OverviewMainTabV3({
                               </span>
                             </th>
                             <th
-                              className="py-3 px-4 text-right font-semibold bg-background"
+                              className="py-1\.5 px-4 text-right font-semibold bg-background"
                               style={{ minWidth: "130px", width: "130px" }}
                             >
                               <span className="text-purple-600">Net (kWh)</span>
@@ -4908,7 +4907,7 @@ export function OverviewMainTabV3({
                                     className={`border-b hover:bg-muted/50 ${isFirstInGroup && idx !== 0 ? "border-t-2" : ""}`}
                                   >
                                     <td
-                                      className={`py-3 px-4 font-medium text-xs border-r ${groupBgClass}`}
+                                      className={`py-1\.5 px-4 font-medium text-xs border-r ${groupBgClass}`}
                                       style={{
                                         position: "sticky",
                                         left: 0,
@@ -4920,7 +4919,7 @@ export function OverviewMainTabV3({
                                       {isFirstInGroup ? row.boundaryPoint : ""}
                                     </td>
                                     <td
-                                      className={`py-3 px-4 cursor-pointer border-r ${groupBgClass}`}
+                                      className={`py-1\.5 px-4 cursor-pointer border-r ${groupBgClass}`}
                                       style={{
                                         position: "sticky",
                                         left: "180px",
@@ -4952,7 +4951,7 @@ export function OverviewMainTabV3({
                                       </div>
                                     </td>
                                     <td
-                                      className={`py-3 px-4 text-right ${groupBgClass}`}
+                                      className={`py-1\.5 px-4 text-right ${groupBgClass}`}
                                     >
                                       <Badge
                                         variant="secondary"
@@ -4962,7 +4961,7 @@ export function OverviewMainTabV3({
                                       </Badge>
                                     </td>
                                     <td
-                                      className={`py-3 px-4 text-right text-green-600 font-medium text-xs ${groupBgClass}`}
+                                      className={`py-1\.5 px-4 text-right text-green-600 font-medium text-xs ${groupBgClass}`}
                                     >
                                       {row.totalImport.toLocaleString("en-US", {
                                         minimumFractionDigits: 4,
@@ -4970,7 +4969,7 @@ export function OverviewMainTabV3({
                                       })}
                                     </td>
                                     <td
-                                      className={`py-3 px-4 text-right text-blue-600 font-medium text-xs ${groupBgClass}`}
+                                      className={`py-1\.5 px-4 text-right text-blue-600 font-medium text-xs ${groupBgClass}`}
                                     >
                                       {row.totalExport.toLocaleString("en-US", {
                                         minimumFractionDigits: 4,
@@ -4978,7 +4977,7 @@ export function OverviewMainTabV3({
                                       })}
                                     </td>
                                     <td
-                                      className={`py-3 px-4 text-right text-purple-600 font-semibold text-xs ${groupBgClass}`}
+                                      className={`py-1\.5 px-4 text-right text-purple-600 font-semibold text-xs ${groupBgClass}`}
                                     >
                                       {row.netFlow.toLocaleString("en-US", {
                                         minimumFractionDigits: 4,
@@ -5084,7 +5083,7 @@ export function OverviewMainTabV3({
                             }}
                           >
                             <td
-                              className="py-3 px-4 text-xs border-r bg-muted/50"
+                              className="py-1\.5 px-4 text-xs border-r bg-muted/50"
                               style={{
                                 position: "sticky",
                                 left: 0,
@@ -5096,7 +5095,7 @@ export function OverviewMainTabV3({
                               Total
                             </td>
                             <td
-                              className="py-3 px-4 border-r bg-muted/50"
+                              className="py-1\.5 px-4 border-r bg-muted/50"
                               style={{
                                 position: "sticky",
                                 left: "180px",
@@ -5105,13 +5104,13 @@ export function OverviewMainTabV3({
                                 width: "150px",
                               }}
                             ></td>
-                            <td className="py-3 px-4 text-right text-xs bg-muted/50">
+                            <td className="py-1\.5 px-4 text-right text-xs bg-muted/50">
                               {singleRegionBoundaryLocationBreakdown.reduce(
                                 (sum, row) => sum + row.meterCount,
                                 0,
                               )}
                             </td>
-                            <td className="py-3 px-4 text-right text-green-600 text-xs bg-muted/50">
+                            <td className="py-1\.5 px-4 text-right text-green-600 text-xs bg-muted/50">
                               {singleRegionBoundaryLocationBreakdown
                                 .reduce((sum, row) => sum + row.totalImport, 0)
                                 .toLocaleString("en-US", {
@@ -5119,7 +5118,7 @@ export function OverviewMainTabV3({
                                   maximumFractionDigits: 4,
                                 })}
                             </td>
-                            <td className="py-3 px-4 text-right text-blue-600 text-xs bg-muted/50">
+                            <td className="py-1\.5 px-4 text-right text-blue-600 text-xs bg-muted/50">
                               {singleRegionBoundaryLocationBreakdown
                                 .reduce((sum, row) => sum + row.totalExport, 0)
                                 .toLocaleString("en-US", {
@@ -5127,7 +5126,7 @@ export function OverviewMainTabV3({
                                   maximumFractionDigits: 4,
                                 })}
                             </td>
-                            <td className="py-3 px-4 text-right text-purple-600 text-xs bg-muted/50">
+                            <td className="py-1\.5 px-4 text-right text-purple-600 text-xs bg-muted/50">
                               {singleRegionBoundaryLocationBreakdown
                                 .reduce((sum, row) => sum + row.netFlow, 0)
                                 .toLocaleString("en-US", {
@@ -5142,7 +5141,7 @@ export function OverviewMainTabV3({
                   </div>
 
                   {}
-                  <div className="mt-3 flex gap-2">
+                  <div className="mt-2 flex gap-2">
                     <Button
                       variant="outline"
                       size="sm"
@@ -5175,10 +5174,10 @@ export function OverviewMainTabV3({
 
   const renderMapView = () => {
     return (
-      <div className="space-y-3 p-4">
+      <div className="space-y-2 p-3">
         <div className="flex items-center justify-between">
           <div>
-            <h2 className="text-2xl font-bold">Consumption Map</h2>
+            <h2 className="text-lg font-bold">Consumption Map</h2>
             <p className="text-muted-foreground">
               Geographic visualization of district-level consumption patterns
             </p>
@@ -5199,10 +5198,10 @@ export function OverviewMainTabV3({
 
     if (!selectedMeter) {
       return (
-        <div className="space-y-3 p-4">
+        <div className="space-y-2 p-3">
           <div className="flex items-center justify-between">
             <div>
-              <h2 className="text-2xl font-bold">Meter Not Found</h2>
+              <h2 className="text-lg font-bold">Meter Not Found</h2>
             </div>
             <Button
               variant="outline"
@@ -5220,11 +5219,11 @@ export function OverviewMainTabV3({
     const daysInPeriod = selectedMeter.days_online + selectedMeter.days_offline;
 
     return (
-      <div className="space-y-3 p-4">
+      <div className="space-y-2 p-3">
         {}
         <div className="flex items-center justify-between">
           <div>
-            <h2 className="text-2xl font-bold">Meter Health Profile</h2>
+            <h2 className="text-lg font-bold">Meter Health Profile</h2>
             <p className="text-muted-foreground">
               Detailed health analysis for {selectedMeterNumber}
             </p>
@@ -5239,12 +5238,12 @@ export function OverviewMainTabV3({
         <Card>
           <CardHeader>
             <CardTitle className="flex items-center gap-2">
-              <Activity className="h-5 w-5" />
+              <Activity className="h-4 w-4" />
               Meter Information
             </CardTitle>
           </CardHeader>
           <CardContent>
-            <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
               <div>
                 <div className="text-sm text-muted-foreground mb-1">
                   Meter Number
@@ -5274,7 +5273,7 @@ export function OverviewMainTabV3({
         </Card>
 
         {}
-        <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+        <div className="grid grid-cols-1 md:grid-cols-4 gap-2">
           <Card
             className={`border-2 ${selectedMeter.status === "ONLINE" ? "border-green-500/20 bg-green-500/5" : "border-red-500/20 bg-red-500/5"}`}
           >
@@ -5288,7 +5287,7 @@ export function OverviewMainTabV3({
                 <div
                   className={`h-3 w-3 rounded-full ${selectedMeter.status === "ONLINE" ? "bg-green-500" : "bg-red-500"}`}
                 />
-                <div className="text-2xl font-bold">{selectedMeter.status}</div>
+                <div className="text-lg font-bold">{selectedMeter.status}</div>
               </div>
             </CardContent>
           </Card>
@@ -5324,7 +5323,7 @@ export function OverviewMainTabV3({
               </CardTitle>
             </CardHeader>
             <CardContent>
-              <div className="text-3xl font-bold">
+              <div className="text-xl font-bold">
                 {healthPercentage.toFixed(1)}%
               </div>
               <Progress value={healthPercentage} className="h-2 mt-2" />
@@ -5338,7 +5337,7 @@ export function OverviewMainTabV3({
               </CardTitle>
             </CardHeader>
             <CardContent>
-              <div className="text-3xl font-bold text-green-600">
+              <div className="text-xl font-bold text-green-600">
                 {selectedMeter.days_online}
               </div>
               <p className="text-xs text-muted-foreground mt-1">
@@ -5357,8 +5356,8 @@ export function OverviewMainTabV3({
             </CardDescription>
           </CardHeader>
           <CardContent>
-            <div className="space-y-4">
-              <div className="flex items-center gap-4">
+            <div className="space-y-2">
+              <div className="flex items-center gap-2">
                 <div className="flex-1">
                   <div className="flex items-center justify-between mb-2">
                     <span className="text-sm font-medium text-green-600">
@@ -5379,7 +5378,7 @@ export function OverviewMainTabV3({
                 </div>
               </div>
 
-              <div className="flex items-center gap-4">
+              <div className="flex items-center gap-2">
                 <div className="flex-1">
                   <div className="flex items-center justify-between mb-2">
                     <span className="text-sm font-medium text-red-600">
@@ -5401,8 +5400,8 @@ export function OverviewMainTabV3({
               </div>
 
               {}
-              <div className="pt-4 border-t">
-                <ResponsiveContainer width="100%" height={170}>
+              <div className="pt-2 border-t">
+                <ResponsiveContainer width="100%" height={120}>
                   <PieChart>
                     <Pie
                       data={[
@@ -5439,8 +5438,8 @@ export function OverviewMainTabV3({
             </CardDescription>
           </CardHeader>
           <CardContent>
-            <div className="space-y-4">
-              <div className="flex items-start gap-3 p-4 rounded-lg bg-muted/50">
+            <div className="space-y-2">
+              <div className="flex items-start gap-2 p-3 rounded-lg bg-muted/50">
                 <div
                   className={`h-10 w-10 rounded-full flex items-center justify-center ${
                     healthPercentage >= 90
@@ -5453,7 +5452,7 @@ export function OverviewMainTabV3({
                   }`}
                 >
                   <Activity
-                    className={`h-5 w-5 ${
+                    className={`h-4 w-4 ${
                       healthPercentage >= 90
                         ? "text-green-600"
                         : healthPercentage >= 70
@@ -5481,16 +5480,16 @@ export function OverviewMainTabV3({
                 </div>
               </div>
 
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                <div className="p-4 rounded-lg border">
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-2">
+                <div className="p-3 rounded-lg border">
                   <div className="text-sm text-muted-foreground mb-1">
                     Total Period
                   </div>
-                  <div className="text-2xl font-bold">{daysInPeriod} days</div>
+                  <div className="text-lg font-bold">{daysInPeriod} days</div>
                 </div>
-                <div className="p-4 rounded-lg border bg-green-50">
+                <div className="p-3 rounded-lg border bg-green-50">
                   <div className="text-sm text-green-700 mb-1">Online Days</div>
-                  <div className="text-2xl font-bold text-green-700">
+                  <div className="text-lg font-bold text-green-700">
                     {selectedMeter.days_online}
                   </div>
                   <div className="text-xs text-green-600 mt-1">
@@ -5503,9 +5502,9 @@ export function OverviewMainTabV3({
                     % of period
                   </div>
                 </div>
-                <div className="p-4 rounded-lg border bg-red-50">
+                <div className="p-3 rounded-lg border bg-red-50">
                   <div className="text-sm text-red-700 mb-1">Offline Days</div>
-                  <div className="text-2xl font-bold text-red-700">
+                  <div className="text-lg font-bold text-red-700">
                     {selectedMeter.days_offline}
                   </div>
                   <div className="text-xs text-red-600 mt-1">
@@ -5617,9 +5616,9 @@ export function OverviewMainTabV3({
     };
 
     return (
-      <div className="space-y-3">
+      <div className="space-y-2">
         <div className="flex items-center justify-between">
-          <div className="flex items-center gap-4">
+          <div className="flex items-center gap-2">
             <Button
               variant="outline"
               size="sm"
@@ -5630,7 +5629,7 @@ export function OverviewMainTabV3({
               Back to Overview
             </Button>
             <div>
-              <h2 className="text-2xl font-bold">Regional Analysis</h2>
+              <h2 className="text-lg font-bold">Regional Analysis</h2>
               <p className="text-sm text-muted-foreground">
                 Comprehensive regional consumption breakdown
               </p>
@@ -5638,7 +5637,7 @@ export function OverviewMainTabV3({
           </div>
         </div>
 
-        <div className="space-y-4">
+        <div className="space-y-2">
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-2">
               <h3 className="text-lg font-semibold">All Regions</h3>
@@ -5676,7 +5675,7 @@ export function OverviewMainTabV3({
             </Button>
           </div>
 
-          <div className="flex gap-4 overflow-x-auto pb-4 snap-x snap-mandatory scrollbar-thin scrollbar-thumb-muted scrollbar-track-muted/20">
+          <div className="flex gap-2 overflow-x-auto pb-2 snap-x snap-mandatory scrollbar-thin scrollbar-thumb-muted scrollbar-track-muted/20">
             {regionalAnalytics.regions.map((regionData, index) => {
               const meterTypeBreakdown = getMeterTypeBreakdownForRegion(
                 regionData.region,
@@ -5729,7 +5728,7 @@ export function OverviewMainTabV3({
                     </div>
                   </CardHeader>
                   {isExpanded && (
-                    <CardContent className="space-y-4">
+                    <CardContent className="space-y-2">
                       {meterTypeBreakdown.length > 0 ? (
                         <>
                           <div>
@@ -5898,7 +5897,7 @@ export function OverviewMainTabV3({
                   over the selected period
                 </CardDescription>
               </div>
-              <div className="flex items-center gap-4">
+              <div className="flex items-center gap-2">
                 {aggregateDataRegionAnalytics.availableMeterTypes.length >
                   0 && (
                   <DropdownMenu>
@@ -5968,7 +5967,7 @@ export function OverviewMainTabV3({
                     </DropdownMenuTrigger>
                     <DropdownMenuContent
                       align="end"
-                      className="w-56 max-h-56 overflow-y-auto"
+                      className="w-56 max-h-36 overflow-y-auto"
                     >
                       <DropdownMenuLabel>Select Regions</DropdownMenuLabel>
                       <DropdownMenuSeparator />
@@ -6237,7 +6236,7 @@ export function OverviewMainTabV3({
                     ` (Filtered: ${Array.from(selectedBalanceMeterTypes).join(", ")})`}
                 </CardDescription>
               </div>
-              <div className="flex items-center gap-4">
+              <div className="flex items-center gap-2">
                 {aggregateDataRegionAnalytics.availableMeterTypes.length >
                   0 && (
                   <DropdownMenu>
@@ -6335,7 +6334,7 @@ export function OverviewMainTabV3({
               }
 
               return barChartData.length > 0 ? (
-                <div className="h-56">
+                <div className="h-36">
                   <ResponsiveContainer width="100%" height="100%">
                     <RechartsBarChart data={barChartData} layout="vertical">
                       <CartesianGrid strokeDasharray="3 3" />
@@ -6765,15 +6764,15 @@ export function OverviewMainTabV3({
     const allMeterTypes = meterTypeDetailedBreakdown || [];
 
     return (
-      <div className="space-y-3 p-4">
+      <div className="space-y-2 p-3">
         <div className="flex items-center justify-between">
           <div>
-            <h2 className="text-2xl font-bold">Category Breakdown</h2>
+            <h2 className="text-lg font-bold">Category Breakdown</h2>
           </div>
         </div>
 
         <div className="relative">
-          <div className="flex gap-4 overflow-x-auto pb-4 snap-x snap-mandatory scrollbar-thin scrollbar-thumb-muted scrollbar-track-muted/20">
+          <div className="flex gap-2 overflow-x-auto pb-2 snap-x snap-mandatory scrollbar-thin scrollbar-thumb-muted scrollbar-track-muted/20">
             {allMeterTypes.map((meterType, index) => {
               const displayValue =
                 categoryViewMode === "net"
@@ -6802,7 +6801,7 @@ export function OverviewMainTabV3({
 
               return (
                 <Card key={index} className="min-w-[280px] snap-start">
-                  <CardHeader className="pb-3">
+                  <CardHeader className="pb-2">
                     <div className="flex items-start justify-between">
                       <CardTitle className="text-base font-semibold">
                         {formatMeterType(meterType.meter_type)}
@@ -6841,9 +6840,9 @@ export function OverviewMainTabV3({
                       </div>
                     </div>
                   </CardHeader>
-                  <CardContent className="space-y-3">
+                  <CardContent className="space-y-2">
                     <div>
-                      <div className="text-2xl font-bold">
+                      <div className="text-lg font-bold">
                         {formatNumber(displayValue)}
                       </div>
                       <div className="text-xs text-muted-foreground">kWh</div>
@@ -7054,7 +7053,7 @@ export function OverviewMainTabV3({
           <CardContent>
             {allMeterTypes.length > 0 &&
             allMeterTypes[0].dailyData.length > 0 ? (
-              <div className="h-56">
+              <div className="h-36">
                 <ResponsiveContainer width="100%" height="100%">
                   <LineChart>
                     <CartesianGrid strokeDasharray="3 3" />
@@ -7169,7 +7168,7 @@ export function OverviewMainTabV3({
           </CardHeader>
           <CardContent>
             {allMeterTypes.length > 0 ? (
-              <div className="space-y-4">
+              <div className="space-y-2">
                 {allMeterTypes.map((meterType, index) => {
                   const maxValue = Math.max(
                     meterType.total_import_kwh,
@@ -7333,7 +7332,7 @@ export function OverviewMainTabV3({
             <div className="flex items-start justify-between">
               <div>
                 <CardTitle className="flex items-center gap-2">
-                  <Award className="h-5 w-5" />
+                  <Award className="h-4 w-4" />
                   Full Meters Ranking
                 </CardTitle>
                 <CardDescription>
@@ -7343,7 +7342,7 @@ export function OverviewMainTabV3({
                     ` (${sortedMeters.length} meters)`}
                 </CardDescription>
               </div>
-              <div className="flex items-center gap-4">
+              <div className="flex items-center gap-2">
                 {}
                 {}
                 {}
@@ -7393,10 +7392,10 @@ export function OverviewMainTabV3({
 
           <CardContent>
             {rankingsLoading ? (
-              <Skeleton className="h-[260px] w-full" />
+              <Skeleton className="h-[170px] w-full" />
             ) : !meterRankings?.rankings ||
               meterRankings.rankings.length === 0 ? (
-              <div className="h-[260px] flex items-center justify-center border border-dashed rounded-lg">
+              <div className="h-[170px] flex items-center justify-center border border-dashed rounded-lg">
                 <div className="text-center">
                   <p className="text-muted-foreground mb-2">
                     No ranking data available
@@ -7416,13 +7415,13 @@ export function OverviewMainTabV3({
                       <tr className="border-b">
                         <th
                           colSpan={3}
-                          className="py-3 px-4 text-left text-xs font-semibold text-muted-foreground uppercase tracking-wider"
+                          className="py-1\.5 px-4 text-left text-xs font-semibold text-muted-foreground uppercase tracking-wider"
                         >
                           Meter Information
                         </th>
                         <th
                           colSpan={2}
-                          className="py-3 px-4 text-center text-xs font-semibold uppercase tracking-wider border-l bg-green-50/50"
+                          className="py-1\.5 px-4 text-center text-xs font-semibold uppercase tracking-wider border-l bg-green-50/50"
                         >
                           <div className="flex items-center justify-center gap-2">
                             <TrendingUp className="h-4 w-4 text-green-600" />
@@ -7431,7 +7430,7 @@ export function OverviewMainTabV3({
                         </th>
                         <th
                           colSpan={2}
-                          className="py-3 px-4 text-center text-xs font-semibold uppercase tracking-wider border-l bg-blue-50/50"
+                          className="py-1\.5 px-4 text-center text-xs font-semibold uppercase tracking-wider border-l bg-blue-50/50"
                         >
                           <div className="flex items-center justify-center gap-2">
                             <TrendingDown className="h-4 w-4 text-blue-600" />
@@ -7439,7 +7438,7 @@ export function OverviewMainTabV3({
                           </div>
                         </th>
                         {rankingColumns.showNetKwh && (
-                          <th className="py-3 px-4 text-right text-xs font-semibold uppercase tracking-wider border-l">
+                          <th className="py-1\.5 px-4 text-right text-xs font-semibold uppercase tracking-wider border-l">
                             Net
                           </th>
                         )}
@@ -7447,18 +7446,18 @@ export function OverviewMainTabV3({
 
                       {}
                       <tr className="bg-background/95 backdrop-blur-sm border-b-2">
-                        <th className="py-3 px-4 text-left font-semibold">
+                        <th className="py-1\.5 px-4 text-left font-semibold">
                           Meter #
                         </th>
-                        <th className="py-3 px-4 text-left font-semibold">
+                        <th className="py-1\.5 px-4 text-left font-semibold">
                           Type
                         </th>
-                        <th className="py-3 px-4 text-left font-semibold">
+                        <th className="py-1\.5 px-4 text-left font-semibold">
                           Location
                         </th>
 
                         <th
-                          className="py-3 px-4 text-right font-semibold cursor-pointer hover:bg-green-50 transition-colors border-l group"
+                          className="py-1\.5 px-4 text-right font-semibold cursor-pointer hover:bg-green-50 transition-colors border-l group"
                           onClick={() => handleSort("import_kwh")}
                         >
                           <div className="flex items-center justify-end gap-1">
@@ -7474,7 +7473,7 @@ export function OverviewMainTabV3({
                           </div>
                         </th>
                         <th
-                          className="py-3 px-4 text-center font-semibold cursor-pointer hover:bg-green-50 transition-colors group"
+                          className="py-1\.5 px-4 text-center font-semibold cursor-pointer hover:bg-green-50 transition-colors group"
                           onClick={() => handleSort("import_rank")}
                         >
                           <div className="flex items-center justify-center gap-1">
@@ -7489,7 +7488,7 @@ export function OverviewMainTabV3({
                         </th>
 
                         <th
-                          className="py-3 px-4 text-right font-semibold cursor-pointer hover:bg-blue-50 transition-colors border-l group"
+                          className="py-1\.5 px-4 text-right font-semibold cursor-pointer hover:bg-blue-50 transition-colors border-l group"
                           onClick={() => handleSort("export_kwh")}
                         >
                           <div className="flex items-center justify-end gap-1">
@@ -7503,7 +7502,7 @@ export function OverviewMainTabV3({
                           </div>
                         </th>
                         <th
-                          className="py-3 px-4 text-center font-semibold cursor-pointer hover:bg-blue-50 transition-colors group"
+                          className="py-1\.5 px-4 text-center font-semibold cursor-pointer hover:bg-blue-50 transition-colors group"
                           onClick={() => handleSort("export_rank")}
                         >
                           <div className="flex items-center justify-center gap-1">
@@ -7518,7 +7517,7 @@ export function OverviewMainTabV3({
                         </th>
 
                         {rankingColumns.showNetKwh && (
-                          <th className="py-3 px-4 text-right font-semibold border-l">
+                          <th className="py-1\.5 px-4 text-right font-semibold border-l">
                             Consumption kWh
                           </th>
                         )}
@@ -7587,24 +7586,24 @@ export function OverviewMainTabV3({
                                     : "bg-muted/20"
                                 }`}
                               >
-                                <td className="py-3 px-4 font-mono text-xs">
+                                <td className="py-1\.5 px-4 font-mono text-xs">
                                   {meter.meter_number}
                                 </td>
-                                <td className="py-3 px-4">
+                                <td className="py-1\.5 px-4">
                                   <Badge variant="outline" className="text-xs">
                                     {formatMeterType(meter.meter_type)}
                                   </Badge>
                                 </td>
-                                <td className="py-3 px-4 text-xs">
+                                <td className="py-1\.5 px-4 text-xs">
                                   {getLocationString()}
                                 </td>
 
-                                <td className="py-3 px-4 text-right font-semibold bg-green-50/30 border-l">
+                                <td className="py-1\.5 px-4 text-right font-semibold bg-green-50/30 border-l">
                                   <span className="text-green-700">
                                     {formatNumber(meter.total_import_kwh)}
                                   </span>
                                 </td>
-                                <td className="py-3 px-4 text-center bg-green-50/30">
+                                <td className="py-1\.5 px-4 text-center bg-green-50/30">
                                   {meter.import_rank ? (
                                     <Badge
                                       variant="outline"
@@ -7617,12 +7616,12 @@ export function OverviewMainTabV3({
                                   )}
                                 </td>
 
-                                <td className="py-3 px-4 text-right font-semibold bg-blue-50/30 border-l">
+                                <td className="py-1\.5 px-4 text-right font-semibold bg-blue-50/30 border-l">
                                   <span className="text-blue-700">
                                     {formatNumber(meter.total_export_kwh)}
                                   </span>
                                 </td>
-                                <td className="py-3 px-4 text-center bg-blue-50/30">
+                                <td className="py-1\.5 px-4 text-center bg-blue-50/30">
                                   {meter.export_rank ? (
                                     <Badge
                                       variant="outline"
@@ -7636,7 +7635,7 @@ export function OverviewMainTabV3({
                                 </td>
 
                                 {rankingColumns.showNetKwh && (
-                                  <td className="py-3 px-4 text-right font-semibold border-l">
+                                  <td className="py-1\.5 px-4 text-right font-semibold border-l">
                                     {formatNumber(meter.net_kwh)}
                                   </td>
                                 )}
@@ -7695,7 +7694,7 @@ export function OverviewMainTabV3({
                                   >
                                     <td
                                       colSpan={3}
-                                      className="py-3 px-4 font-semibold"
+                                      className="py-1\.5 px-4 font-semibold"
                                     >
                                       <div className="flex items-center gap-2">
                                         {isExpanded ? (
@@ -7710,12 +7709,12 @@ export function OverviewMainTabV3({
                                       </div>
                                     </td>
 
-                                    <td className="py-3 px-4 text-right font-semibold bg-green-50/50 border-l">
+                                    <td className="py-1\.5 px-4 text-right font-semibold bg-green-50/50 border-l">
                                       <span className="text-green-700">
                                         {formatNumber(totals.totalImport)}
                                       </span>
                                     </td>
-                                    <td className="py-3 px-4 text-center bg-green-50/50">
+                                    <td className="py-1\.5 px-4 text-center bg-green-50/50">
                                       <Badge
                                         variant="outline"
                                         className={`text-xs ${getRankBadgeClass(groupImportRank)} font-semibold`}
@@ -7724,12 +7723,12 @@ export function OverviewMainTabV3({
                                       </Badge>
                                     </td>
 
-                                    <td className="py-3 px-4 text-right font-semibold bg-blue-50/50 border-l">
+                                    <td className="py-1\.5 px-4 text-right font-semibold bg-blue-50/50 border-l">
                                       <span className="text-blue-700">
                                         {formatNumber(totals.totalExport)}
                                       </span>
                                     </td>
-                                    <td className="py-3 px-4 text-center bg-blue-50/50">
+                                    <td className="py-1\.5 px-4 text-center bg-blue-50/50">
                                       <Badge
                                         variant="outline"
                                         className={`text-xs ${getRankBadgeClass(groupExportRank)} font-semibold`}
@@ -7739,7 +7738,7 @@ export function OverviewMainTabV3({
                                     </td>
 
                                     {rankingColumns.showNetKwh && (
-                                      <td className="py-3 px-4 text-right font-semibold border-l">
+                                      <td className="py-1\.5 px-4 text-right font-semibold border-l">
                                         {formatNumber(
                                           totals.totalImport -
                                             totals.totalExport,
@@ -7885,10 +7884,10 @@ export function OverviewMainTabV3({
 
   if (drillDownView === "meters") {
     return (
-      <div className="space-y-3 p-4">
+      <div className="space-y-2 p-3">
         <div className="flex items-center justify-between">
           <div>
-            <h2 className="text-2xl font-bold">Meter Health Details</h2>
+            <h2 className="text-lg font-bold">Meter Health Details</h2>
             <p className="text-muted-foreground">
               Detailed meter status and health analysis
             </p>
@@ -7912,9 +7911,9 @@ export function OverviewMainTabV3({
   }
 
   return (
-    <div className="space-y-4 p-4">
+    <div className="space-y-2 p-4">
       {}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-4">
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-2 mb-2">
         <Card>
           <CardHeader className="pb-2">
             <div className="flex items-center justify-between">
@@ -7927,7 +7926,7 @@ export function OverviewMainTabV3({
             </div>
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">
+            <div className="text-lg font-bold">
               {formatNumber(energyPurchases)}
             </div>
             <p className="text-xs text-muted-foreground mt-1">kWh</p>
@@ -7940,7 +7939,7 @@ export function OverviewMainTabV3({
             </CardTitle>
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">
+            <div className="text-lg font-bold">
               {energySales === null
                 ? "Not Yet Available"
                 : formatNumber(energySales)}
@@ -7961,7 +7960,7 @@ export function OverviewMainTabV3({
               <div className="flex items-center justify-between">
                 {}
                 <div>
-                  <div className="text-2xl font-bold">Not Yet Available</div>
+                  <div className="text-lg font-bold">Not Yet Available</div>
                   <p className="text-xs text-muted-foreground mt-1">kWh</p>
                 </div>
 
@@ -7978,7 +7977,7 @@ export function OverviewMainTabV3({
               <div className="flex items-center justify-between">
                 {}
                 <div>
-                  <div className="text-2xl font-bold">
+                  <div className="text-lg font-bold">
                     {formatNumber(systemLosses.kwh)}
                   </div>
                   <p className="text-xs text-muted-foreground mt-1">kWh</p>
@@ -8001,10 +8000,10 @@ export function OverviewMainTabV3({
       </div>
 
       {}
-      <div className="grid gap-4 md:grid-cols-3">
+      <div className="grid gap-2 md:grid-cols-3">
         {}
         <Card className="border-2">
-          <CardHeader className="pb-3">
+          <CardHeader className="pb-2">
             <div className="flex items-center justify-between">
               <div>
                 <CardTitle className="text-base font-semibold">
@@ -8014,7 +8013,7 @@ export function OverviewMainTabV3({
                   kWh imported
                 </CardDescription>
               </div>
-              <div className="h-9 w-9 rounded-lg bg-green-500/10 flex items-center justify-center">
+              <div className="h-7 w-7 rounded-lg bg-green-500/10 flex items-center justify-center">
                 <TrendingUp className="h-4 w-4 text-green-600" />
               </div>
             </div>
@@ -8022,19 +8021,19 @@ export function OverviewMainTabV3({
             {aggregateLoading ? (
               <Skeleton className="h-8 w-40 mt-2" />
             ) : (
-              <div className="text-2xl font-bold text-green-600 mt-2 text-right">
+              <div className="text-lg font-bold text-green-600 mt-2 text-right">
                 {formatNumber(totalImport, 2)}
               </div>
             )}
           </CardHeader>
           <CardContent className="space-y-0 pt-0">
-            <Separator className="mb-3" />
+            <Separator className="mb-2" />
             {aggregateLoading ? (
               <Skeleton className="h-32 w-full" />
             ) : (
               meterTypeBreakdownData.map((item) => (
                 <div key={item.meter_type}>
-                  <div className="flex items-start justify-between py-2.5">
+                  <div className="flex items-start justify-between py-1\.5">
                     <div>
                       <p className="text-xs text-muted-foreground">
                         {formatMeterType(item.meter_type)}
@@ -8056,7 +8055,7 @@ export function OverviewMainTabV3({
 
         {}
         <Card className="border-2">
-          <CardHeader className="pb-3">
+          <CardHeader className="pb-2">
             <div className="flex items-center justify-between">
               <div>
                 <CardTitle className="text-base font-semibold">
@@ -8066,26 +8065,26 @@ export function OverviewMainTabV3({
                   kWh exported
                 </CardDescription>
               </div>
-              <div className="h-9 w-9 rounded-lg bg-blue-500/10 flex items-center justify-center">
+              <div className="h-7 w-7 rounded-lg bg-blue-500/10 flex items-center justify-center">
                 <TrendingDown className="h-4 w-4 text-blue-600" />
               </div>
             </div>
             {aggregateLoading ? (
               <Skeleton className="h-8 w-40 mt-2" />
             ) : (
-              <div className="text-2xl font-bold text-blue-600 mt-2 text-right">
+              <div className="text-lg font-bold text-blue-600 mt-2 text-right">
                 {formatNumber(totalExport, 2)}
               </div>
             )}
           </CardHeader>
           <CardContent className="space-y-0 pt-0">
-            <Separator className="mb-3" />
+            <Separator className="mb-2" />
             {aggregateLoading ? (
               <Skeleton className="h-32 w-full" />
             ) : (
               meterTypeBreakdownData.map((item) => (
                 <div key={item.meter_type}>
-                  <div className="flex items-start justify-between py-2.5">
+                  <div className="flex items-start justify-between py-1\.5">
                     <div>
                       <p className="text-xs text-muted-foreground">
                         {formatMeterType(item.meter_type)}
@@ -8107,32 +8106,32 @@ export function OverviewMainTabV3({
 
         {}
         <Card className="border-2">
-          <CardHeader className="pb-3">
+          <CardHeader className="pb-2">
             <div className="flex items-center justify-between">
               <div>
                 <CardTitle className="text-base font-semibold">Net</CardTitle>
                 <CardDescription className="text-xs">kWh net</CardDescription>
               </div>
-              <div className="h-9 w-9 rounded-lg bg-rose-500/10 flex items-center justify-center">
+              <div className="h-7 w-7 rounded-lg bg-rose-500/10 flex items-center justify-center">
                 <Zap className="h-4 w-4 text-rose-600" />
               </div>
             </div>
             {aggregateLoading ? (
               <Skeleton className="h-8 w-40 mt-2" />
             ) : (
-              <div className="text-2xl font-bold text-rose-600 mt-2 text-right">
+              <div className="text-lg font-bold text-rose-600 mt-2 text-right">
                 {formatNumber(netConsumption, 2)}
               </div>
             )}
           </CardHeader>
           <CardContent className="space-y-0 pt-0">
-            <Separator className="mb-3" />
+            <Separator className="mb-2" />
             {aggregateLoading ? (
               <Skeleton className="h-32 w-full" />
             ) : (
               meterTypeBreakdownData.map((item) => (
                 <div key={item.meter_type}>
-                  <div className="flex items-start justify-between py-2.5">
+                  <div className="flex items-start justify-between py-1\.5">
                     <div>
                       <p className="text-xs text-muted-foreground">
                         {formatMeterType(item.meter_type)}
@@ -8154,14 +8153,14 @@ export function OverviewMainTabV3({
       </div>
 
       {}
-      <div className="grid gap-4 md:grid-cols-2">
+      <div className="grid gap-2 md:grid-cols-2">
         {}
         <Card
           className="relative overflow-hidden border-2 hover:shadow-lg transition-shadow cursor-pointer group"
           onClick={() => setDrillDownView("meters")}
         >
           <div className="absolute top-0 right-0 w-32 h-32 bg-gradient-to-br from-purple-500/10 to-transparent rounded-bl-full" />
-          <CardHeader className="pb-3">
+          <CardHeader className="pb-2">
             <div className="flex items-center justify-between">
               <div>
                 <CardTitle className="text-base font-semibold">
@@ -8184,18 +8183,18 @@ export function OverviewMainTabV3({
                 >
                   {healthPercentage.toFixed(1)}%
                 </Badge>
-                <div className="h-9 w-9 rounded-lg bg-purple-500/10 flex items-center justify-center">
+                <div className="h-7 w-7 rounded-lg bg-purple-500/10 flex items-center justify-center">
                   <Activity className="h-4 w-4 text-purple-600" />
                 </div>
               </div>
             </div>
           </CardHeader>
-          <CardContent className="space-y-4">
+          <CardContent className="space-y-2">
             {isLoadingSummary ? (
               <Skeleton className="h-16 w-full" />
             ) : (
               <>
-                <div className="text-3xl font-bold tracking-tight">
+                <div className="text-xl font-bold tracking-tight">
                   {onlineMeters}
                   <span className="text-lg text-muted-foreground font-normal">
                     {" "}
@@ -8213,7 +8212,7 @@ export function OverviewMainTabV3({
                       <span className="text-muted-foreground">
                         {formatMeterType(mt.type)}
                       </span>
-                      <div className="flex items-center gap-3">
+                      <div className="flex items-center gap-2">
                         <span className="text-green-600 font-medium">
                           {mt.online} on
                         </span>
@@ -8234,7 +8233,7 @@ export function OverviewMainTabV3({
 
         {}
         <Card className="border-2">
-          <CardHeader className="pb-3">
+          <CardHeader className="pb-2">
             <div className="flex items-center justify-between">
               <div>
                 <CardTitle className="text-base font-semibold">
@@ -8244,13 +8243,13 @@ export function OverviewMainTabV3({
                   Current meter connectivity by type
                 </CardDescription>
               </div>
-              <div className="h-9 w-9 rounded-lg bg-emerald-500/10 flex items-center justify-center">
+              <div className="h-7 w-7 rounded-lg bg-emerald-500/10 flex items-center justify-center">
                 <Activity className="h-4 w-4 text-emerald-600" />
               </div>
             </div>
           </CardHeader>
           <CardContent className="space-y-0 pt-0">
-            <Separator className="mb-3" />
+            <Separator className="mb-2" />
             {isLoadingSummary ? (
               <Skeleton className="h-40 w-full" />
             ) : byMeterTypeFromSummary.length === 0 ? (
@@ -8260,11 +8259,11 @@ export function OverviewMainTabV3({
             ) : (
               <>
                 {}
-                <div className="flex items-center justify-between py-2.5 bg-muted/30 rounded-md px-2 mb-2">
+                <div className="flex items-center justify-between py-1\.5 bg-muted/30 rounded-md px-2 mb-2">
                   <span className="text-xs font-semibold text-foreground">
                     All Meters
                   </span>
-                  <div className="flex items-center gap-4 text-xs font-semibold">
+                  <div className="flex items-center gap-2 text-xs font-semibold">
                     <span className="text-green-600">
                       {onlineMeters} Online
                     </span>
@@ -8283,7 +8282,7 @@ export function OverviewMainTabV3({
                       : 0;
                   return (
                     <div key={mt.type}>
-                      <div className="flex items-center justify-between py-2.5">
+                      <div className="flex items-center justify-between py-1\.5">
                         <div className="flex items-center gap-2">
                           <div
                             className={`h-2 w-2 rounded-full ${pct >= 90 ? "bg-green-500" : pct >= 70 ? "bg-amber-500" : "bg-red-500"}`}
@@ -8292,7 +8291,7 @@ export function OverviewMainTabV3({
                             {formatMeterType(mt.type)}
                           </span>
                         </div>
-                        <div className="flex items-center gap-4 text-xs">
+                        <div className="flex items-center gap-2 text-xs">
                           <span className="text-green-600 font-medium w-16 text-right">
                             {mt.online} online
                           </span>

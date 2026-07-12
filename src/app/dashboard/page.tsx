@@ -1,36 +1,37 @@
-"use client"
+"use client";
 
-import { useEffect } from "react"
-import { AppLayout } from "@/components/layout/app-layout"
-import { useDashboardStore } from "@/stores/dashboard-store"
-import { useAppStore } from "@/stores/app-store"
-import { OverviewMainTabV3 } from "@/components/dashboard/overview-main-tab-v3"
-import { TrendingUp, TrendingDown, Users, Activity } from "lucide-react"
-import { useQuery } from "@tanstack/react-query"
+import { useEffect } from "react";
+import { AppLayout } from "@/components/layout/app-layout";
+import { useDashboardStore } from "@/stores/dashboard-store";
+import { useAppStore } from "@/stores/app-store";
+import { OverviewMainTabV3 } from "@/components/dashboard/overview-main-tab-v3";
+import { TrendingUp, TrendingDown, Users, Activity } from "lucide-react";
+import { useQuery } from "@tanstack/react-query";
 
 export default function DashboardPage() {
-  const { metrics, setMetrics, setLoading } = useDashboardStore()
-  const { filters, applyFilters, clearFilters, clearNonDateFilters } = useAppStore()
+  const { metrics, setMetrics, setLoading } = useDashboardStore();
+  const { filters, applyFilters, clearFilters, clearNonDateFilters } =
+    useAppStore();
 
   // Clear non-date filters when user leaves the page
   useEffect(() => {
     return () => {
-      clearNonDateFilters()
-    }
-  }, [clearNonDateFilters])
+      clearNonDateFilters();
+    };
+  }, [clearNonDateFilters]);
 
   const handleApplyFilters = (newFilters: any) => {
-    applyFilters(newFilters)
-  }
+    applyFilters(newFilters);
+  };
 
   const handleResetFilters = () => {
-    clearFilters()
-  }
+    clearFilters();
+  };
 
   const { data: chartData, isLoading } = useQuery({
     queryKey: ["dashboard-data", filters],
     queryFn: async () => {
-      console.log("[v0] Dashboard fetching with filters:", filters)
+      console.log("[v0] Dashboard fetching with filters:", filters);
       // TODO: Replace with actual API endpoint when backend is ready
       // const response = await fetch('/api/dashboard/metrics', {
       //   method: 'POST',
@@ -40,14 +41,14 @@ export default function DashboardPage() {
       // return response.json()
 
       // Mock data
-      setLoading(false)
+      setLoading(false);
       const mockMetrics = {
         totalUsers: 12543,
         activeUsers: 8234,
         revenue: 456789,
         growth: 23.5,
-      }
-      setMetrics(mockMetrics)
+      };
+      setMetrics(mockMetrics);
 
       return {
         revenue: Array.from({ length: 7 }, (_, i) => ({
@@ -58,9 +59,9 @@ export default function DashboardPage() {
           date: `Day ${i + 1}`,
           value: Math.floor(Math.random() * 3000) + 1000,
         })),
-      }
+      };
     },
-  })
+  });
 
   const metricCards = [
     {
@@ -98,27 +99,32 @@ export default function DashboardPage() {
       trendUp: false,
       description: "from last period",
     },
-  ]
+  ];
 
   // Helper to convert Date or string to YYYY-MM-DD format
-  const formatDateToString = (date: Date | string | undefined, fallback: string): string => {
-    if (!date) return fallback
+  const formatDateToString = (
+    date: Date | string | undefined,
+    fallback: string,
+  ): string => {
+    if (!date) return fallback;
     if (date instanceof Date) {
-      return date.toISOString().split("T")[0]
+      return date.toISOString().split("T")[0];
     }
     if (typeof date === "string") {
-      return date.includes("T") ? date.split("T")[0] : date
+      return date.includes("T") ? date.split("T")[0] : date;
     }
-    return fallback
-  }
+    return fallback;
+  };
 
-  const defaultStart = new Date(new Date().setDate(new Date().getDate() - 30)).toISOString().split("T")[0]
-  const defaultEnd = new Date().toISOString().split("T")[0]
+  const defaultStart = new Date(new Date().setDate(new Date().getDate() - 30))
+    .toISOString()
+    .split("T")[0];
+  const defaultEnd = new Date().toISOString().split("T")[0];
 
   const dateRange = {
     start: formatDateToString(filters.dateRange?.start, defaultStart),
     end: formatDateToString(filters.dateRange?.end, defaultEnd),
-  }
+  };
 
   const componentFilters = {
     regions: filters.regions || [],
@@ -129,18 +135,22 @@ export default function DashboardPage() {
     voltages: (filters.voltageKvs || []).map((v: string) => Number.parseInt(v)),
     locations: filters.locations || [],
     feeders: filters.feeders || [],
-  }
+  };
 
   return (
-      <AppLayout>
-        <div className="space-y-6">
-          <div>
-            <h2 className="text-3xl font-semibold tracking-tight text-foreground">Dashboard Overview</h2>
-            <p className="text-muted-foreground mt-1">Monitor your electricity consumption and meter performance</p>
-          </div>
-
-          <OverviewMainTabV3 dateRange={dateRange} filters={componentFilters} />
+    <AppLayout>
+      <div className="space-y-2">
+        <div>
+          <h2 className="text-3xl font-semibold tracking-tight text-foreground">
+            Dashboard Overview
+          </h2>
+          <p className="text-muted-foreground">
+            Monitor your electricity consumption and meter performance
+          </p>
         </div>
-      </AppLayout>
-  )
+
+        <OverviewMainTabV3 dateRange={dateRange} filters={componentFilters} />
+      </div>
+    </AppLayout>
+  );
 }
