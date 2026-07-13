@@ -8204,7 +8204,7 @@ export function OverviewMainTabV3({
                 <Progress value={healthPercentage} className="h-2" />
                 {}
                 <div className="space-y-1 pt-1">
-                  {byMeterTypeFromSummary.slice(0, 4).map((mt) => (
+                  {byMeterTypeFromSummary.map((mt) => (
                     <div
                       key={mt.type}
                       className="flex items-center justify-between text-xs"

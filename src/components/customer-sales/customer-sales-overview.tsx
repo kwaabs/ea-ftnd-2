@@ -289,9 +289,7 @@ export function CustomerSalesOverview({
         exportKwh: e.exportKwh,
         meters: e.meterDays > 0 ? Math.round(e.meterSum / e.meterDays) : 0,
       }))
-      .sort(
-        (a, b) => b.importKwh + b.exportKwh - (a.importKwh + a.exportKwh),
-      );
+      .sort((a, b) => b.importKwh + b.exportKwh - (a.importKwh + a.exportKwh));
   }, [amrItems]);
 
   // ── Combined chart: Zeus vs MMS vs AMR kWh by region ──
@@ -494,7 +492,7 @@ export function CustomerSalesOverview({
                       ? "Zeus (Postpaid)"
                       : name === "mms"
                         ? "MMS (Prepaid)"
-                        : "AMR (Daily)",
+                        : "AMR",
                   ]}
                 />
                 <Legend
@@ -557,7 +555,7 @@ export function CustomerSalesOverview({
               value="amr"
               className="data-[state=active]:text-orange-700"
             >
-              AMR — Daily
+              AMR
             </TabsTrigger>
           </TabsList>
 
@@ -599,7 +597,7 @@ export function CustomerSalesOverview({
                             colSpan={3}
                             className="text-center py-2 px-4 font-medium text-orange-700"
                           >
-                            AMR — Daily
+                            AMR
                           </th>
                           <th
                             colSpan={3}
@@ -1156,7 +1154,9 @@ export function CustomerSalesOverview({
                           interval={0}
                         />
                         <YAxis
-                          tickFormatter={(v) => (v / 1_000_000).toFixed(0) + "M"}
+                          tickFormatter={(v) =>
+                            (v / 1_000_000).toFixed(0) + "M"
+                          }
                           tick={{ fontSize: 11 }}
                         />
                         <Tooltip
@@ -1216,7 +1216,10 @@ export function CustomerSalesOverview({
                           tick={{ fontSize: 11 }}
                         />
                         <Tooltip
-                          formatter={(v: number) => [formatNumber(v), "Customers"]}
+                          formatter={(v: number) => [
+                            formatNumber(v),
+                            "Customers",
+                          ]}
                         />
                         <Bar
                           dataKey="customer_count"

@@ -125,7 +125,7 @@ export default function CustomerSalesPage() {
               value="amr"
               className="data-[state=active]:text-orange-700"
             >
-              AMR — Daily
+              AMR
             </TabsTrigger>
           </TabsList>
           <TabsContent value="zeus" className="mt-4">

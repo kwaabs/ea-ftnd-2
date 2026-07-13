@@ -10,13 +10,6 @@ import {
 } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useAmrConsumptionDaily } from "@/hooks/api/use-amr-consumption-daily-api";
 import { Search, ChevronLeft, ChevronRight } from "lucide-react";
@@ -57,9 +50,6 @@ export function AmrCustomerSalesDetail({
   district,
 }: AmrCustomerSalesDetailProps) {
   const [searchTerm, setSearchTerm] = useState("");
-  const [systemFilter, setSystemFilter] = useState<
-    "all" | "import_kwh" | "export_kwh"
-  >("all");
   const [page, setPage] = useState(1);
   const pageSize = 100;
 
@@ -68,7 +58,7 @@ export function AmrCustomerSalesDetail({
     dateTo: dateRange.end,
     region,
     district,
-    systemName: systemFilter === "all" ? undefined : systemFilter,
+    systemName: "import_kwh",
     page,
     limit: pageSize,
   });
@@ -88,6 +78,38 @@ export function AmrCustomerSalesDetail({
         (r.district || "").toLowerCase().includes(term),
     );
   }, [rawRecords, searchTerm]);
+
+  // Pivot: each raw record is one (meter, date, system_name) row — merge the
+  // import_kwh and export_kwh rows for the same meter/date into a single row
+  // with both columns side by side, instead of one row per system_name.
+  const pivotedRecords = useMemo(() => {
+    const groups = new Map<string, any>();
+    for (const r of filteredRecords as any[]) {
+      const key = `${r.meter_number || ""}__${r.account_no || ""}__${r.consumption_date || ""}`;
+      let group = groups.get(key);
+      if (!group) {
+        group = {
+          key,
+          customer_name: r.customer_name,
+          meter_number: r.meter_number,
+          account_no: r.account_no,
+          region: r.region,
+          district: r.district,
+          tariff_class: r.tariff_class,
+          consumption_date: r.consumption_date,
+          import_kwh: null as number | null,
+          export_kwh: null as number | null,
+        };
+        groups.set(key, group);
+      }
+      if (r.system_name === "export_kwh") {
+        group.export_kwh = r.consumed_energy;
+      } else {
+        group.import_kwh = r.consumed_energy;
+      }
+    }
+    return Array.from(groups.values());
+  }, [filteredRecords]);
 
   // Total/pages come from the server now — reflects the whole matching
   // dataset, not just what's on this page.
@@ -124,30 +146,12 @@ export function AmrCustomerSalesDetail({
               className="pl-9"
             />
           </div>
-          <Select
-            value={systemFilter}
-            onValueChange={(val: any) => {
-              setSystemFilter(val);
-              setPage(1);
-            }}
-          >
-            <SelectTrigger className="w-40">
-              <SelectValue placeholder="System type" />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="all">All Systems</SelectItem>
-              <SelectItem value="import_kwh">
-                Import (Grid Consumption)
-              </SelectItem>
-              <SelectItem value="export_kwh">Export (Generation)</SelectItem>
-            </SelectContent>
-          </Select>
         </div>
 
         {/* Table */}
         {isLoading ? (
           <Skeleton className="h-64 w-full" />
-        ) : filteredRecords.length === 0 ? (
+        ) : pivotedRecords.length === 0 ? (
           <div className="text-center py-12 text-muted-foreground">
             <p className="text-sm">No records found for the selected filters</p>
           </div>
@@ -173,13 +177,10 @@ export function AmrCustomerSalesDetail({
                       District
                     </th>
                     <th className="text-left py-3 px-4 font-medium text-muted-foreground">
-                      System
-                    </th>
-                    <th className="text-left py-3 px-4 font-medium text-muted-foreground">
                       Tariff
                     </th>
                     <th className="text-right py-3 px-4 font-medium text-orange-700">
-                      Consumed (kWh)
+                      Consumption (kWh)
                     </th>
                     <th className="text-right py-3 px-4 font-medium text-muted-foreground">
                       Date
@@ -187,54 +188,39 @@ export function AmrCustomerSalesDetail({
                   </tr>
                 </thead>
                 <tbody>
-                  {filteredRecords.map((record: any, idx: number) => {
-                    const isExport = record.system_name === "export_kwh";
-                    return (
-                      <tr
-                        key={idx}
-                        className="border-b last:border-0 hover:bg-muted/50"
-                      >
-                        <td className="py-3 px-4 font-medium truncate">
-                          {record.customer_name || "—"}
-                        </td>
-                        <td className="text-right py-3 px-4 font-mono text-xs">
-                          {record.meter_number || "—"}
-                        </td>
-                        <td className="text-right py-3 px-4 font-mono text-xs">
-                          {record.account_no || "—"}
-                        </td>
-                        <td className="py-3 px-4 text-xs">
-                          {record.region || "—"}
-                        </td>
-                        <td className="py-3 px-4 text-xs">
-                          {record.district || "—"}
-                        </td>
-                        <td className="py-3 px-4 text-xs">
-                          <Badge
-                            variant="outline"
-                            className={
-                              isExport
-                                ? "border-purple-300 text-purple-700"
-                                : "border-orange-300 text-orange-700"
-                            }
-                          >
-                            {isExport ? "Export" : "Import"}
-                          </Badge>
-                        </td>
-                        <td className="py-3 px-4 text-xs">
-                          {record.tariff_class || "—"}
-                        </td>
-                        <td
-                          className={`text-right py-3 px-4 font-semibold tabular-nums text-sm ${isExport ? "text-purple-700" : "text-orange-700"}`}
-                        >
-                          {formatKwhRaw(record.consumed_energy)}
-                        </td>
-                        <td className="py-3 px-4 text-muted-foreground whitespace-nowrap text-xs">
-                          {formatDate(record.consumption_date)}
-                        </td>
-                      </tr>
-                    );
-                  })}
+                  {pivotedRecords.map((record: any) => (
+                    <tr
+                      key={record.key}
+                      className="border-b last:border-0 hover:bg-muted/50"
+                    >
+                      <td className="py-3 px-4 font-medium truncate">
+                        {record.customer_name || "—"}
+                      </td>
+                      <td className="text-right py-3 px-4 font-mono text-xs">
+                        {record.meter_number || "—"}
+                      </td>
+                      <td className="text-right py-3 px-4 font-mono text-xs">
+                        {record.account_no || "—"}
+                      </td>
+                      <td className="py-3 px-4 text-xs">
+                        {record.region || "—"}
+                      </td>
+                      <td className="py-3 px-4 text-xs">
+                        {record.district || "—"}
+                      </td>
+                      <td className="py-3 px-4 text-xs">
+                        {record.tariff_class || "—"}
+                      </td>
+                      <td className="text-right py-3 px-4 font-semibold tabular-nums text-sm text-orange-700">
+                        {record.import_kwh === null
+                          ? "—"
+                          : formatKwhRaw(record.import_kwh)}
+                      </td>
+                      <td className="py-3 px-4 text-muted-foreground whitespace-nowrap text-xs">
+                        {formatDate(record.consumption_date)}
+                      </td>
+                    </tr>
+                  ))}
                 </tbody>
               </table>
             </div>

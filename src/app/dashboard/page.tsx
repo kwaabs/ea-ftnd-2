@@ -7,6 +7,7 @@ import { useAppStore } from "@/stores/app-store";
 import { OverviewMainTabV3 } from "@/components/dashboard/overview-main-tab-v3";
 import { TrendingUp, TrendingDown, Users, Activity } from "lucide-react";
 import { useQuery } from "@tanstack/react-query";
+import { RegionalSummaryMarquee } from "@/components/dashboard/regional-summary-marquee";
 
 export default function DashboardPage() {
   const { metrics, setMetrics, setLoading } = useDashboardStore();
@@ -139,15 +140,17 @@ export default function DashboardPage() {
 
   return (
     <AppLayout>
-      <div className="space-y-2">
+      <div className="space-y-6">
         <div>
           <h2 className="text-3xl font-semibold tracking-tight text-foreground">
             Dashboard Overview
           </h2>
-          <p className="text-muted-foreground">
+          <p className="text-muted-foreground mt-1">
             Monitor your electricity consumption and meter performance
           </p>
         </div>
+
+        <RegionalSummaryMarquee dateRange={dateRange} />
 
         <OverviewMainTabV3 dateRange={dateRange} filters={componentFilters} />
       </div>
