@@ -391,7 +391,7 @@ export function RegionalSummaryMarquee({
       <div className="min-w-0 flex-1">
       {isLoadingGlobal && isLoadingRegional ? (
         <Marquee
-          speed="normal"
+          speed="slow"
           gap="medium"
           className={compact ? "bg-transparent border-0" : undefined}
         >
@@ -407,7 +407,7 @@ export function RegionalSummaryMarquee({
         </Marquee>
       ) : (
         <Marquee
-          speed="normal"
+          speed="slow"
           gap="medium"
           className={compact ? "bg-transparent border-0" : undefined}
         >
