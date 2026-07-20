@@ -4,15 +4,19 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Activity, WifiOff, CheckCircle2 } from "lucide-react"
 import type { SingleMeterStatus } from "@/hooks/api/use-meter-status-api"
 import { useMemo } from "react"
+import { ExportButton } from "@/components/ui/export-button"
 
 interface MeterStatusTrendProps {
   statusData: SingleMeterStatus[]
   isLoading?: boolean
+  filenamePrefix?: string
 }
 
-export function MeterStatusTrend({ statusData, isLoading }: MeterStatusTrendProps) {
-  const stats = useMemo(() => {
-    if (!statusData || statusData.length === 0) return null
+export function MeterStatusTrend({ statusData, isLoading, filenamePrefix = "meter" }: MeterStatusTrendProps) {
+  const { stats, exportData } = useMemo(() => {
+    if (!statusData || statusData.length === 0) {
+      return { stats: null, exportData: [] as Record<string, string | number>[] }
+    }
 
     // Group by date to avoid double-counting (import/export are separate entries)
     const byDate = new Map<string, { date: string; status: string; readingCount: number }>()
@@ -31,7 +35,7 @@ export function MeterStatusTrend({ statusData, isLoading }: MeterStatusTrendProp
       }
     })
 
-    const uniqueDays = Array.from(byDate.values())
+    const uniqueDays = Array.from(byDate.values()).sort((a, b) => a.date.localeCompare(b.date))
     const totalDays = uniqueDays.length
     const onlineDays = uniqueDays.filter((d) => !d.status.startsWith("OFFLINE")).length
     const offlineDays = totalDays - onlineDays
@@ -45,25 +49,24 @@ export function MeterStatusTrend({ statusData, isLoading }: MeterStatusTrendProp
     const expectedReadings = totalDays * 96
     const readingCompleteness = expectedReadings > 0 ? (totalReadings / expectedReadings) * 100 : 0
 
-    console.log("[v0] Status & Health Stats:", {
-      totalDays,
-      onlineDays,
-      offlineDays,
-      uptimePercentage,
-      totalReadings,
-      avgReadingsPerDay,
-      readingCompleteness,
-    })
-
     return {
-      totalDays,
-      onlineDays,
-      offlineDays,
-      uptimePercentage,
-      downtimePercentage,
-      totalReadings,
-      avgReadingsPerDay,
-      readingCompleteness,
+      stats: {
+        totalDays,
+        onlineDays,
+        offlineDays,
+        uptimePercentage,
+        downtimePercentage,
+        totalReadings,
+        avgReadingsPerDay,
+        readingCompleteness,
+      },
+      exportData: uniqueDays.map((d) => ({
+        date: d.date,
+        status: d.status,
+        reading_count: d.readingCount,
+        expected_readings: 96,
+        completeness_pct: (d.readingCount / 96) * 100,
+      })),
     }
   }, [statusData])
 
@@ -106,11 +109,19 @@ export function MeterStatusTrend({ statusData, isLoading }: MeterStatusTrendProp
   return (
     <Card>
       <CardHeader>
-        <CardTitle className="text-lg flex items-center gap-2">
-          <Activity className="h-5 w-5" />
-          Status & Health
-        </CardTitle>
-        <p className="text-xs text-muted-foreground">Last {stats.totalDays} days</p>
+        <div className="flex items-start justify-between gap-3">
+          <div>
+            <CardTitle className="text-lg flex items-center gap-2">
+              <Activity className="h-5 w-5" />
+              Status & Health
+            </CardTitle>
+            <p className="text-xs text-muted-foreground">Last {stats.totalDays} days</p>
+          </div>
+          <ExportButton
+            data={exportData}
+            filename={`${filenamePrefix}-status-health`}
+          />
+        </div>
       </CardHeader>
       <CardContent className="space-y-4">
         {/* Uptime */}

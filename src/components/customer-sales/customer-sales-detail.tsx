@@ -13,6 +13,8 @@ import { ArrowUpDown, ChevronLeft, ChevronRight, ExternalLink, Search, Zap } fro
 
 interface CustomerSalesDetailProps {
     dateRange: { start: string; end: string }
+    region?: string
+    district?: string
 }
 
 type SortField = "lastbilldate" | "lastbillconsumption" | "lastbillamount" | "currentbalance" | "lastpaymentdate" | "fullname"
@@ -42,7 +44,7 @@ function dateValue(v: string | null | undefined) {
     return new Date(v).getTime()
 }
 
-export function CustomerSalesDetail({ dateRange }: CustomerSalesDetailProps) {
+export function CustomerSalesDetail({ dateRange, region, district }: CustomerSalesDetailProps) {
     const [page, setPage] = useState(1)
     const [searchTerm, setSearchTerm] = useState("")
     const [sortField, setSortField] = useState<SortField>("lastbilldate")
@@ -51,6 +53,8 @@ export function CustomerSalesDetail({ dateRange }: CustomerSalesDetailProps) {
     const { data: detailData, isLoading } = useCustomerConsumptionDetail({
         dateFrom: dateRange.start,
         dateTo: dateRange.end,
+        region,
+        district,
         page: 1,
         limit: 2000,
     })

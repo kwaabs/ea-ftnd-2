@@ -1,6 +1,6 @@
 "use client"
 
-import { useMemo, useState } from "react"
+import { useMemo, useRef, useState } from "react"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
@@ -8,6 +8,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Skeleton } from "@/components/ui/skeleton"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Progress } from "@/components/ui/progress"
+import { ExportButton } from "@/components/ui/export-button"
 
 import { useDtxAggregate, useDtxDaily } from "@/hooks/api/use-dtx-api"
 import { useDistrictBoundaryAggregate, useDistrictBoundaryDaily } from "@/hooks/api/use-district-boundary-api"
@@ -59,6 +60,8 @@ export function DistrictDetail({ district }: DistrictDetailProps) {
     const [selectedMetrics, setSelectedMetrics] = useState<Set<string>>(new Set(["dtx"]))
     const [cumulateMetrics, setCumulateMetrics] = useState(false)
     const [metricsDropdownOpen, setMetricsDropdownOpen] = useState(false)
+    const trendChartRef = useRef<HTMLDivElement>(null)
+    const healthChartRef = useRef<HTMLDivElement>(null)
 
     const METRIC_OPTIONS = [
         { key: "dtx", label: "DTX", color: "#3b82f6" },
@@ -624,6 +627,84 @@ export function DistrictDetail({ district }: DistrictDetailProps) {
     const totalBoundaryExport = boundaryExchanges.totalExport
     const availableSupply = totalDtxConsumption + totalBoundaryImport - totalBoundaryExport
 
+    const exportSlug = district.replace(/\s+/g, "-").toLowerCase()
+
+    const exportDatasets = useMemo(() => {
+        const summary = [
+            { metric: "DTX Consumption", value_kwh: totalDtxConsumption, meters: totalDtxMeters },
+            { metric: "Boundary Import", value_kwh: totalBoundaryImport },
+            { metric: "Boundary Export", value_kwh: totalBoundaryExport },
+            { metric: "Available Supply", value_kwh: availableSupply },
+            { metric: "DTX Meters", value_kwh: totalDtxMeters },
+            { metric: "Boundary Meters", value_kwh: boundaryMeterCount },
+        ]
+
+        const dailyTrend = chartData.map((d) => ({
+            date: d.date,
+            dtx_kwh: d.dtx,
+            boundary_import_kwh: d.boundaryImport,
+            boundary_export_kwh: d.boundaryExport,
+            net_kwh: d.net,
+        }))
+
+        const boundaryImports = boundaryExchanges.imports.map((imp) => ({
+            direction: "import",
+            partner: imp.from,
+            import_kwh: imp.import,
+            export_kwh: imp.export,
+        }))
+
+        const boundaryExports = boundaryExchanges.exports.map((exp) => ({
+            direction: "export",
+            partner: exp.to,
+            import_kwh: exp.import,
+            export_kwh: exp.export,
+        }))
+
+        const meterPerf = meterPerformance.all.map((m) => ({
+            meter: m.meter,
+            location: m.location,
+            meter_brand: m.meter_brand,
+            consumption_kwh: m.consumption,
+        }))
+
+        const ranking = (districtRanking?.topDistricts || []).map((d, idx) => ({
+            rank: idx + 1,
+            district: d.district,
+            consumption_kwh: d.consumption,
+            meters: d.meters,
+            is_current: d.district === district,
+        }))
+
+        const healthTimeline = (statusTimeline || []).map((d: any) => ({
+            date: d.date,
+            online: d.online,
+            offline: d.offline,
+        }))
+
+        return {
+            summary,
+            dailyTrend,
+            boundaryAll: [...boundaryImports, ...boundaryExports],
+            meterPerf,
+            ranking,
+            healthTimeline,
+        }
+    }, [
+        totalDtxConsumption,
+        totalBoundaryImport,
+        totalBoundaryExport,
+        availableSupply,
+        totalDtxMeters,
+        boundaryMeterCount,
+        chartData,
+        boundaryExchanges,
+        meterPerformance,
+        districtRanking,
+        district,
+        statusTimeline,
+    ])
+
     const isLoading = dtxAggregateLoading || dtxDailyLoading || boundaryAggregateLoading || boundaryDailyLoading
 
     if (isLoading) {
@@ -694,7 +775,7 @@ export function DistrictDetail({ district }: DistrictDetailProps) {
     return (
         <div className="space-y-6 pb-16">
             {/* Header */}
-            <div className="flex items-center justify-between">
+            <div className="flex items-center justify-between gap-4 flex-wrap">
                 <div>
                     <div className="flex items-center gap-3 mb-2">
 
@@ -708,12 +789,11 @@ export function DistrictDetail({ district }: DistrictDetailProps) {
                         <h1 className="text-3xl font-bold">{district}</h1>
                     </div>
                     <p className="text-muted-foreground">District overview and consumption analysis</p>
-                    {/*{parentRegion && (*/}
-                    {/*    <Link href={`/regions/${encodeURIComponent(parentRegion)}`} className="text-sm text-primary hover:underline mt-1 inline-block">*/}
-                    {/*        View {parentRegion} Region →*/}
-                    {/*    </Link>*/}
-                    {/*)}*/}
                 </div>
+                <ExportButton
+                    data={exportDatasets.summary}
+                    filename={`${exportSlug}-summary`}
+                />
             </div>
 
             {/* Summary Cards */}
@@ -885,13 +965,23 @@ export function DistrictDetail({ district }: DistrictDetailProps) {
             {statusSummary && (
                 <Card>
                     <CardHeader>
-                        <CardTitle className="flex items-center gap-2">
-                            <Activity className="h-5 w-5" />
-                            Meter Health Status
-                        </CardTitle>
-                        <CardDescription>Real-time monitoring of all meters in this district</CardDescription>
+                        <div className="flex items-center justify-between gap-3 flex-wrap">
+                            <div>
+                                <CardTitle className="flex items-center gap-2">
+                                    <Activity className="h-5 w-5" />
+                                    Meter Health Status
+                                </CardTitle>
+                                <CardDescription>Real-time monitoring of all meters in this district</CardDescription>
+                            </div>
+                            <ExportButton
+                                data={exportDatasets.healthTimeline}
+                                filename={`${exportSlug}-meter-health`}
+                                chartRef={healthChartRef}
+                            />
+                        </div>
                     </CardHeader>
                     <CardContent>
+                        <div ref={healthChartRef}>
                         <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6">
                             {/* Visual Health Indicator */}
                             <div className="flex items-center gap-6">
@@ -1012,6 +1102,7 @@ export function DistrictDetail({ district }: DistrictDetailProps) {
                                 </ResponsiveContainer>
                             </div>
                         )}
+                        </div>
                     </CardContent>
                 </Card>
             )}
@@ -1019,16 +1110,21 @@ export function DistrictDetail({ district }: DistrictDetailProps) {
             {/* Consumption Trend */}
             <Card>
                 <CardHeader>
-                    <div className="flex items-center justify-between">
+                    <div className="flex items-center justify-between gap-3 flex-wrap">
                         <div>
                             <CardTitle>Consumption Trend</CardTitle>
                             <CardDescription>Daily consumption breakdown over selected period</CardDescription>
                         </div>
-                        <div className="flex items-center gap-2">
+                        <div className="flex items-center gap-2 flex-wrap">
                             <Button variant="outline" size="sm" disabled>
                                 <Calendar className="h-4 w-4 mr-2" />
                                 {dateRange.start} - {dateRange.end}
                             </Button>
+                            <ExportButton
+                                data={exportDatasets.dailyTrend}
+                                filename={`${exportSlug}-consumption-trend`}
+                                chartRef={trendChartRef}
+                            />
                         </div>
                     </div>
                 </CardHeader>
@@ -1088,6 +1184,7 @@ export function DistrictDetail({ district }: DistrictDetailProps) {
                         )}
                     </div>
 
+                    <div ref={trendChartRef}>
                     {(() => {
                         const activeMetrics = METRIC_OPTIONS.filter(o => selectedMetrics.has(o.key))
                         const cumulatedLabel = activeMetrics.map(o => o.label).join(", ")
@@ -1144,6 +1241,7 @@ export function DistrictDetail({ district }: DistrictDetailProps) {
                             </ResponsiveContainer>
                         )
                     })()}
+                    </div>
                 </CardContent>
             </Card>
 
@@ -1151,11 +1249,19 @@ export function DistrictDetail({ district }: DistrictDetailProps) {
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <Card>
                     <CardHeader>
-                        <div className="flex items-center gap-2">
-                            <TrendingUp className="h-5 w-5 text-green-600" />
-                            <CardTitle className="text-base">Imports from Other Districts</CardTitle>
+                        <div className="flex items-center justify-between gap-3 flex-wrap">
+                            <div>
+                                <div className="flex items-center gap-2">
+                                    <TrendingUp className="h-5 w-5 text-green-600" />
+                                    <CardTitle className="text-base">Imports from Other Districts</CardTitle>
+                                </div>
+                                <CardDescription>Energy received from neighboring districts</CardDescription>
+                            </div>
+                            <ExportButton
+                                data={exportDatasets.boundaryAll.filter((r) => r.direction === "import")}
+                                filename={`${exportSlug}-boundary-imports`}
+                            />
                         </div>
-                        <CardDescription>Energy received from neighboring districts</CardDescription>
                     </CardHeader>
                     <CardContent>
                         {boundaryExchanges.imports.length === 0 ? (
@@ -1182,11 +1288,19 @@ export function DistrictDetail({ district }: DistrictDetailProps) {
 
                 <Card>
                     <CardHeader>
-                        <div className="flex items-center gap-2">
-                            <TrendingDown className="h-5 w-5 text-orange-600" />
-                            <CardTitle className="text-base">Exports to Other Districts</CardTitle>
+                        <div className="flex items-center justify-between gap-3 flex-wrap">
+                            <div>
+                                <div className="flex items-center gap-2">
+                                    <TrendingDown className="h-5 w-5 text-orange-600" />
+                                    <CardTitle className="text-base">Exports to Other Districts</CardTitle>
+                                </div>
+                                <CardDescription>Energy sent to neighboring districts</CardDescription>
+                            </div>
+                            <ExportButton
+                                data={exportDatasets.boundaryAll.filter((r) => r.direction === "export")}
+                                filename={`${exportSlug}-boundary-exports`}
+                            />
                         </div>
-                        <CardDescription>Energy sent to neighboring districts</CardDescription>
                     </CardHeader>
                     <CardContent>
                         {boundaryExchanges.exports.length === 0 ? (
@@ -1215,8 +1329,16 @@ export function DistrictDetail({ district }: DistrictDetailProps) {
             {/* Meter Performance - CONSOLIDATED WITH TABS */}
             <Card>
                 <CardHeader>
-                    <CardTitle>Meter Performance (Distribution Transformers)</CardTitle>
-                    <CardDescription>Performance analysis of meters in this district</CardDescription>
+                    <div className="flex items-center justify-between gap-3 flex-wrap">
+                        <div>
+                            <CardTitle>Meter Performance (Distribution Transformers)</CardTitle>
+                            <CardDescription>Performance analysis of meters in this district</CardDescription>
+                        </div>
+                        <ExportButton
+                            data={exportDatasets.meterPerf}
+                            filename={`${exportSlug}-meter-performance`}
+                        />
+                    </div>
                 </CardHeader>
                 <CardContent>
                     <Tabs value={performanceView} onValueChange={(v) => setPerformanceView(v as any)}>
@@ -1347,11 +1469,19 @@ export function DistrictDetail({ district }: DistrictDetailProps) {
             {districtRanking && (
                 <Card>
                     <CardHeader>
-                        <div className="flex items-center gap-2">
-                            <Trophy className="h-5 w-5 text-yellow-600"/>
-                            <CardTitle>District Performance Ranking</CardTitle>
+                        <div className="flex items-center justify-between gap-3 flex-wrap">
+                            <div>
+                                <div className="flex items-center gap-2">
+                                    <Trophy className="h-5 w-5 text-yellow-600"/>
+                                    <CardTitle>District Performance Ranking</CardTitle>
+                                </div>
+                                <CardDescription>How this district compares to others in the region</CardDescription>
+                            </div>
+                            <ExportButton
+                                data={exportDatasets.ranking}
+                                filename={`${exportSlug}-district-ranking`}
+                            />
                         </div>
-                        <CardDescription>How this district compares to others in the region</CardDescription>
                     </CardHeader>
                     <CardContent>
                         <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">

@@ -502,7 +502,12 @@ export function HeaderFilterDropdown() {
     // wouldn't do anything on these pages.
     const isMapPage = pathname === "/map"
     const isCustomerSalesPage = pathname === "/customer-sales"
-    const isDateOnlyPage = isMeterDetailsPage || isStationDetailsPage || isBoundaryDetailsPage || isRegionDetailsPage || isDistrictDetailsPage || isExpressFeederDetailPage || isMapPage || isCustomerSalesPage
+    // Zeus / MMS / AMR list: date + region + district; AMR meter detail: date only
+    const isZeusPage = pathname === "/customer-sales/zeus"
+    const isMmsPage = pathname === "/customer-sales/mms"
+    const isAmrPage = pathname === "/amr"
+    const isAmrMeterDetailPage = Boolean(pathname?.startsWith("/amr/") && pathname.split("/").length === 3)
+    const isDateOnlyPage = isMeterDetailsPage || isStationDetailsPage || isBoundaryDetailsPage || isRegionDetailsPage || isDistrictDetailsPage || isExpressFeederDetailPage || isMapPage || isCustomerSalesPage || isAmrMeterDetailPage
 
     // Regions overview page — show only date + region filters
     const isRegionsOverviewPage = pathname === "/regions"
@@ -615,13 +620,13 @@ export function HeaderFilterDropdown() {
         setFilters(defaultFilters)
     }
 
-    const showMeterType = !isRegionsOverviewPage && !isExpressFeedersPage && !["bsp", "dtx", "district-boundary", "regional-boundary"].includes(meterCategory || "")
-    const showStation = !isRegionsOverviewPage && !["dtx", "district-boundary", "regional-boundary"].includes(meterCategory || "")
+    const showMeterType = !isZeusPage && !isMmsPage && !isAmrPage && !isRegionsOverviewPage && !isExpressFeedersPage && !["bsp", "dtx", "district-boundary", "regional-boundary"].includes(meterCategory || "")
+    const showStation = !isZeusPage && !isMmsPage && !isAmrPage && !isRegionsOverviewPage && !["dtx", "district-boundary", "regional-boundary"].includes(meterCategory || "")
     const showRegion = !["district-boundary", "regional-boundary"].includes(meterCategory || "")
     const showDistrict = !isRegionsOverviewPage && !["bsp", "district-boundary", "regional-boundary"].includes(meterCategory || "")
-    const showBoundaryPoint = !isRegionsOverviewPage && !isExpressFeedersPage && !["bsp", "dtx"].includes(meterCategory || "")
-    const showLocation = !isRegionsOverviewPage && !isExpressFeedersPage && ["district-boundary", "regional-boundary"].includes(meterCategory || "")
-    const showVoltage = !isRegionsOverviewPage && hasVoltageData
+    const showBoundaryPoint = !isZeusPage && !isMmsPage && !isAmrPage && !isRegionsOverviewPage && !isExpressFeedersPage && !["bsp", "dtx"].includes(meterCategory || "")
+    const showLocation = !isZeusPage && !isMmsPage && !isAmrPage && !isRegionsOverviewPage && !isExpressFeedersPage && ["district-boundary", "regional-boundary"].includes(meterCategory || "")
+    const showVoltage = !isZeusPage && !isMmsPage && !isAmrPage && !isRegionsOverviewPage && hasVoltageData
 
     // Transform options for react-select
     const regionOptions = (filterOptions?.regions || []).map((r) => ({ value: r, label: r }))

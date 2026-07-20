@@ -1,6 +1,7 @@
 "use client"
 
-import React, { useState } from "react"
+import React from "react"
+import Image from "next/image"
 import { cn } from "@/lib/utils"
 import { Button } from "@/components/ui/button"
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui/dropdown-menu"
@@ -11,24 +12,30 @@ import { useUserStore } from "@/stores/user-store"
 import { usePathname, useRouter } from "next/navigation"
 import { useFilterOptionsWithAvailability } from "@/hooks/api/use-filter-options"
 import { LayoutDashboard, Map, BarChart3, Globe, Users, ChevronRight, ChevronLeft, Settings, LogOut, User, MessageSquare } from "lucide-react"
-import { CommentsSheet } from "@/components/comments/comments-sheet"
+import { useCommentsSheetStore } from "@/stores/comments-sheet-store"
+
+interface SidebarSubItem {
+    id: string
+    label: string
+    href: string
+    onClick?: () => void
+    isHeader?: boolean
+    isIndented?: boolean
+    isDoubleIndented?: boolean
+    hasSubItems?: boolean
+    onChevronClick?: () => void
+    /** Nested items rendered under this row with their own tree line */
+    children?: SidebarSubItem[]
+    /** Menu id used for expand/collapse (defaults to id) */
+    menuId?: string
+}
 
 interface MenuItem {
     id: string
     label: string
     icon: React.ComponentType<{ className?: string }>
     href?: string
-    subItems?: {
-        id: string
-        label: string
-        href: string
-        onClick?: () => void
-        isHeader?: boolean
-        isIndented?: boolean
-        isDoubleIndented?: boolean
-        hasSubItems?: boolean
-        onChevronClick?: () => void
-    }[]
+    subItems?: SidebarSubItem[]
 }
 
 export function Sidebar() {
@@ -36,7 +43,7 @@ export function Sidebar() {
     const { user, logout } = useUserStore()
     const pathname = usePathname()
     const router = useRouter()
-    const [commentsOpen, setCommentsOpen] = useState(false)
+    const openCommentsSheet = useCommentsSheetStore(s => s.open)
 
     const { data: filterOptions, isLoading: isLoadingFilters } = useFilterOptionsWithAvailability()
 
@@ -49,6 +56,17 @@ export function Sidebar() {
     const handleNavigation = (href: string) => {
         router.push(href)
     }
+
+    const userInitials = (() => {
+        const parts = (user?.name || "").trim().split(/\s+/).filter(Boolean)
+        if (parts.length >= 2) {
+            return `${parts[0][0]}${parts[parts.length - 1][0]}`.toUpperCase()
+        }
+        if (parts.length === 1) {
+            return parts[0].slice(0, 2).toUpperCase()
+        }
+        return user?.email?.charAt(0).toUpperCase() || "U"
+    })()
 
     const regionToDistricts = React.useMemo(() => {
         if (!filterOptions?.allMeters) return {}
@@ -102,18 +120,30 @@ export function Sidebar() {
             return 0
         })
 
-        // Add all meter types in sorted order
         sortedTypes.forEach((type) => {
             organized.push({
                 id: `meter-${type}`,
                 label: meterTypeMapping[type] || type,
                 href: `/meter-category/${type.toLowerCase().replace(/_/g, "-")}`,
-                isIndented: true,
             })
         })
 
         return organized
     }, [filterOptions?.all?.meterTypes])
+
+    const isCustomerConsumptionPath =
+        pathname === "/customer-sales" ||
+        pathname.startsWith("/customer-sales/") ||
+        pathname === "/amr" ||
+        pathname.startsWith("/amr/")
+
+    React.useEffect(() => {
+        if (isCustomerConsumptionPath && !openMenus.includes("customer-sales")) {
+            toggleMenu("customer-sales")
+        }
+        // Only auto-expand when entering these routes
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [pathname])
 
     const menuItems: MenuItem[] = [
         {
@@ -125,15 +155,15 @@ export function Sidebar() {
                 ...((filterOptions?.all?.meterTypes || []).length > 0
                     ? [
                         {
-                            id: "meter-category-header",
+                            id: "meter-category",
                             label: "CATEGORY",
                             href: "#",
                             isHeader: true,
                             hasSubItems: true,
-                            onClick: undefined,
+                            menuId: "meter-category",
                             onChevronClick: () => toggleMenu("meter-category"),
+                            children: organizeMeterTypes,
                         },
-                        ...(openMenus.includes("meter-category") ? organizeMeterTypes : []),
                     ]
                     : []),
             ],
@@ -144,27 +174,26 @@ export function Sidebar() {
             icon: Globe,
             href: "/regions",
             subItems: [
-                ...((filterOptions?.all?.regions || []).length > 0
-                    ? (filterOptions?.all?.regions || []).flatMap((region) => [
-                        {
-                            id: `region-${region}`,
-                            label: region,
-                            href: `/regions/${region.toLowerCase().replace(/\s+/g, "-")}`,
-                            isIndented: false,
-                            hasSubItems: (regionToDistricts[region] || []).length > 0,
-                            onChevronClick:
-                                (regionToDistricts[region] || []).length > 0 ? () => toggleMenu(`region-${region}`) : undefined,
-                        },
-                        ...(openMenus.includes(`region-${region}`)
-                            ? (regionToDistricts[region] || []).map((district) => ({
-                                id: `district-${region}-${district}`,
-                                label: district,
-                                href: `/regions/${region.toLowerCase().replace(/\s+/g, "-")}/districts/${district.toLowerCase().replace(/\s+/g, "-")}`,
-                                isIndented: true,
-                            }))
-                            : []),
-                    ])
-                    : []),
+                ...((filterOptions?.all?.regions || []).map((region) => {
+                    const districts = regionToDistricts[region] || []
+                    const regionSlug = region.toLowerCase().replace(/\s+/g, "-")
+                    return {
+                        id: `region-${region}`,
+                        label: region,
+                        href: `/regions/${regionSlug}`,
+                        hasSubItems: districts.length > 0,
+                        menuId: `region-${region}`,
+                        onChevronClick:
+                            districts.length > 0
+                                ? () => toggleMenu(`region-${region}`)
+                                : undefined,
+                        children: districts.map((district) => ({
+                            id: `district-${region}-${district}`,
+                            label: district,
+                            href: `/regions/${regionSlug}/districts/${district.toLowerCase().replace(/\s+/g, "-")}`,
+                        })),
+                    }
+                })),
             ],
         },
         {
@@ -172,6 +201,28 @@ export function Sidebar() {
             label: "Customer Consumption",
             icon: Users,
             href: "/customer-sales",
+            subItems: [
+                {
+                    id: "customer-overview",
+                    label: "Overview",
+                    href: "/customer-sales",
+                },
+                {
+                    id: "customer-zeus",
+                    label: "Zeus — Postpaid",
+                    href: "/customer-sales/zeus",
+                },
+                {
+                    id: "customer-mms",
+                    label: "MMS — Prepaid",
+                    href: "/customer-sales/mms",
+                },
+                {
+                    id: "customer-amr",
+                    label: "AMR Meters",
+                    href: "/amr",
+                },
+            ],
         },
         {
             id: "map",
@@ -197,9 +248,29 @@ export function Sidebar() {
             )}
         >
             <div className="flex h-full flex-col">
-                <div className="flex h-16 items-center justify-between border-b border-sidebar-border px-4">
-                    {!isCollapsed && <span className="text-lg font-semibold text-sidebar-foreground">Dashboard</span>}
-                    <Button variant="ghost" size="icon" onClick={toggleCollapsed} className="h-8 w-8">
+                <div
+                    className={cn(
+                        "flex items-center border-b border-sidebar-border",
+                        isCollapsed ? "h-16 justify-center px-0" : "h-16 justify-between gap-2 px-3",
+                    )}
+                >
+                    {!isCollapsed && (
+                        <div className="flex items-center gap-2 min-w-0 flex-1">
+                            <Image
+                                src="/images/ecg-logo.jpg"
+                                alt="ECG Logo"
+                                width={36}
+                                height={36}
+                                className="rounded-full shrink-0"
+                            />
+                            <span className="min-w-0 text-sm font-semibold text-sidebar-foreground leading-snug">
+                                Energy Accounting
+                                <br />
+                                and Monitoring
+                            </span>
+                        </div>
+                    )}
+                    <Button variant="ghost" size="icon" onClick={toggleCollapsed} className="h-8 w-8 shrink-0">
                         {isCollapsed ? <ChevronRight className="h-4 w-4" /> : <ChevronLeft className="h-4 w-4" />}
                     </Button>
                 </div>
@@ -209,7 +280,15 @@ export function Sidebar() {
                         <nav className="space-y-1 px-3 py-4">
                             {menuItems.map((item) => {
                                 const Icon = item.icon
-                                const isActive = pathname === item.href || (item.subItems?.some((sub) => pathname === sub.href) ?? false)
+                                const isActive =
+                                    pathname === item.href ||
+                                    (item.id === "customer-sales" && isCustomerConsumptionPath) ||
+                                    (item.subItems?.some(
+                                        (sub) =>
+                                            pathname === sub.href ||
+                                            (sub.href === "/amr" && pathname.startsWith("/amr/")) ||
+                                            (sub.children?.some((child) => pathname === child.href) ?? false),
+                                    ) ?? false)
                                 const isOpen = openMenus.includes(item.id)
 
                                 if (item.subItems && item.subItems.length > 0) {
@@ -242,59 +321,90 @@ export function Sidebar() {
                                             {!isCollapsed && isOpen && (
                                                 <div className="mt-1 ml-4 border-l-2 border-sidebar-border/50 pl-2 space-y-1">
                                                     {item.subItems.map((subItem) => {
-                                                        // Check if this subItem has districts
-                                                        const hasChevron = subItem.hasSubItems && subItem.onChevronClick
+                                                        const hasChevron = Boolean(subItem.hasSubItems && subItem.onChevronClick)
+                                                        const childMenuId = subItem.menuId || subItem.id
+                                                        const childrenOpen = openMenus.includes(childMenuId)
+                                                        const isSubActive =
+                                                            subItem.href !== "#" &&
+                                                            (pathname === subItem.href ||
+                                                                (subItem.href === "/amr" &&
+                                                                    pathname.startsWith("/amr/")) ||
+                                                                (subItem.children?.some(
+                                                                    (child) => pathname === child.href,
+                                                                ) ?? false) ||
+                                                                // Keep region highlighted on its district pages
+                                                                (subItem.href.startsWith("/regions/") &&
+                                                                    pathname.startsWith(`${subItem.href}/`)))
 
                                                         return (
-                                                            <div key={subItem.id} className="flex items-center gap-1">
-                                                                <Button
-                                                                    variant="ghost"
-                                                                    size="sm"
-                                                                    className={cn(
-                                                                        "w-full cursor-pointer justify-start text-sm text-gray-300 hover:text-white hover:bg-sidebar-accent/50",
-                                                                        pathname === subItem.href &&
-                                                                        subItem.href !== "#" &&
-                                                                        "bg-sidebar-accent text-white font-semibold",
-                                                                        subItem.isHeader && "font-medium text-gray-200 hover:bg-sidebar-accent/30 pl-2",
-                                                                        subItem.isIndented && "pl-4",
-                                                                        subItem.isDoubleIndented && "pl-8",
-                                                                        hasChevron && "flex-1",
-                                                                    )}
-                                                                    onClick={() => {
-                                                                        if (subItem.onClick) {
-                                                                            subItem.onClick()
-                                                                        } else if (subItem.href !== "#") {
-                                                                            handleNavigation(subItem.href)
-                                                                        }
-                                                                    }}
-                                                                >
-                                                                    {subItem.hasSubItems && !hasChevron && (
-                                                                        <ChevronRight
-                                                                            className={cn(
-                                                                                "h-3 w-3 mr-1 transition-transform",
-                                                                                openMenus.includes(subItem.id) && "rotate-90",
-                                                                            )}
-                                                                        />
-                                                                    )}
-                                                                    {subItem.label}
-                                                                </Button>
-                                                                {hasChevron && (
+                                                            <div key={subItem.id} className="space-y-1">
+                                                                <div className="flex items-center gap-1">
                                                                     <Button
                                                                         variant="ghost"
-                                                                        size="icon"
-                                                                        className="h-7 w-7 shrink-0"
-                                                                        onClick={(e) => {
-                                                                            e.stopPropagation()
-                                                                            subItem.onChevronClick?.()
+                                                                        size="sm"
+                                                                        className={cn(
+                                                                            "w-full cursor-pointer justify-start text-sm text-gray-300 hover:text-white hover:bg-sidebar-accent/50",
+                                                                            isSubActive &&
+                                                                            "bg-sidebar-accent text-white font-semibold",
+                                                                            subItem.isHeader && "font-medium text-gray-200 hover:bg-sidebar-accent/30",
+                                                                            subItem.isIndented && "pl-5",
+                                                                            subItem.isDoubleIndented && "pl-8",
+                                                                            hasChevron && "flex-1",
+                                                                        )}
+                                                                        onClick={() => {
+                                                                            // Header-only rows (e.g. CATEGORY) toggle; link rows navigate
+                                                                            if (subItem.isHeader && hasChevron) {
+                                                                                subItem.onChevronClick?.()
+                                                                            } else if (subItem.onClick) {
+                                                                                subItem.onClick()
+                                                                            } else if (subItem.href !== "#") {
+                                                                                handleNavigation(subItem.href)
+                                                                            }
                                                                         }}
                                                                     >
-                                                                        <ChevronRight
-                                                                            className={cn(
-                                                                                "h-3 w-3 transition-transform",
-                                                                                openMenus.includes(subItem.id) && "rotate-90",
-                                                                            )}
-                                                                        />
+                                                                        {subItem.label}
                                                                     </Button>
+                                                                    {hasChevron && (
+                                                                        <Button
+                                                                            variant="ghost"
+                                                                            size="icon"
+                                                                            className="h-7 w-7 shrink-0"
+                                                                            onClick={(e) => {
+                                                                                e.stopPropagation()
+                                                                                subItem.onChevronClick?.()
+                                                                            }}
+                                                                        >
+                                                                            <ChevronRight
+                                                                                className={cn(
+                                                                                    "h-3 w-3 transition-transform",
+                                                                                    childrenOpen && "rotate-90",
+                                                                                )}
+                                                                            />
+                                                                        </Button>
+                                                                    )}
+                                                                </div>
+                                                                {/* Nested tree: children sit under this item */}
+                                                                {hasChevron && childrenOpen && (subItem.children?.length ?? 0) > 0 && (
+                                                                    <div className="ml-3 border-l-2 border-sidebar-border/40 pl-2 space-y-0.5">
+                                                                        {subItem.children!.map((child) => {
+                                                                            const isChildActive = pathname === child.href
+                                                                            return (
+                                                                                <Button
+                                                                                    key={child.id}
+                                                                                    variant="ghost"
+                                                                                    size="sm"
+                                                                                    className={cn(
+                                                                                        "w-full cursor-pointer justify-start text-sm text-gray-300 hover:text-white hover:bg-sidebar-accent/50",
+                                                                                        isChildActive &&
+                                                                                        "bg-sidebar-accent text-white font-semibold",
+                                                                                    )}
+                                                                                    onClick={() => handleNavigation(child.href)}
+                                                                                >
+                                                                                    {child.label}
+                                                                                </Button>
+                                                                            )
+                                                                        })}
+                                                                    </div>
                                                                 )}
                                                             </div>
                                                         )
@@ -331,23 +441,30 @@ export function Sidebar() {
                             <DropdownMenuTrigger asChild>
                                 <Button
                                     variant="ghost"
-                                    className={cn("w-full cursor-pointer", isCollapsed ? "justify-center p-2" : "justify-start")}
+                                    className={cn(
+                                        "w-full h-auto cursor-pointer text-sidebar-foreground",
+                                        "hover:bg-sidebar-accent hover:text-sidebar-accent-foreground",
+                                        "aria-expanded:bg-sidebar-accent aria-expanded:text-sidebar-accent-foreground",
+                                        isCollapsed ? "justify-center p-2" : "justify-start gap-2 px-2 py-2",
+                                    )}
                                 >
-                                    <Avatar className={cn("h-8 w-8", !isCollapsed && "mr-2")}>
-                                        <AvatarFallback className="bg-primary text-primary-foreground">
-                                            {user.name?.charAt(0).toUpperCase() || "U"}
+                                    <Avatar className="h-8 w-8 shrink-0">
+                                        <AvatarFallback className="bg-primary text-primary-foreground text-xs">
+                                            {userInitials}
                                         </AvatarFallback>
                                     </Avatar>
                                     {!isCollapsed && (
-                                        <div className="flex flex-col items-start flex-1 min-w-0">
+                                        <div className="flex flex-col items-start flex-1 min-w-0 text-left">
                                             <span className="text-sm font-medium truncate w-full">{user.name}</span>
-                                            <span className="text-xs text-white truncate w-full">{user.email}</span>
+                                            <span className="text-xs truncate w-full opacity-70 font-normal">
+                                                {user.email}
+                                            </span>
                                         </div>
                                     )}
                                 </Button>
                             </DropdownMenuTrigger>
                             <DropdownMenuContent align="end" className="w-56">
-                                <DropdownMenuItem onClick={() => setCommentsOpen(true)}>
+                                <DropdownMenuItem onClick={openCommentsSheet}>
                                     <MessageSquare className="mr-2 h-4 w-4" />
                                     Comments
                                 </DropdownMenuItem>
@@ -362,8 +479,6 @@ export function Sidebar() {
                 )}
             </div>
         </aside>
-
-        <CommentsSheet open={commentsOpen} onClose={() => setCommentsOpen(false)} />
     </>
 )
 }

@@ -1,9 +1,10 @@
 "use client"
 
-import { useMemo } from "react"
+import { useMemo, useRef } from "react"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { useCustomerConsumptionDetail } from "@/hooks/api/use-customer-consumption-detail-api"
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from "recharts"
+import { ExportButton } from "@/components/ui/export-button"
 
 interface RegionalCustomerSalesTrendProps {
   region: string
@@ -18,6 +19,7 @@ const COLORS = {
 }
 
 export function RegionalCustomerSalesTrend({ region, dateRange }: RegionalCustomerSalesTrendProps) {
+  const chartRef = useRef<HTMLDivElement>(null)
   const { data: detailData } = useCustomerConsumptionDetail({
     dateFrom: dateRange.start,
     dateTo: dateRange.end,
@@ -70,6 +72,8 @@ export function RegionalCustomerSalesTrend({ region, dateRange }: RegionalCustom
     return Array.from(sources).sort()
   }, [chartData])
 
+  const exportSlug = region.replace(/\s+/g, "-").toLowerCase()
+
   if (chartData.length === 0) {
     return (
       <Card>
@@ -87,11 +91,22 @@ export function RegionalCustomerSalesTrend({ region, dateRange }: RegionalCustom
   return (
     <Card>
       <CardHeader>
-        <CardTitle>Consumption Trend</CardTitle>
-        <CardDescription>Monthly consumption by data source ({uniqueSources.length} source{uniqueSources.length !== 1 ? "s" : ""})</CardDescription>
+        <div className="flex items-start justify-between gap-3">
+          <div>
+            <CardTitle>Consumption Trend</CardTitle>
+            <CardDescription>Monthly consumption by data source ({uniqueSources.length} source{uniqueSources.length !== 1 ? "s" : ""})</CardDescription>
+          </div>
+          <div className="flex items-center gap-2 shrink-0">
+            <ExportButton
+              data={chartData}
+              filename={`${exportSlug}-customer-sales-trend`}
+              chartRef={chartRef}
+            />
+          </div>
+        </div>
       </CardHeader>
       <CardContent>
-        <div className="w-full h-80">
+        <div ref={chartRef} className="w-full h-80 bg-background rounded-md p-2">
           <ResponsiveContainer width="100%" height="100%">
             <LineChart
               data={chartData}
@@ -101,24 +116,19 @@ export function RegionalCustomerSalesTrend({ region, dateRange }: RegionalCustom
               <XAxis
                 dataKey="month"
                 tick={{ fontSize: 12 }}
-                tickFormatter={(value) => {
-                  const [year, month] = value.split("-")
-                  const date = new Date(parseInt(year), parseInt(month) - 1)
-                  return date.toLocaleDateString("en-GB", { month: "short", year: "2-digit" })
-                }}
               />
               <YAxis
-                label={{ value: "Consumption (kWh)", angle: -90, position: "insideLeft" }}
-                tickFormatter={(value) => (value / 1000000).toFixed(1) + "M"}
+                tickFormatter={(value) => {
+                  if (value >= 1000000) return `${(value / 1000000).toFixed(1)}M`
+                  if (value >= 1000) return `${(value / 1000).toFixed(1)}K`
+                  return value.toString()
+                }}
+                tick={{ fontSize: 12 }}
               />
               <Tooltip
-                formatter={(value) => {
-                  if (typeof value === "number") {
-                    return [value.toLocaleString("en-US", { maximumFractionDigits: 0 }) + " kWh", ""]
-                  }
-                  return value
-                }}
-                labelFormatter={(label) => `Month: ${label}`}
+                formatter={(value: number) => [
+                  value.toLocaleString("en-US", { maximumFractionDigits: 0 }) + " kWh",
+                ]}
               />
               <Legend />
               {uniqueSources.map((src) => (
@@ -126,9 +136,9 @@ export function RegionalCustomerSalesTrend({ region, dateRange }: RegionalCustom
                   key={src}
                   type="monotone"
                   dataKey={src}
-                  stroke={COLORS[src as keyof typeof COLORS] || COLORS.Unknown}
+                  stroke={COLORS[src as keyof typeof COLORS] || "#8b5cf6"}
                   strokeWidth={2}
-                  dot={false}
+                  dot={{ r: 3 }}
                   connectNulls
                 />
               ))}

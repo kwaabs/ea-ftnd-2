@@ -12,6 +12,7 @@ interface AmrConsumptionDailyParams {
   region?: string;
   district?: string;
   meterNumber?: string;
+  sltType?: string;
   systemName?: "import_kwh" | "export_kwh";
   page?: number;
   limit?: number;
@@ -25,6 +26,7 @@ export function useAmrConsumptionDaily(params: AmrConsumptionDailyParams) {
   if (params.region) queryString.append("region", params.region);
   if (params.district) queryString.append("district", params.district);
   if (params.meterNumber) queryString.append("meterNumber", params.meterNumber);
+  if (params.sltType) queryString.append("sltType", params.sltType);
   if (params.systemName) queryString.append("systemName", params.systemName);
   if (params.page) queryString.append("page", params.page.toString());
   if (params.limit) queryString.append("limit", params.limit.toString());
@@ -37,6 +39,7 @@ export function useAmrConsumptionDaily(params: AmrConsumptionDailyParams) {
       params.region,
       params.district,
       params.meterNumber,
+      params.sltType,
       params.systemName,
       params.page,
       params.limit,

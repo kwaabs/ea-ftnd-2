@@ -140,19 +140,27 @@ export default function DashboardPage() {
 
   return (
     <AppLayout>
-      <div className="space-y-6">
-        <div>
-          <h2 className="text-3xl font-semibold tracking-tight text-foreground">
+      <div className="h-full min-h-0 flex flex-col gap-2.5 overflow-hidden">
+        <div className="shrink-0 min-w-0">
+          <h2 className="text-xl font-semibold tracking-tight text-foreground leading-tight">
             Dashboard Overview
           </h2>
-          <p className="text-muted-foreground mt-1">
-            Monitor your electricity consumption and meter performance
+          <p className="text-muted-foreground text-xs truncate">
+            Consumption, sales, losses, and meter health at a glance
           </p>
         </div>
 
-        <RegionalSummaryMarquee dateRange={dateRange} />
+        <div className="shrink-0">
+          <RegionalSummaryMarquee dateRange={dateRange} compact />
+        </div>
 
-        <OverviewMainTabV3 dateRange={dateRange} filters={componentFilters} />
+        <div className="flex-1 min-h-0 overflow-hidden">
+          <OverviewMainTabV3
+            dateRange={dateRange}
+            filters={componentFilters}
+            compact
+          />
+        </div>
       </div>
     </AppLayout>
   );

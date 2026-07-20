@@ -3653,7 +3653,7 @@
 
 "use client";
 
-import { useMemo, useState } from "react";
+import { useMemo, useState, useRef } from "react";
 import {
   Card,
   CardContent,
@@ -3698,6 +3698,7 @@ import { MmsCustomerSalesDetail } from "@/components/customer-sales/mms-customer
 import { AmrCustomerSalesDetail } from "@/components/customer-sales/amr-customer-sales-detail";
 import { EnergyFlowDiagram } from "@/components/regions/energy-flow-diagram";
 import { formatNumber, toProperCase } from "@/lib/utils";
+import { ExportButton } from "@/components/ui/export-button";
 import {
   ArrowLeft,
   ArrowLeftRight,
@@ -3796,6 +3797,8 @@ export function RegionDetail({ region }: RegionDetailProps) {
   const [selectedMetrics, setSelectedMetrics] = useState<string[]>([
     "availableSupply",
   ]);
+  const energyFlowChartRef = useRef<HTMLDivElement>(null);
+  const dailyTrendChartRef = useRef<HTMLDivElement>(null);
 
   // Convert region to proper case for data matching
   const regionProperCase = toProperCase(region);
@@ -3981,6 +3984,14 @@ export function RegionDetail({ region }: RegionDetailProps) {
     dateTo: dateRange.end,
   });
 
+  // AMR by SLT type for energy-flow Customer Sales drill-down
+  const { data: amrSltData } = useAmrConsumptionAggregate({
+    dateFrom: dateRange.start,
+    dateTo: dateRange.end,
+    region: regionProperCase,
+    group: "slt_type",
+  });
+
   const amrAggData = useMemo(() => {
     if (!amrData || !Array.isArray(amrData)) return [];
     return amrData.filter(
@@ -4001,8 +4012,7 @@ export function RegionDetail({ region }: RegionDetailProps) {
     ) {
       customerConsumptionAggData.forEach((item: any) => {
         const kwh = item.sum_lastbillconsumption || 0;
-        const src = item.data_src || "Zeus";
-        bySrc.set(src, (bySrc.get(src) ?? 0) + kwh);
+        bySrc.set("Zeus (Postpaid)", (bySrc.get("Zeus (Postpaid)") ?? 0) + kwh);
         total += kwh;
       });
     }
@@ -4028,8 +4038,29 @@ export function RegionDetail({ region }: RegionDetailProps) {
       total += amrTotalKwh;
     }
 
-    return { total, bySrc };
-  }, [customerConsumptionAggData, mmsAggData, amrAggData]);
+    // SLT breakdown under AMR (same import+export basis as total)
+    const amrBySltType = new Map<string, number>();
+    for (const row of amrSltData || []) {
+      if (
+        (row.region || "").toLowerCase() !== regionProperCase.toLowerCase()
+      ) {
+        continue;
+      }
+      const key = (row.slt_type || "").trim() || "Unknown";
+      amrBySltType.set(
+        key,
+        (amrBySltType.get(key) || 0) + (row.total_consumption || 0),
+      );
+    }
+
+    return { total, bySrc, amrBySltType };
+  }, [
+    customerConsumptionAggData,
+    mmsAggData,
+    amrAggData,
+    amrSltData,
+    regionProperCase,
+  ]);
 
   // Fetch meter health status for REGIONAL_BOUNDARY — only when this region actually has boundary points.
   // If boundaryMeteringPoints is empty and we fire the query, the API returns ALL boundary meters globally,
@@ -4273,6 +4304,12 @@ export function RegionDetail({ region }: RegionDetailProps) {
   // A cross-region feeder where the receiving station is here = "inbound".
   // A cross-region feeder where the sending station is here = "outbound".
   // If somehow neither station is here, skip it.
+  //
+  // Regional energy accounting uses the directional meter readings:
+  //   inbound  → receivingMeter.importKwh  (energy entering this region)
+  //   outbound → sendingMeter.exportKwh    (energy leaving this region)
+  // Internal feeders (both ends here) contribute to both sides so EXPRESS_FEEDER
+  // meters always appear on the flow diagram; net impact is only meter imbalance.
   const expressFeederMetrics = useMemo(() => {
     if (!expressFeederData?.feederBreakdown) {
       return {
@@ -4280,12 +4317,15 @@ export function RegionDetail({ region }: RegionDetailProps) {
         inbound: [],
         outbound: [],
         internal: [],
+        diagramInbound: [],
+        diagramOutbound: [],
         inboundImport: 0,
         outboundExport: 0,
       };
     }
 
-    const regionUpper = regionProperCase.toUpperCase();
+    const regionUpper = regionProperCase.trim().toUpperCase();
+    const normRegion = (r?: string | null) => (r || "").trim().toUpperCase();
     type Tagged = (typeof expressFeederData.feederBreakdown)[0] & {
       direction: "inbound" | "outbound" | "internal";
     };
@@ -4293,9 +4333,9 @@ export function RegionDetail({ region }: RegionDetailProps) {
     const all: Tagged[] = [];
 
     for (const f of expressFeederData.feederBreakdown) {
-      const sendingHere = f.sendingMeter.region.toUpperCase() === regionUpper;
+      const sendingHere = normRegion(f.sendingMeter?.region) === regionUpper;
       const receivingHere =
-        f.receivingMeter.region.toUpperCase() === regionUpper;
+        normRegion(f.receivingMeter?.region) === regionUpper;
 
       if (sendingHere && receivingHere) {
         all.push({ ...f, direction: "internal" });
@@ -4304,20 +4344,29 @@ export function RegionDetail({ region }: RegionDetailProps) {
       } else if (sendingHere) {
         all.push({ ...f, direction: "outbound" });
       }
-      // if neither station is in this region the API shouldn't have returned it, skip
     }
 
     const inbound = all.filter((f) => f.direction === "inbound");
     const outbound = all.filter((f) => f.direction === "outbound");
+    const internal = all.filter((f) => f.direction === "internal");
+    const diagramInbound = [...inbound, ...internal];
+    const diagramOutbound = [...outbound, ...internal];
 
     return {
       all,
       inbound,
       outbound,
-      internal: all.filter((f) => f.direction === "internal"),
-      inboundImport: inbound.reduce((s, f) => s + f.totalImport, 0),
-      // Outbound = energy leaving this region = totalExport on the sending meter's side
-      outboundExport: outbound.reduce((s, f) => s + f.totalExport, 0),
+      internal,
+      diagramInbound,
+      diagramOutbound,
+      inboundImport: diagramInbound.reduce(
+        (s, f) => s + (f.receivingMeter?.importKwh || 0),
+        0,
+      ),
+      outboundExport: diagramOutbound.reduce(
+        (s, f) => s + (f.sendingMeter?.exportKwh || 0),
+        0,
+      ),
     };
   }, [expressFeederData, regionProperCase]);
 
@@ -5014,6 +5063,200 @@ export function RegionDetail({ region }: RegionDetailProps) {
     });
   }, [districtGeometriesData, dtxMetrics]);
 
+  const exportSlug = regionProperCase.replace(/\s+/g, "-").toLowerCase();
+
+  // Downloadable datasets for every table/chart on this page
+  const exportDatasets = useMemo(() => {
+    const summary = [
+      { metric: "BSP Import", value: energyFlow.bspImport },
+      { metric: "Boundary Import", value: energyFlow.boundaryImport },
+      { metric: "Boundary Export", value: energyFlow.boundaryExport },
+      { metric: "Express Feeder Inbound", value: energyFlow.expressFeederInbound },
+      { metric: "Express Feeder Export", value: energyFlow.expressFeederExport },
+      { metric: "Available Supply", value: energyFlow.availableSupply },
+      { metric: "DTX Consumption", value: energyFlow.dtxConsumption },
+      { metric: "Customer Sales", value: energyFlow.customerSales },
+      { metric: "System Losses", value: energyFlow.systemLosses },
+      { metric: "Net Position", value: analytics.netPosition },
+    ];
+
+    const peaks = [
+      {
+        metric: "Peak BSP Day",
+        date: peakAnalysis.peakBspDay?.date || "",
+        value: peakAnalysis.peakBspDay?.value || 0,
+      },
+      {
+        metric: "Peak DTX Day",
+        date: peakAnalysis.peakDtxDay?.date || "",
+        value: peakAnalysis.peakDtxDay?.value || 0,
+      },
+      {
+        metric: "Peak Import Day",
+        date: peakAnalysis.peakImportDay?.date || "",
+        value: peakAnalysis.peakImportDay?.value || 0,
+      },
+      {
+        metric: "Peak Export Day",
+        date: peakAnalysis.peakExportDay?.date || "",
+        value: peakAnalysis.peakExportDay?.value || 0,
+      },
+    ];
+
+    const expressFeeders = expressFeederMetrics.all.map((f) => ({
+      feeder_name: f.feederName,
+      direction: f.direction,
+      sending_region: f.sendingMeter.region,
+      sending_station: f.sendingMeter.station,
+      receiving_region: f.receivingMeter.region,
+      receiving_station: f.receivingMeter.station,
+      receiving_import_kwh: f.receivingMeter.importKwh,
+      sending_export_kwh: f.sendingMeter.exportKwh,
+      total_import_kwh: f.totalImport,
+      total_export_kwh: f.totalExport,
+    }));
+
+    const energyFlowRows = [
+      ...summary
+        .filter((r) => typeof r.value === "number")
+        .map((r) => ({ metric: r.metric, kwh: r.value })),
+      ...expressFeederMetrics.diagramInbound.map((f) => ({
+        metric: `Express Inbound — ${f.feederName}`,
+        kwh: f.receivingMeter.importKwh || 0,
+      })),
+      ...expressFeederMetrics.diagramOutbound.map((f) => ({
+        metric: `Express Export — ${f.feederName}`,
+        kwh: f.sendingMeter.exportKwh || 0,
+      })),
+    ];
+
+    const dailyTrend = dailyData.map((d) => ({
+      date: d.date,
+      bsp_kwh: d.bsp,
+      dtx_kwh: d.dtx,
+      boundary_import_kwh: d.boundaryImport,
+      boundary_export_kwh: d.boundaryExport,
+      available_supply_kwh: d.availableSupply,
+      net_kwh: d.net,
+    }));
+
+    const boundaryImports = boundaryMetrics.imports.flatMap((p) =>
+      Array.from(p.locations.entries()).map(([location, data]) => ({
+        direction: "import",
+        partner: p.partner,
+        location,
+        kwh: data.value,
+        meters: data.meters.size,
+      })),
+    );
+
+    const boundaryExports = boundaryMetrics.exports.flatMap((p) =>
+      Array.from(p.locations.entries()).map(([location, data]) => ({
+        direction: "export",
+        partner: p.partner,
+        location,
+        kwh: data.value,
+        meters: data.meters.size,
+      })),
+    );
+
+    const feederTradingRows = [
+      ...feederTrading.inbound.flatMap((r) =>
+        Array.from(r.stations.values()).flatMap((st) =>
+          st.feeders.map((f) => ({
+            direction: "inbound",
+            partner_region: r.region,
+            station: st.station,
+            feeder_name: f.name,
+            meter_number: f.meterNumber,
+            kwh: f.kwh,
+          })),
+        ),
+      ),
+      ...feederTrading.outbound.flatMap((r) =>
+        Array.from(r.stations.values()).flatMap((st) =>
+          st.feeders.map((f) => ({
+            direction: "outbound",
+            partner_region: r.region,
+            station: st.station,
+            feeder_name: f.name,
+            meter_number: f.meterNumber,
+            kwh: f.kwh,
+          })),
+        ),
+      ),
+    ];
+
+    const bspStations = Array.from(bspMetrics.byStation.entries()).map(
+      ([station, data]) => ({
+        station,
+        import_kwh: data.import,
+        export_kwh: data.export,
+        net_kwh: data.import - data.export,
+        meters: data.meters.size,
+      }),
+    );
+
+    const dtxDistricts = Array.from(dtxMetrics.byDistrict.entries()).map(
+      ([district, data]) => ({
+        district,
+        consumption_kwh: data.consumption,
+        meters: data.meters.size,
+      }),
+    );
+
+    const rankings = (districtRankings || []).map((r, i) => ({
+      rank: i + 1,
+      district: r.district,
+      consumption_kwh: r.consumption,
+      meters: r.meters,
+    }));
+
+    const regionRankRows = regionRanking
+      ? (regionRanking.topRegions || []).map((r: any, i: number) => ({
+          rank: i + 1,
+          region: r.region,
+          consumption_kwh: r.consumption,
+          is_current: r.region === regionProperCase,
+        }))
+      : [];
+
+    const customerSalesBySrc = Array.from(
+      customerSalesMetrics.bySrc.entries(),
+    ).map(([source, kwh]) => ({ source, kwh }));
+
+    return {
+      summary,
+      peaks,
+      expressFeeders,
+      energyFlowRows,
+      dailyTrend,
+      boundaryImports,
+      boundaryExports,
+      boundaryAll: [...boundaryImports, ...boundaryExports],
+      feederTradingRows,
+      bspStations,
+      dtxDistricts,
+      rankings,
+      regionRankRows,
+      customerSalesBySrc,
+    };
+  }, [
+    energyFlow,
+    analytics.netPosition,
+    peakAnalysis,
+    expressFeederMetrics,
+    dailyData,
+    boundaryMetrics,
+    feederTrading,
+    bspMetrics,
+    dtxMetrics,
+    districtRankings,
+    regionRanking,
+    regionProperCase,
+    customerSalesMetrics,
+  ]);
+
   if (aggregateLoading || isBoundaryDataLoading) {
     return (
       <div className="space-y-6">
@@ -5122,35 +5365,37 @@ export function RegionDetail({ region }: RegionDetailProps) {
       <Card>
         <CardContent className="pt-6">
           <Tabs defaultValue="summary" className="w-full">
-            <TabsList className="grid w-full grid-cols-4 mb-6">
-              <TabsTrigger
-                value="summary"
-                className="data-[state=active]:text-blue-600 data-[state=active]:border-blue-600"
-              >
-                Summary Metrics
-              </TabsTrigger>
+            <div className="mb-6">
+              <TabsList className="grid w-full grid-cols-4">
+                <TabsTrigger
+                  value="summary"
+                  className="data-[state=active]:text-blue-600 data-[state=active]:border-blue-600"
+                >
+                  Summary Metrics
+                </TabsTrigger>
 
-              <TabsTrigger
-                value="peaks"
-                className="data-[state=active]:text-amber-600 data-[state=active]:border-amber-600"
-              >
-                Energy Peaks
-              </TabsTrigger>
+                <TabsTrigger
+                  value="peaks"
+                  className="data-[state=active]:text-amber-600 data-[state=active]:border-amber-600"
+                >
+                  Energy Peaks
+                </TabsTrigger>
 
-              <TabsTrigger
-                value="express-feeders"
-                className="data-[state=active]:text-purple-600 data-[state=active]:border-purple-600"
-              >
-                Express Feeders
-              </TabsTrigger>
+                <TabsTrigger
+                  value="express-feeders"
+                  className="data-[state=active]:text-purple-600 data-[state=active]:border-purple-600"
+                >
+                  Express Feeders
+                </TabsTrigger>
 
-              <TabsTrigger
-                value="customer-sales"
-                className="data-[state=active]:text-green-600 data-[state=active]:border-green-600"
-              >
-                Customer Sales
-              </TabsTrigger>
-            </TabsList>
+                <TabsTrigger
+                  value="customer-sales"
+                  className="data-[state=active]:text-green-600 data-[state=active]:border-green-600"
+                >
+                  Customer Sales
+                </TabsTrigger>
+              </TabsList>
+            </div>
 
             {/* Tab 1: Summary Metrics */}
             <TabsContent
@@ -5404,11 +5649,14 @@ export function RegionDetail({ region }: RegionDetailProps) {
                         {formatNumber(expressFeederMetrics.inboundImport)} kWh
                       </div>
                       <div className="text-sm text-muted-foreground mt-1">
-                        {expressFeederMetrics.inbound.length} feeder
-                        {expressFeederMetrics.inbound.length !== 1
+                        {expressFeederMetrics.diagramInbound.length} feeder
+                        {expressFeederMetrics.diagramInbound.length !== 1
                           ? "s"
                           : ""}{" "}
                         receiving into this region
+                        {expressFeederMetrics.internal.length > 0
+                          ? ` (${expressFeederMetrics.internal.length} internal)`
+                          : ""}
                       </div>
                     </CardContent>
                   </Card>
@@ -5425,11 +5673,14 @@ export function RegionDetail({ region }: RegionDetailProps) {
                         {formatNumber(expressFeederMetrics.outboundExport)} kWh
                       </div>
                       <div className="text-sm text-muted-foreground mt-1">
-                        {expressFeederMetrics.outbound.length} feeder
-                        {expressFeederMetrics.outbound.length !== 1
+                        {expressFeederMetrics.diagramOutbound.length} feeder
+                        {expressFeederMetrics.diagramOutbound.length !== 1
                           ? "s"
                           : ""}{" "}
-                        sending out of this region
+                        sending from this region
+                        {expressFeederMetrics.internal.length > 0
+                          ? ` (${expressFeederMetrics.internal.length} internal)`
+                          : ""}
                       </div>
                     </CardContent>
                   </Card>
@@ -5454,17 +5705,23 @@ export function RegionDetail({ region }: RegionDetailProps) {
                             sending meter and one receiving meter.
                           </CardDescription>
                         </div>
-                        <div className="relative w-56 shrink-0">
-                          <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground pointer-events-none" />
-                          <Input
-                            placeholder="Filter by feeder name..."
-                            value={feederSearch}
-                            onChange={(e) => {
-                              setFeederSearch(e.target.value);
-                              setFeederPage(0);
-                            }}
-                            className="pl-8 h-9 text-sm"
+                        <div className="flex items-center gap-2 shrink-0">
+                          <ExportButton
+                            data={exportDatasets.expressFeeders}
+                            filename={`${exportSlug}-express-feeders`}
                           />
+                          <div className="relative w-56">
+                            <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground pointer-events-none" />
+                            <Input
+                              placeholder="Filter by feeder name..."
+                              value={feederSearch}
+                              onChange={(e) => {
+                                setFeederSearch(e.target.value);
+                                setFeederPage(0);
+                              }}
+                              className="pl-8 h-9 text-sm"
+                            />
+                          </div>
                         </div>
                       </div>
                     </CardHeader>
@@ -5889,29 +6146,43 @@ export function RegionDetail({ region }: RegionDetailProps) {
       </Card>
 
       {/* Energy Flow Visualization */}
-      <Card>
+      <Card className="min-w-0">
         <CardHeader>
-          <CardTitle>Energy Flow Analysis</CardTitle>
-          <p className="text-sm text-muted-foreground">
-            Proportional energy flows from sources through available supply to
-            consumption and export
-          </p>
+          <div className="flex items-start justify-between gap-3">
+            <div>
+              <CardTitle>Energy Flow Analysis</CardTitle>
+              <p className="text-sm text-muted-foreground">
+                Proportional energy flows from sources through available supply
+                to consumption and export
+              </p>
+            </div>
+            <div className="flex items-center gap-2 shrink-0">
+              <ExportButton
+                data={exportDatasets.energyFlowRows}
+                filename={`${exportSlug}-energy-flow`}
+                chartRef={energyFlowChartRef}
+              />
+            </div>
+          </div>
         </CardHeader>
 
-        <CardContent className="space-y-8">
+        <CardContent className="space-y-8 min-w-0">
           {/* Flow diagram */}
-          <EnergyFlowDiagram
-            region={toProperCase(region)}
-            energyFlow={energyFlow}
-            netPosition={analytics.netPosition}
-            bspByStation={bspMetrics.byStation}
-            dtxByDistrict={dtxMetrics.byDistrict}
-            boundaryImports={boundaryMetrics.imports}
-            boundaryExports={boundaryMetrics.exports}
-            expressInbound={expressFeederMetrics.inbound}
-            expressOutbound={expressFeederMetrics.outbound}
-            customerBySrc={customerSalesMetrics.bySrc}
-          />
+          <div ref={energyFlowChartRef} className="bg-background rounded-md p-2 min-w-0 w-full">
+            <EnergyFlowDiagram
+              region={toProperCase(region)}
+              energyFlow={energyFlow}
+              netPosition={analytics.netPosition}
+              bspByStation={bspMetrics.byStation}
+              dtxByDistrict={dtxMetrics.byDistrict}
+              boundaryImports={boundaryMetrics.imports}
+              boundaryExports={boundaryMetrics.exports}
+              expressInbound={expressFeederMetrics.diagramInbound}
+              expressOutbound={expressFeederMetrics.diagramOutbound}
+              customerBySrc={customerSalesMetrics.bySrc}
+              amrBySltType={customerSalesMetrics.amrBySltType}
+            />
+          </div>
         </CardContent>
       </Card>
 
@@ -5919,7 +6190,15 @@ export function RegionDetail({ region }: RegionDetailProps) {
       <Card>
         <CardHeader>
           <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-            <CardTitle>Daily Consumption Trend</CardTitle>
+            <div className="flex items-center gap-3 flex-wrap">
+              <CardTitle>Daily Consumption Trend</CardTitle>
+              <ExportButton
+                data={exportDatasets.dailyTrend}
+                filename={`${exportSlug}-daily-trend`}
+                chartRef={dailyTrendChartRef}
+                disabled={selectedMetrics.length === 0 || dailyData.length === 0}
+              />
+            </div>
             <div className="flex flex-wrap gap-2">
               {[
                 { key: "bsp", label: "BSP Incomer", color: "#22c55e" },
@@ -5980,6 +6259,7 @@ export function RegionDetail({ region }: RegionDetailProps) {
               Select at least one metric to display
             </div>
           ) : (
+            <div ref={dailyTrendChartRef} className="bg-background rounded-md p-2">
             <ResponsiveContainer width="100%" height={380}>
               <AreaChart
                 data={dailyData}
@@ -6098,6 +6378,7 @@ export function RegionDetail({ region }: RegionDetailProps) {
                 )}
               </AreaChart>
             </ResponsiveContainer>
+            </div>
           )}
         </CardContent>
       </Card>
@@ -6105,7 +6386,13 @@ export function RegionDetail({ region }: RegionDetailProps) {
       {/*Tables */}
       <Card>
         <CardHeader>
-          <CardTitle>Energy Trading Regions</CardTitle>
+          <div className="flex items-start justify-between gap-3">
+            <CardTitle>Energy Trading Regions</CardTitle>
+            <ExportButton
+              data={exportDatasets.boundaryAll}
+              filename={`${exportSlug}-boundary-trading`}
+            />
+          </div>
         </CardHeader>
         <CardContent>
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
@@ -6525,14 +6812,22 @@ export function RegionDetail({ region }: RegionDetailProps) {
         feederTrading.outbound.length > 0) && (
         <Card>
           <CardHeader>
-            <CardTitle className="flex items-center gap-2">
-              <Zap className="h-5 w-5 text-purple-600" />
-              Express Feeder Trading
-            </CardTitle>
-            <CardDescription>
-              Energy exchanged with other regions via express feeders — inbound
-              (received) and outbound (sent)
-            </CardDescription>
+            <div className="flex items-start justify-between gap-3">
+              <div>
+                <CardTitle className="flex items-center gap-2">
+                  <Zap className="h-5 w-5 text-purple-600" />
+                  Express Feeder Trading
+                </CardTitle>
+                <CardDescription>
+                  Energy exchanged with other regions via express feeders —
+                  inbound (received) and outbound (sent)
+                </CardDescription>
+              </div>
+              <ExportButton
+                data={exportDatasets.feederTradingRows}
+                filename={`${exportSlug}-express-feeder-trading`}
+              />
+            </div>
           </CardHeader>
           <CardContent>
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
@@ -7173,13 +7468,21 @@ export function RegionDetail({ region }: RegionDetailProps) {
       {regionRanking && (
         <Card>
           <CardHeader>
-            <div className="flex items-center gap-2">
-              <Activity className="h-5 w-5 text-blue-600" />
-              <CardTitle>Regional Performance Comparison</CardTitle>
+            <div className="flex items-start justify-between gap-3">
+              <div>
+                <div className="flex items-center gap-2">
+                  <Activity className="h-5 w-5 text-blue-600" />
+                  <CardTitle>Regional Performance Comparison</CardTitle>
+                </div>
+                <CardDescription>
+                  How this region compares nationally
+                </CardDescription>
+              </div>
+              <ExportButton
+                data={exportDatasets.regionRankRows}
+                filename={`${exportSlug}-region-ranking`}
+              />
             </div>
-            <CardDescription>
-              How this region compares nationally
-            </CardDescription>
           </CardHeader>
           <CardContent>
             <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
@@ -7319,10 +7622,18 @@ export function RegionDetail({ region }: RegionDetailProps) {
       {bspMetrics.byStation.size > 0 && (
         <Card>
           <CardHeader>
-            <CardTitle>BSP Stations Breakdown</CardTitle>
-            <p className="text-sm text-muted-foreground">
-              Click station to view meter contributions
-            </p>
+            <div className="flex items-start justify-between gap-3">
+              <div>
+                <CardTitle>BSP Stations Breakdown</CardTitle>
+                <p className="text-sm text-muted-foreground">
+                  Click station to view meter contributions
+                </p>
+              </div>
+              <ExportButton
+                data={exportDatasets.bspStations}
+                filename={`${exportSlug}-bsp-stations`}
+              />
+            </div>
           </CardHeader>
           <CardContent>
             <Table>
@@ -7553,13 +7864,17 @@ export function RegionDetail({ region }: RegionDetailProps) {
       {dtxMetrics.byDistrict.size > 0 && (
         <Card>
           <CardHeader>
-            <div className="flex items-center justify-between">
+            <div className="flex items-center justify-between gap-3">
               <div>
                 <CardTitle>Distribution Transformers in Region</CardTitle>
                 <CardDescription>
                   Region → District → Meter (Click to expand)
                 </CardDescription>
               </div>
+              <ExportButton
+                data={exportDatasets.dtxDistricts}
+                filename={`${exportSlug}-dtx-districts`}
+              />
             </div>
           </CardHeader>
           <CardContent>

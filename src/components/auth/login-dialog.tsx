@@ -125,6 +125,7 @@ import { useState } from "react"
 import { useMutation } from "@tanstack/react-query"
 import { useMsal } from "@azure/msal-react"
 import { loginRequest } from "@/lib/msal-config"
+import { saveAuthReturnUrl } from "@/lib/auth-return-url"
 import { Button } from "@/components/ui/button"
 import { Zap, LineChart, ShieldCheck, Users, Loader2 } from "lucide-react"
 import { useUserStore } from "@/stores/user-store"
@@ -138,6 +139,8 @@ export function LoginDialog() {
 
   const loginMutation = useMutation({
     mutationFn: async () => {
+      // Remember deep link (e.g. /regions) — Azure always returns to origin redirectUri
+      saveAuthReturnUrl()
       const inProgress = sessionStorage.getItem("msal.interaction.status")
       if (inProgress) sessionStorage.removeItem("msal.interaction.status")
       await instance.loginRedirect(loginRequest)

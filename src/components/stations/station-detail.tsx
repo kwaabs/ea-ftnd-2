@@ -1,6 +1,6 @@
 "use client"
 
-import { useMemo, useState } from "react"
+import { useMemo, useState, useRef } from "react"
 
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
@@ -15,6 +15,7 @@ import {
     DialogTitle,
     DialogTrigger,
 } from "@/components/ui/dialog"
+import { ExportButton } from "@/components/ui/export-button"
 
 import { useBspDaily, useBspAggregate } from "@/hooks/api/use-bsp-api"
 import { usePssDaily } from "@/hooks/api/use-pss-api"
@@ -61,6 +62,9 @@ export function StationDetail({ station }: StationDetailProps) {
     const [selectedMetrics, setSelectedMetrics] = useState<string[]>(["totalImport", "totalExport"])
     const [rankingSort, setRankingSort] = useState<"import" | "export">("import")
     const [stationFilter, setStationFilter] = useState("")
+    const rankingChartRef = useRef<HTMLDivElement>(null)
+    const breakdownChartRef = useRef<HTMLDivElement>(null)
+    const dailyTrendChartRef = useRef<HTMLDivElement>(null)
 
     const stationProperCase = toProperCase(station)
 
@@ -470,6 +474,73 @@ export function StationDetail({ station }: StationDetailProps) {
         )
     }
 
+    const exportSlug = stationProperCase.replace(/\s+/g, "-").toLowerCase()
+
+    const exportDatasets = useMemo(() => {
+        const ranking = (stationAnalytics?.allStationsGlobal || []).map((s, idx) => ({
+            rank: idx + 1,
+            station: s.station,
+            region: s.region,
+            import_kwh: s.supplyKwh,
+            export_kwh: s.reverseFlowKwh,
+            net_kwh: s.netSupplyKwh,
+            is_current: s.station.toLowerCase() === stationProperCase.toLowerCase(),
+        }))
+
+        const breakdown = [
+            ...meterTypeBreakdown.map((d) => ({
+                type: d.name,
+                metric: "import_share",
+                kwh: d.value,
+            })),
+            ...meterTypeBalance.map((d) => ({
+                type: d.name,
+                metric: "balance",
+                import_kwh: d.import,
+                export_kwh: d.export,
+            })),
+        ]
+
+        const dailyTrend = dailyData.map((d) => ({
+            date: d.date,
+            total_import_kwh: d.totalImport,
+            total_export_kwh: d.totalExport,
+            bsp_import_kwh: d.bspImport,
+            bsp_export_kwh: d.bspExport,
+            pss_import_kwh: d.pssImport,
+            pss_export_kwh: d.pssExport,
+            ss_import_kwh: d.ssImport,
+            ss_export_kwh: d.ssExport,
+        }))
+
+        const mapMeterRows = (rows: typeof bspMetrics.meterRows, type: string) =>
+            rows.map((r) => ({
+                meter_type: type,
+                feeder_panel: r.feeder,
+                meter_number: r.meterNumber,
+                import_kwh: r.import,
+                export_kwh: r.export,
+                net_kwh: r.import - r.export,
+            }))
+
+        const meters = [
+            ...mapMeterRows(bspMetrics.meterRows, "BSP"),
+            ...mapMeterRows(pssMetrics.meterRows, "PSS"),
+            ...mapMeterRows(ssMetrics.meterRows, "SS"),
+        ]
+
+        return { ranking, breakdown, dailyTrend, meters, bspMeters: mapMeterRows(bspMetrics.meterRows, "BSP"), pssMeters: mapMeterRows(pssMetrics.meterRows, "PSS"), ssMeters: mapMeterRows(ssMetrics.meterRows, "SS") }
+    }, [
+        stationAnalytics,
+        stationProperCase,
+        meterTypeBreakdown,
+        meterTypeBalance,
+        dailyData,
+        bspMetrics.meterRows,
+        pssMetrics.meterRows,
+        ssMetrics.meterRows,
+    ])
+
     const isLoading = bspLoading || pssLoading || ssLoading
 
     if (isLoading) {
@@ -857,12 +928,17 @@ export function StationDetail({ station }: StationDetailProps) {
                     {/* Global Station Ranking Chart */}
                     <Card>
                         <CardHeader>
-                            <div className="flex items-center justify-between">
+                            <div className="flex items-center justify-between gap-3 flex-wrap">
                                 <CardTitle className="text-base flex items-center gap-2">
                                     <BarChart3 className="h-4 w-4" />
                                     Station Ranking (All Regions)
                                 </CardTitle>
-                                <div className="flex items-center gap-2">
+                                <div className="flex items-center gap-2 flex-wrap">
+                                    <ExportButton
+                                        data={exportDatasets.ranking}
+                                        filename={`${exportSlug}-station-ranking`}
+                                        chartRef={rankingChartRef}
+                                    />
                                     <Button
                                         variant={rankingSort === "import" ? "default" : "outline"}
                                         size="sm"
@@ -890,6 +966,13 @@ export function StationDetail({ station }: StationDetailProps) {
                                             <DialogHeader>
                                                 <DialogTitle>All Station Rankings - By {rankingSort === "import" ? "Import" : "Export"}</DialogTitle>
                                             </DialogHeader>
+
+                                            <div className="flex justify-end mb-2">
+                                                <ExportButton
+                                                    data={exportDatasets.ranking}
+                                                    filename={`${exportSlug}-station-ranking-all`}
+                                                />
+                                            </div>
 
                                             {/* Filter input */}
                                             <div className="flex items-center gap-4 py-4">
@@ -981,7 +1064,7 @@ export function StationDetail({ station }: StationDetailProps) {
                             </div>
                         </CardHeader>
                         <CardContent>
-                            <div style={{ width: "100%", height: 400 }}>
+                            <div ref={rankingChartRef} className="bg-background rounded-md p-2" style={{ width: "100%", height: 400 }}>
                                 <ResponsiveContainer>
                                     <BarChart
                                         data={rankingSort === "import" ? stationAnalytics.topStationsImport : stationAnalytics.topStationsExport}
@@ -1012,8 +1095,6 @@ export function StationDetail({ station }: StationDetailProps) {
                                         </Bar>
                                     </BarChart>
                                 </ResponsiveContainer>
-
-
                             </div>
                             <p className="text-xs text-muted-foreground text-center mt-2">
                                 Top {(rankingSort === "import" ? stationAnalytics.topStationsImport : stationAnalytics.topStationsExport).length} stations nationally by BSP {rankingSort}. Current station highlighted.
@@ -1024,9 +1105,17 @@ export function StationDetail({ station }: StationDetailProps) {
                     {/* Import vs Export by Meter Type + Pie */}
                     <Card>
                         <CardHeader>
-                            <CardTitle className="text-base">Energy Breakdown</CardTitle>
+                            <div className="flex items-center justify-between gap-3 flex-wrap">
+                                <CardTitle className="text-base">Energy Breakdown</CardTitle>
+                                <ExportButton
+                                    data={exportDatasets.breakdown}
+                                    filename={`${exportSlug}-energy-breakdown`}
+                                    chartRef={breakdownChartRef}
+                                />
+                            </div>
                         </CardHeader>
                         <CardContent className="space-y-6">
+                            <div ref={breakdownChartRef} className="bg-background rounded-md p-2 space-y-6">
                             {/* Pie Chart */}
                             {meterTypeBreakdown.length > 0 && (
                                 <div>
@@ -1086,6 +1175,7 @@ export function StationDetail({ station }: StationDetailProps) {
                                     </div>
                                 </div>
                             )}
+                            </div>
                         </CardContent>
                     </Card>
                 </div>
@@ -1096,7 +1186,14 @@ export function StationDetail({ station }: StationDetailProps) {
                 <CardHeader>
                     <div className="flex items-center justify-between flex-wrap gap-2">
                         <CardTitle className="text-base">Daily Consumption Trend</CardTitle>
-                        <div className="flex gap-2 flex-wrap">
+                        <div className="flex items-center gap-2 flex-wrap">
+                            <ExportButton
+                                data={exportDatasets.dailyTrend}
+                                filename={`${exportSlug}-daily-trend`}
+                                chartRef={dailyTrendChartRef}
+                                disabled={dailyData.length === 0}
+                            />
+                            <div className="flex gap-2 flex-wrap">
                             {[
                                 { key: "totalImport", label: "Total Import", color: "#10b981" },
                                 { key: "totalExport", label: "Total Export", color: "#3b82f6" },
@@ -1117,12 +1214,13 @@ export function StationDetail({ station }: StationDetailProps) {
                                     <span className="text-xs font-medium" style={{ color: item.color }}>{item.label}</span>
                                 </label>
                             ))}
+                            </div>
                         </div>
                     </div>
                 </CardHeader>
                 <CardContent>
                     {dailyData.length > 0 ? (
-                        <div style={{ width: "100%", height: 300 }}>
+                        <div ref={dailyTrendChartRef} className="bg-background rounded-md p-2" style={{ width: "100%", height: 300 }}>
                             <ResponsiveContainer>
                                 <AreaChart data={dailyData}>
                                     <CartesianGrid strokeDasharray="3 3" className="stroke-muted" />
@@ -1170,10 +1268,16 @@ export function StationDetail({ station }: StationDetailProps) {
             {bspMetrics.meterRows.length > 0 && (
                 <Card>
                     <CardHeader>
-                        <CardTitle className="flex items-center gap-2">
-                            <div className="w-3 h-3 rounded-full bg-green-500" />
-                            BSP Meters ({bspMetrics.uniqueMeters.size})
-                        </CardTitle>
+                        <div className="flex items-center justify-between gap-3 flex-wrap">
+                            <CardTitle className="flex items-center gap-2">
+                                <div className="w-3 h-3 rounded-full bg-green-500" />
+                                BSP Meters ({bspMetrics.uniqueMeters.size})
+                            </CardTitle>
+                            <ExportButton
+                                data={exportDatasets.bspMeters}
+                                filename={`${exportSlug}-bsp-meters`}
+                            />
+                        </div>
                     </CardHeader>
                     <CardContent>
                         <Table>
@@ -1216,10 +1320,16 @@ export function StationDetail({ station }: StationDetailProps) {
             {pssMetrics.meterRows.length > 0 && (
                 <Card>
                     <CardHeader>
-                        <CardTitle className="flex items-center gap-2">
-                            <div className="w-3 h-3 rounded-full bg-amber-500" />
-                            PSS Meters ({pssMetrics.uniqueMeters.size})
-                        </CardTitle>
+                        <div className="flex items-center justify-between gap-3 flex-wrap">
+                            <CardTitle className="flex items-center gap-2">
+                                <div className="w-3 h-3 rounded-full bg-amber-500" />
+                                PSS Meters ({pssMetrics.uniqueMeters.size})
+                            </CardTitle>
+                            <ExportButton
+                                data={exportDatasets.pssMeters}
+                                filename={`${exportSlug}-pss-meters`}
+                            />
+                        </div>
                     </CardHeader>
                     <CardContent>
                         <Table>
@@ -1262,10 +1372,16 @@ export function StationDetail({ station }: StationDetailProps) {
             {ssMetrics.meterRows.length > 0 && (
                 <Card>
                     <CardHeader>
-                        <CardTitle className="flex items-center gap-2">
-                            <div className="w-3 h-3 rounded-full bg-purple-500" />
-                            SS Meters ({ssMetrics.uniqueMeters.size})
-                        </CardTitle>
+                        <div className="flex items-center justify-between gap-3 flex-wrap">
+                            <CardTitle className="flex items-center gap-2">
+                                <div className="w-3 h-3 rounded-full bg-purple-500" />
+                                SS Meters ({ssMetrics.uniqueMeters.size})
+                            </CardTitle>
+                            <ExportButton
+                                data={exportDatasets.ssMeters}
+                                filename={`${exportSlug}-ss-meters`}
+                            />
+                        </div>
                     </CardHeader>
                     <CardContent>
                         <Table>

@@ -459,6 +459,7 @@ export function MeterDetailsView({ meterNumber }: MeterDetailsViewProps) {
                                             data={consumptionData}
                                             comparisonData={comparisonData}
                                             comparisonMode={comparisonMode}
+                                            filenamePrefix={meterNumber}
                                         />
                                     )}
                                 </CardContent>
@@ -472,6 +473,7 @@ export function MeterDetailsView({ meterNumber }: MeterDetailsViewProps) {
                                 <MeterInsightsCharts
                                     consumptionData={consumptionData}
                                     statusData={statusData}
+                                    filenamePrefix={meterNumber}
                                 />
                             )}
                         </TabsContent>
@@ -480,13 +482,18 @@ export function MeterDetailsView({ meterNumber }: MeterDetailsViewProps) {
 
                 {/* Right: Status + Related */}
                 <div className="space-y-4">
-                    <MeterStatusTrend statusData={statusData} isLoading={statusLoading} />
+                    <MeterStatusTrend
+                        statusData={statusData}
+                        isLoading={statusLoading}
+                        filenamePrefix={meterNumber}
+                    />
 
                     {relatedMeters.length > 0 && (
                         <RelatedMeters
                             meters={relatedMeters}
                             currentMeterType={meter.meter_type}
                             filterType={relatedFilterType}
+                            filenamePrefix={meterNumber}
                         />
                     )}
                 </div>

@@ -20,9 +20,13 @@ import { cn } from "@/lib/utils"
 import { Button } from "@/components/ui/button"
 import { useAppStore } from "@/stores/app-store"
 import { formatApiDate } from "@/lib/utils"
+import { ExportButton } from "@/components/ui/export-button"
 
 export function RegionalBoundaryTab() {
     const filters = useAppStore((state) => state.filters)
+    const statusTimelineChartRef = useRef<HTMLDivElement>(null)
+    const trendsChartRef = useRef<HTMLDivElement>(null)
+    const comparisonChartRef = useRef<HTMLDivElement>(null)
 
     const params = {
         dateFrom: filters.dateRange ? formatApiDate(filters.dateRange.start) : "",
@@ -563,6 +567,69 @@ export function RegionalBoundaryTab() {
     const paginatedStatusData = meterStatusTableData
     const totalStatusPages = detailsData?.pagination?.total_pages || 1
 
+    const exportDatasets = useMemo(() => {
+        const statusTimeline = statusTimelineData.map((d) => ({
+            date: d.date,
+            online: d.online,
+            offline: d.offline,
+        }))
+
+        const meterStatus = meterStatusTableData.map((m) => ({
+            meter_number: m.meter_number,
+            boundary_point: m.boundary_metering_point,
+            location: m.location,
+            status: m.latestStatus,
+            total_consumption_kwh: m.totalConsumption,
+            uptime_pct: m.uptime,
+            days_offline: m.daysOffline,
+            last_reading: m.lastReadingTime,
+        }))
+
+        const trends = (boundaryData?.timeSeriesData || []).map((d: any) => ({
+            date: d.date,
+            import_kwh: d.importKwh ?? d.import ?? 0,
+            export_kwh: d.exportKwh ?? d.export ?? 0,
+            ...Object.fromEntries(
+                Object.entries(d).filter(([k]) => k !== "date" && k !== "importKwh" && k !== "exportKwh" && k !== "import" && k !== "export"),
+            ),
+        }))
+
+        const comparison = (boundaryData?.byBoundaryPoint || []).map((bp: any) => ({
+            boundary_point: bp.boundaryPoint,
+            import_kwh: bp.importKwh,
+            export_kwh: bp.exportKwh,
+            net_kwh: bp.netKwh,
+        }))
+
+        const pointDetails = tableData.map((bp) => ({
+            boundary_point: bp.boundaryPoint,
+            import_kwh: bp.importKwh,
+            export_kwh: bp.exportKwh,
+            net_kwh: bp.netKwh,
+        }))
+
+        const flowAnalysis = displayFlowData.flatMap((bp) =>
+            bp.flows.map((flow: any) => ({
+                boundary_point: bp.boundaryPoint,
+                meter_number: flow.meterNumber,
+                from: flow.from,
+                to: flow.to,
+                location: flow.location,
+                import_kwh: flow.import,
+                export_kwh: flow.export,
+                net_kwh: flow.net,
+            })),
+        )
+
+        return { statusTimeline, meterStatus, trends, comparison, pointDetails, flowAnalysis }
+    }, [
+        statusTimelineData,
+        meterStatusTableData,
+        boundaryData,
+        tableData,
+        displayFlowData,
+    ])
+
     useMemo(() => {
         setStatusCurrentPage(1)
     }, [statusFilter, statusSearchTerm])
@@ -671,8 +738,17 @@ export function RegionalBoundaryTab() {
 
                     <Card>
                         <CardHeader>
-                            <CardTitle>Status Timeline</CardTitle>
-                            <CardDescription>Daily online/offline meter count</CardDescription>
+                            <div className="flex items-start justify-between gap-3">
+                                <div>
+                                    <CardTitle>Status Timeline</CardTitle>
+                                    <CardDescription>Daily online/offline meter count</CardDescription>
+                                </div>
+                                <ExportButton
+                                    data={exportDatasets.statusTimeline}
+                                    filename="regional-boundary-status-timeline"
+                                    chartRef={statusTimelineChartRef}
+                                />
+                            </div>
                         </CardHeader>
                         <CardContent>
                             {!timelineData || statusTimelineData.length === 0 ? (
@@ -680,6 +756,7 @@ export function RegionalBoundaryTab() {
                                     No status data available
                                 </div>
                             ) : (
+                                <div ref={statusTimelineChartRef} className="bg-background rounded-md p-2">
                                 <ChartContainer
                                     config={{
                                         online: {
@@ -708,14 +785,23 @@ export function RegionalBoundaryTab() {
                                         </BarChart>
                                     </ResponsiveContainer>
                                 </ChartContainer>
+                                </div>
                             )}
                         </CardContent>
                     </Card>
 
                     <Card>
                         <CardHeader>
-                            <CardTitle>Meter Status Details</CardTitle>
-                            <CardDescription>Individual meter health and reporting status</CardDescription>
+                            <div className="flex items-start justify-between gap-3">
+                                <div>
+                                    <CardTitle>Meter Status Details</CardTitle>
+                                    <CardDescription>Individual meter health and reporting status</CardDescription>
+                                </div>
+                                <ExportButton
+                                    data={exportDatasets.meterStatus}
+                                    filename="regional-boundary-meter-status"
+                                />
+                            </div>
                         </CardHeader>
                         <CardContent className="space-y-4">
                             <div className="flex items-center justify-between gap-4">
@@ -904,12 +990,17 @@ export function RegionalBoundaryTab() {
             <div className="grid gap-4 md:grid-cols-2">
                 <Card className="md:col-span-2">
                     <CardHeader>
-                        <div className="flex items-center justify-between">
+                        <div className="flex items-center justify-between gap-3 flex-wrap">
                             <div>
                                 <CardTitle>Regional Energy Transfer Trends</CardTitle>
                                 <CardDescription>Import and export patterns across boundary points over time for selected period</CardDescription>
                             </div>
-                            <div className="flex items-center gap-4">
+                            <div className="flex items-center gap-4 flex-wrap">
+                                <ExportButton
+                                    data={exportDatasets.trends}
+                                    filename="regional-boundary-trends"
+                                    chartRef={trendsChartRef}
+                                />
                                 <div className="flex items-center gap-2">
                                     <Checkbox id="trends-import" checked={showTrendsImport} onCheckedChange={setShowTrendsImport} />
                                     <Label htmlFor="trends-import" className="text-sm font-normal cursor-pointer">
@@ -985,6 +1076,7 @@ export function RegionalBoundaryTab() {
                                 No data available for the selected filters
                             </div>
                         ) : (
+                            <div ref={trendsChartRef} className="bg-background rounded-md p-2">
                             <ChartContainer
                                 config={{
                                     import: {
@@ -1063,18 +1155,24 @@ export function RegionalBoundaryTab() {
                                     </LineChart>
                                 </ResponsiveContainer>
                             </ChartContainer>
+                            </div>
                         )}
                     </CardContent>
                 </Card>
 
                 <Card className="md:col-span-2">
                     <CardHeader>
-                        <div className="flex items-center justify-between">
+                        <div className="flex items-center justify-between gap-3 flex-wrap">
                             <div>
                                 <CardTitle>Boundary Point Comparison</CardTitle>
                                 <CardDescription>Energy transfer by boundary metering point</CardDescription>
                             </div>
-                            <div className="flex items-center gap-4">
+                            <div className="flex items-center gap-4 flex-wrap">
+                                <ExportButton
+                                    data={exportDatasets.comparison}
+                                    filename="regional-boundary-comparison"
+                                    chartRef={comparisonChartRef}
+                                />
                                 <div className="flex items-center gap-2">
                                     <Checkbox
                                         id="comparison-import"
@@ -1102,6 +1200,7 @@ export function RegionalBoundaryTab() {
                         {isLoading ? (
                             <Skeleton className="h-[300px] w-full" />
                         ) : (
+                            <div ref={comparisonChartRef} className="bg-background rounded-md p-2">
                             <ChartContainer
                                 config={{
                                     importKwh: {
@@ -1143,16 +1242,25 @@ export function RegionalBoundaryTab() {
                                     </BarChart>
                                 </ResponsiveContainer>
                             </ChartContainer>
+                            </div>
                         )}
                     </CardContent>
                 </Card>
 
                 <Card className="md:col-span-2">
                     <CardHeader>
-                        <CardTitle>Boundary Point Details</CardTitle>
-                        <CardDescription>
-                            Detailed breakdown of energy transfers by boundary point (click to expand)
-                        </CardDescription>
+                        <div className="flex items-start justify-between gap-3">
+                            <div>
+                                <CardTitle>Boundary Point Details</CardTitle>
+                                <CardDescription>
+                                    Detailed breakdown of energy transfers by boundary point (click to expand)
+                                </CardDescription>
+                            </div>
+                            <ExportButton
+                                data={exportDatasets.pointDetails}
+                                filename="regional-boundary-point-details"
+                            />
+                        </div>
                     </CardHeader>
                     <CardContent>
                         {!meterRecords ? (
@@ -1297,15 +1405,21 @@ export function RegionalBoundaryTab() {
 
             <Card>
                 <CardHeader>
-                    <div className="flex items-center justify-between">
+                    <div className="flex items-center justify-between gap-3 flex-wrap">
                         <div>
                             <CardTitle>Boundary Flow Analysis</CardTitle>
                             <CardDescription>Bidirectional energy flows between regions with location-level detail</CardDescription>
                         </div>
-                        <Button variant="outline" size="sm" onClick={() => setIsFlowReversed(!isFlowReversed)} className="gap-2">
-                            <ArrowRightLeft className="h-4 w-4" />
-                            {isFlowReversed ? "Show Default View" : "Flip Direction"}
-                        </Button>
+                        <div className="flex items-center gap-2">
+                            <ExportButton
+                                data={exportDatasets.flowAnalysis}
+                                filename="regional-boundary-flow-analysis"
+                            />
+                            <Button variant="outline" size="sm" onClick={() => setIsFlowReversed(!isFlowReversed)} className="gap-2">
+                                <ArrowRightLeft className="h-4 w-4" />
+                                {isFlowReversed ? "Show Default View" : "Flip Direction"}
+                            </Button>
+                        </div>
                     </div>
                 </CardHeader>
                 <CardContent>

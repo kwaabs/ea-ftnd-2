@@ -124,11 +124,14 @@ interface OverviewMainTabV3Props {
     locations?: string[];
     feeders?: string[];
   };
+  /** Fill parent height without page-level vertical scroll */
+  compact?: boolean;
 }
 
 export function OverviewMainTabV3({
   dateRange,
   filters = {},
+  compact = false,
 }: OverviewMainTabV3Props) {
   const [drillDownView, setDrillDownView] = useState<
     null | "meters" | "map" | "single-meter"
@@ -415,6 +418,16 @@ export function OverviewMainTabV3({
       percentage: lossPercentage,
     };
   }, [energyPurchases, energySales]);
+
+  // Same severity scale as marquee: green <10%, amber <25%, red ≥25%
+  const systemLossColorClass =
+    systemLosses.percentage === null
+      ? "text-muted-foreground"
+      : systemLosses.percentage < 10
+        ? "text-green-700"
+        : systemLosses.percentage < 25
+          ? "text-amber-700"
+          : "text-red-600";
 
   const meterHealthSummary = useMeterHealthSummary({
     dateFrom: dateRange.start,
@@ -7884,7 +7897,7 @@ export function OverviewMainTabV3({
 
   if (drillDownView === "meters") {
     return (
-      <div className="space-y-2 p-3">
+      <div className="h-full overflow-y-auto space-y-2 p-1">
         <div className="flex items-center justify-between">
           <div>
             <h2 className="text-lg font-bold">Meter Health Details</h2>
@@ -7910,18 +7923,292 @@ export function OverviewMainTabV3({
     return renderSingleMeterHealthDetails();
   }
 
+  // Compact dashboard: 3 KPI cards + consumption / health boards.
+  if (compact) {
+    return (
+      <div className="h-full min-h-0 flex flex-col gap-3 overflow-hidden">
+        <div className="grid grid-cols-3 gap-3 shrink-0">
+          <Card className="shadow-none border bg-card">
+            <CardContent className="py-2.5 px-4">
+              <div className="flex items-center justify-between gap-2">
+                <p className="text-sm font-medium text-muted-foreground">Purchases (BSP)</p>
+                <span className="text-xs font-semibold text-red-600 animate-pulse shrink-0">
+                  Check meter Imports
+                </span>
+              </div>
+              <p className="text-2xl font-bold tabular-nums tracking-tight mt-0.5">
+                {formatNumber(energyPurchases)}
+                <span className="text-sm font-normal text-muted-foreground ml-1.5">kWh</span>
+              </p>
+            </CardContent>
+          </Card>
+          <Card className="shadow-none border bg-card">
+            <CardContent className="py-2.5 px-4">
+              <p className="text-sm font-medium text-muted-foreground">Sales (Zeus + MMS + AMR)</p>
+              <p className="text-2xl font-bold tabular-nums tracking-tight mt-0.5">
+                {energySales === null ? "—" : formatNumber(energySales)}
+                {energySales !== null && (
+                  <span className="text-sm font-normal text-muted-foreground ml-1.5">kWh</span>
+                )}
+              </p>
+            </CardContent>
+          </Card>
+          <Card className="shadow-none border bg-card">
+            <CardContent className="py-2.5 px-4 flex items-start justify-between gap-3">
+              <div className="min-w-0">
+                <p className="text-sm font-medium text-muted-foreground">System Losses</p>
+                <p
+                  className={`text-2xl font-bold tabular-nums tracking-tight mt-0.5 ${systemLossColorClass}`}
+                >
+                  {systemLosses.kwh === null ? "—" : formatNumber(systemLosses.kwh)}
+                  {systemLosses.kwh !== null && (
+                    <span className={`text-sm font-normal ml-1.5 opacity-70 ${systemLossColorClass}`}>
+                      kWh
+                    </span>
+                  )}
+                </p>
+              </div>
+              <p
+                className={`text-2xl font-semibold tabular-nums tracking-tight shrink-0 mt-5 ${systemLossColorClass}`}
+              >
+                {systemLosses.percentage === null
+                  ? "—"
+                  : `${systemLosses.percentage.toFixed(2)}%`}
+              </p>
+            </CardContent>
+          </Card>
+        </div>
+
+        <div className="grid grid-cols-12 gap-3 flex-1 min-h-0">
+          <Card className="col-span-12 xl:col-span-7 shadow-none border bg-card flex flex-col min-h-0 overflow-hidden">
+            <CardHeader className="py-2 px-3 pb-1.5 shrink-0 border-b">
+              <div className="flex items-center justify-between gap-3 flex-wrap">
+                <div>
+                  <CardTitle className="text-base font-semibold">Consumption by Meter Type</CardTitle>
+                  <CardDescription className="text-xs">
+                    Import, export, and net for the selected period
+                  </CardDescription>
+                </div>
+                <div className="flex items-center gap-3 text-sm font-semibold tabular-nums">
+                  <span className="text-green-600">Imp {formatNumber(totalImport, 0)}</span>
+                  <span className="text-blue-600">Exp {formatNumber(totalExport, 0)}</span>
+                  <span className="text-rose-600">Net {formatNumber(netConsumption, 0)}</span>
+                </div>
+              </div>
+            </CardHeader>
+            <CardContent className="p-0 flex-1 min-h-0 overflow-auto">
+              {aggregateLoading ? (
+                <div className="p-4">
+                  <Skeleton className="h-48 w-full" />
+                </div>
+              ) : (
+                <table className="w-full table-fixed text-base">
+                  <colgroup>
+                    <col className="w-[30%]" />
+                    <col className="w-[24%]" />
+                    <col className="w-[23%]" />
+                    <col className="w-[23%]" />
+                  </colgroup>
+                  <thead className="sticky top-0 bg-card z-10">
+                    <tr className="border-b text-muted-foreground text-sm">
+                      <th className="text-left font-medium py-1.5 px-3">Type</th>
+                      <th className="text-right font-medium py-1.5 px-2 text-green-700">Import</th>
+                      <th className="text-right font-medium py-1.5 px-2 text-blue-700">Export</th>
+                      <th className="text-right font-medium py-1.5 px-3 text-rose-700">Net</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {meterTypeBreakdownData.map((item) => (
+                      <tr
+                        key={item.meter_type}
+                        className="border-b border-border/40 hover:bg-muted/30 transition-colors"
+                      >
+                        <td className="py-2 px-3 font-medium truncate text-sm">
+                          {formatMeterType(item.meter_type)}
+                        </td>
+                        <td className="py-2 px-2 text-right tabular-nums font-semibold text-green-600">
+                          {formatNumber(item.total_import_kwh, 2)}
+                        </td>
+                        <td className="py-2 px-2 text-right tabular-nums font-semibold text-blue-600">
+                          {formatNumber(item.total_export_kwh, 2)}
+                        </td>
+                        <td className="py-2 px-3 text-right tabular-nums font-semibold text-rose-600">
+                          {formatNumber(item.net_kwh, 2)}
+                        </td>
+                      </tr>
+                    ))}
+                    <tr className="border-t-2 bg-muted/20">
+                      <td className="py-2.5 px-3 font-bold text-base">Total</td>
+                      <td className="py-2.5 px-2 text-right tabular-nums text-lg font-bold text-green-600">
+                        {formatNumber(totalImport, 2)}
+                      </td>
+                      <td className="py-2.5 px-2 text-right tabular-nums text-lg font-bold text-blue-600">
+                        {formatNumber(totalExport, 2)}
+                      </td>
+                      <td className="py-2.5 px-3 text-right tabular-nums text-lg font-bold text-rose-600">
+                        {formatNumber(netConsumption, 2)}
+                      </td>
+                    </tr>
+                  </tbody>
+                </table>
+              )}
+            </CardContent>
+          </Card>
+
+          <Card
+            className="col-span-12 xl:col-span-5 shadow-none border bg-card flex flex-col min-h-0 overflow-hidden cursor-pointer hover:bg-muted/20 transition-colors group"
+            onClick={() => setDrillDownView("meters")}
+          >
+            <CardHeader className="py-2 px-3 pb-1.5 shrink-0 border-b">
+              <div className="flex items-center justify-between gap-3 flex-wrap">
+                <div>
+                  <CardTitle className="text-base font-semibold flex items-center gap-1.5">
+                    Meter Health
+                    <ArrowRight className="h-3.5 w-3.5 text-muted-foreground opacity-0 group-hover:opacity-100 transition-opacity" />
+                  </CardTitle>
+                  <CardDescription className="text-xs">
+                    Online / offline by type — click for details
+                  </CardDescription>
+                </div>
+                <div className="flex items-center gap-3">
+                  <div className="text-right">
+                    <p className="text-xl font-bold tabular-nums leading-none">
+                      {onlineMeters}
+                      <span className="text-sm font-normal text-muted-foreground">
+                        {" "}
+                        / {totalMeters}
+                      </span>
+                    </p>
+                  </div>
+                  <Badge
+                    variant="outline"
+                    className={
+                      healthPercentage >= 90
+                        ? "bg-green-500/10 text-green-700 border-green-300"
+                        : healthPercentage >= 70
+                          ? "bg-amber-500/10 text-amber-700 border-amber-300"
+                          : "bg-red-500/10 text-red-700 border-red-300"
+                    }
+                  >
+                    {healthPercentage.toFixed(1)}%
+                  </Badge>
+                </div>
+              </div>
+            </CardHeader>
+            <CardContent className="p-0 flex-1 min-h-0 overflow-auto">
+              {isLoadingSummary ? (
+                <div className="p-4">
+                  <Skeleton className="h-48 w-full" />
+                </div>
+              ) : (
+                <table className="w-full table-fixed text-base">
+                  <colgroup>
+                    <col className="w-[34%]" />
+                    <col className="w-[16%]" />
+                    <col className="w-[16%]" />
+                    <col className="w-[34%]" />
+                  </colgroup>
+                  <thead className="sticky top-0 bg-card z-10">
+                    <tr className="border-b text-muted-foreground text-sm">
+                      <th className="text-left font-medium py-1.5 px-3">Type</th>
+                      <th className="text-right font-medium py-1.5 px-2 text-green-700">Online</th>
+                      <th className="text-right font-medium py-1.5 px-2 text-red-600">Offline</th>
+                      <th className="text-right font-medium py-1.5 px-3">Health</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {byMeterTypeFromSummary.map((mt) => {
+                      const pct =
+                        mt.online + mt.offline > 0
+                          ? Math.round((mt.online / (mt.online + mt.offline)) * 100)
+                          : 0;
+                      return (
+                        <tr
+                          key={mt.type}
+                          className="border-b border-border/40 hover:bg-muted/30 transition-colors"
+                        >
+                          <td className="py-2 px-3 font-medium truncate text-sm">
+                            {formatMeterType(mt.type)}
+                          </td>
+                          <td className="py-2 px-2 text-right tabular-nums font-semibold text-green-600">
+                            {mt.online}
+                          </td>
+                          <td className="py-2 px-2 text-right tabular-nums font-semibold text-red-500">
+                            {mt.offline}
+                          </td>
+                          <td className="py-2 px-3">
+                            <div className="flex items-center justify-end gap-2">
+                              <div className="w-20 h-1.5 rounded-full bg-muted overflow-hidden">
+                                <div
+                                  className={`h-full rounded-full ${
+                                    pct >= 90
+                                      ? "bg-green-500"
+                                      : pct >= 70
+                                        ? "bg-amber-500"
+                                        : "bg-red-500"
+                                  }`}
+                                  style={{ width: `${pct}%` }}
+                                />
+                              </div>
+                              <span
+                                className={`text-sm font-semibold tabular-nums w-9 text-right ${
+                                  pct >= 90
+                                    ? "text-green-700"
+                                    : pct >= 70
+                                      ? "text-amber-700"
+                                      : "text-red-700"
+                                }`}
+                              >
+                                {pct}%
+                              </span>
+                            </div>
+                          </td>
+                        </tr>
+                      );
+                    })}
+                    <tr className="border-t-2 bg-muted/20">
+                      <td className="py-2.5 px-3 font-bold text-base">Total</td>
+                      <td className="py-2.5 px-2 text-right tabular-nums text-lg font-bold text-green-600">
+                        {onlineMeters}
+                      </td>
+                      <td className="py-2.5 px-2 text-right tabular-nums text-lg font-bold text-red-500">
+                        {Math.max(totalMeters - onlineMeters, 0)}
+                      </td>
+                      <td className="py-2.5 px-3 text-right">
+                        <span
+                          className={`text-lg font-bold tabular-nums ${
+                            healthPercentage >= 90
+                              ? "text-green-700"
+                              : healthPercentage >= 70
+                                ? "text-amber-700"
+                                : "text-red-700"
+                          }`}
+                        >
+                          {healthPercentage.toFixed(1)}%
+                        </span>
+                      </td>
+                    </tr>
+                  </tbody>
+                </table>
+              )}
+            </CardContent>
+          </Card>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="space-y-2 p-4">
-      {}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-2 mb-2">
         <Card>
           <CardHeader className="pb-2">
-            <div className="flex items-center justify-between">
+            <div className="flex items-center justify-between gap-2">
               <CardTitle className="text-sm font-medium text-muted-foreground">
                 Energy Purchases (BSP Incomers)
               </CardTitle>
-              <span className="text-xs text-red-600 drop-shadow-xl text-muted-foreground animate-pulse">
-                ECG check meters
+              <span className="text-xs font-semibold text-red-600 animate-pulse shrink-0">
+                Check meter Imports
               </span>
             </div>
           </CardHeader>
@@ -7958,16 +8245,11 @@ export function OverviewMainTabV3({
           <CardContent>
             {systemLosses.kwh === null ? (
               <div className="flex items-center justify-between">
-                {}
                 <div>
                   <div className="text-lg font-bold">Not Yet Available</div>
                   <p className="text-xs text-muted-foreground mt-1">kWh</p>
                 </div>
-
-                {}
                 <div className="h-16 w-[3px] bg-gray-500 dark:bg-gray-700 mx-4"></div>
-
-                {}
                 <div className="text-right">
                   <div className="text-lg font-semibold">—</div>
                   <p className="text-xs text-muted-foreground mt-1">Loss %</p>
@@ -7975,20 +8257,15 @@ export function OverviewMainTabV3({
               </div>
             ) : (
               <div className="flex items-center justify-between">
-                {}
                 <div>
-                  <div className="text-lg font-bold">
+                  <div className={`text-lg font-bold ${systemLossColorClass}`}>
                     {formatNumber(systemLosses.kwh)}
                   </div>
                   <p className="text-xs text-muted-foreground mt-1">kWh</p>
                 </div>
-
-                {}
                 <div className="h-16 w-px bg-blue-600 dark:bg-gray-700 mx-4"></div>
-
-                {}
                 <div className="text-right">
-                  <div className="text-lg font-semibold">
+                  <div className={`text-lg font-semibold ${systemLossColorClass}`}>
                     {systemLosses.percentage.toFixed(2)}%
                   </div>
                   <p className="text-xs text-muted-foreground mt-1">Loss %</p>
@@ -7999,9 +8276,7 @@ export function OverviewMainTabV3({
         </Card>
       </div>
 
-      {}
       <div className="grid gap-2 md:grid-cols-3">
-        {}
         <Card className="border-2">
           <CardHeader className="pb-2">
             <div className="flex items-center justify-between">
@@ -8017,7 +8292,6 @@ export function OverviewMainTabV3({
                 <TrendingUp className="h-4 w-4 text-green-600" />
               </div>
             </div>
-            {}
             {aggregateLoading ? (
               <Skeleton className="h-8 w-40 mt-2" />
             ) : (
@@ -8033,7 +8307,7 @@ export function OverviewMainTabV3({
             ) : (
               meterTypeBreakdownData.map((item) => (
                 <div key={item.meter_type}>
-                  <div className="flex items-start justify-between py-1\.5">
+                  <div className="flex items-start justify-between py-1.5">
                     <div>
                       <p className="text-xs text-muted-foreground">
                         {formatMeterType(item.meter_type)}
@@ -8053,7 +8327,6 @@ export function OverviewMainTabV3({
           </CardContent>
         </Card>
 
-        {}
         <Card className="border-2">
           <CardHeader className="pb-2">
             <div className="flex items-center justify-between">
@@ -8084,7 +8357,7 @@ export function OverviewMainTabV3({
             ) : (
               meterTypeBreakdownData.map((item) => (
                 <div key={item.meter_type}>
-                  <div className="flex items-start justify-between py-1\.5">
+                  <div className="flex items-start justify-between py-1.5">
                     <div>
                       <p className="text-xs text-muted-foreground">
                         {formatMeterType(item.meter_type)}
@@ -8104,7 +8377,6 @@ export function OverviewMainTabV3({
           </CardContent>
         </Card>
 
-        {}
         <Card className="border-2">
           <CardHeader className="pb-2">
             <div className="flex items-center justify-between">
@@ -8131,7 +8403,7 @@ export function OverviewMainTabV3({
             ) : (
               meterTypeBreakdownData.map((item) => (
                 <div key={item.meter_type}>
-                  <div className="flex items-start justify-between py-1\.5">
+                  <div className="flex items-start justify-between py-1.5">
                     <div>
                       <p className="text-xs text-muted-foreground">
                         {formatMeterType(item.meter_type)}
@@ -8152,9 +8424,7 @@ export function OverviewMainTabV3({
         </Card>
       </div>
 
-      {}
       <div className="grid gap-2 md:grid-cols-2">
-        {}
         <Card
           className="relative overflow-hidden border-2 hover:shadow-lg transition-shadow cursor-pointer group"
           onClick={() => setDrillDownView("meters")}
@@ -8202,7 +8472,6 @@ export function OverviewMainTabV3({
                   </span>
                 </div>
                 <Progress value={healthPercentage} className="h-2" />
-                {}
                 <div className="space-y-1 pt-1">
                   {byMeterTypeFromSummary.map((mt) => (
                     <div
@@ -8231,7 +8500,6 @@ export function OverviewMainTabV3({
           </CardContent>
         </Card>
 
-        {}
         <Card className="border-2">
           <CardHeader className="pb-2">
             <div className="flex items-center justify-between">
@@ -8258,8 +8526,7 @@ export function OverviewMainTabV3({
               </p>
             ) : (
               <>
-                {}
-                <div className="flex items-center justify-between py-1\.5 bg-muted/30 rounded-md px-2 mb-2">
+                <div className="flex items-center justify-between py-1.5 bg-muted/30 rounded-md px-2 mb-2">
                   <span className="text-xs font-semibold text-foreground">
                     All Meters
                   </span>
@@ -8282,7 +8549,7 @@ export function OverviewMainTabV3({
                       : 0;
                   return (
                     <div key={mt.type}>
-                      <div className="flex items-center justify-between py-1\.5">
+                      <div className="flex items-center justify-between py-1.5">
                         <div className="flex items-center gap-2">
                           <div
                             className={`h-2 w-2 rounded-full ${pct >= 90 ? "bg-green-500" : pct >= 70 ? "bg-amber-500" : "bg-red-500"}`}

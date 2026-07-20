@@ -10,6 +10,9 @@ interface AmrConsumptionAggregateParams {
   dateFrom?: string;
   dateTo?: string;
   region?: string;
+  /** Additional group dimensions, e.g. "slt_type" */
+  group?: string | string[];
+  sltType?: string;
 }
 
 export function useAmrConsumptionAggregate(
@@ -20,13 +23,24 @@ export function useAmrConsumptionAggregate(
   if (params.dateFrom) queryString.append("dateFrom", params.dateFrom);
   if (params.dateTo) queryString.append("dateTo", params.dateTo);
   if (params.region) queryString.append("region", params.region);
+  if (params.sltType) queryString.append("sltType", params.sltType);
+  if (params.group) {
+    const groups = Array.isArray(params.group) ? params.group : [params.group];
+    for (const g of groups) {
+      if (g) queryString.append("group", g);
+    }
+  }
 
   return useQuery<AmrConsumptionAggregateItem[]>({
+    // v2: bust cache from responses that omitted slt_type before server restart
     queryKey: [
       "amr-consumption-aggregate",
+      "v2",
       params.dateFrom,
       params.dateTo,
       params.region,
+      params.group,
+      params.sltType,
     ],
     queryFn: async () => {
       const url = `${API_BASE_URL}/api/v1/amr/consumption/aggregate?${queryString.toString()}`;
@@ -37,6 +51,6 @@ export function useAmrConsumptionAggregate(
       return data.data || [];
     },
     staleTime: 5 * 60 * 1000,
-    refetchOnMount: false,
+    refetchOnMount: true,
   });
 }

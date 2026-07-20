@@ -1,8 +1,6 @@
 "use client"
 
-import { useEffect } from "react"
-
-import { useRef } from "react"
+import { useEffect, useRef, useState, useMemo } from "react"
 
 import type React from "react"
 import Link from "next/link"
@@ -22,10 +20,10 @@ import { Bar, BarChart, CartesianGrid, ResponsiveContainer, XAxis, YAxis, Legend
 import { ArrowLeftRight, TrendingUp, Activity, Database, ChevronDown, ChevronRight } from "lucide-react"
 import { Skeleton } from "@/components/ui/skeleton"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
-import { useState, useMemo } from "react"
 import { Checkbox } from "@/components/ui/checkbox"
 import { Label } from "@/components/ui/label"
 import { Button } from "@/components/ui/button"
+import { ExportButton } from "@/components/ui/export-button"
 
 interface DistrictBoundaryTabProps {
     dateRange: { start: string; end: string }
@@ -49,6 +47,9 @@ export function DistrictBoundaryTab({
                                         locations,
                                     }: DistrictBoundaryTabProps) {
     const filters = useAppStore((state) => state.filters)
+    const statusTimelineChartRef = useRef<HTMLDivElement>(null)
+    const trendsChartRef = useRef<HTMLDivElement>(null)
+    const comparisonChartRef = useRef<HTMLDivElement>(null)
 
     const params = {
         dateFrom: filters.dateRange ? formatApiDate(filters.dateRange.start) : undefined,
@@ -576,6 +577,69 @@ export function DistrictBoundaryTab({
     const paginatedStatusData = processedStatusData
     const totalStatusPages = detailsData?.pagination?.total_pages || 1
 
+    const exportDatasets = useMemo(() => {
+        const statusTimeline = statusTimelineData.map((d) => ({
+            date: d.date,
+            online: d.online,
+            offline: d.offline,
+        }))
+
+        const meterStatus = processedStatusData.map((m) => ({
+            meter_number: m.meter_number,
+            boundary_point: m.boundary_metering_point,
+            location: m.location,
+            status: m.status,
+            total_consumption_kwh: m.totalConsumption,
+            uptime_pct: m.uptime,
+            days_offline: m.daysOffline,
+            last_reading: m.lastReadingTime,
+        }))
+
+        const trends = (boundaryData?.timeSeriesData || []).map((d: any) => ({
+            date: d.date,
+            import_kwh: d.importKwh ?? d.import ?? 0,
+            export_kwh: d.exportKwh ?? d.export ?? 0,
+            ...Object.fromEntries(
+                Object.entries(d).filter(([k]) => k !== "date" && k !== "importKwh" && k !== "exportKwh" && k !== "import" && k !== "export"),
+            ),
+        }))
+
+        const comparison = (boundaryData?.byBoundaryPoint || []).map((bp: any) => ({
+            boundary_point: bp.boundaryPoint,
+            import_kwh: bp.importKwh,
+            export_kwh: bp.exportKwh,
+            net_kwh: bp.netKwh,
+        }))
+
+        const pointDetails = tableData.map((bp) => ({
+            boundary_point: bp.boundaryPoint,
+            import_kwh: bp.importKwh,
+            export_kwh: bp.exportKwh,
+            net_kwh: bp.netKwh,
+        }))
+
+        const flowAnalysis = displayFlowData.flatMap((bp) =>
+            bp.flows.map((flow: any) => ({
+                boundary_point: bp.boundaryPoint,
+                meter_number: flow.meterNumber,
+                from: flow.from,
+                to: flow.to,
+                location: flow.location,
+                import_kwh: flow.import,
+                export_kwh: flow.export,
+                net_kwh: flow.net,
+            })),
+        )
+
+        return { statusTimeline, meterStatus, trends, comparison, pointDetails, flowAnalysis }
+    }, [
+        statusTimelineData,
+        processedStatusData,
+        boundaryData,
+        tableData,
+        displayFlowData,
+    ])
+
     const [statusSortField, setStatusSortField] = useState<string>("meter_number")
     const [statusSortDirection, setStatusSortDirection] = useState<"asc" | "desc">("asc")
 
@@ -699,8 +763,17 @@ export function DistrictBoundaryTab({
 
                     <Card>
                         <CardHeader>
-                            <CardTitle>Status Timeline</CardTitle>
-                            <CardDescription>Daily online/offline meter count</CardDescription>
+                            <div className="flex items-start justify-between gap-3">
+                                <div>
+                                    <CardTitle>Status Timeline</CardTitle>
+                                    <CardDescription>Daily online/offline meter count</CardDescription>
+                                </div>
+                                <ExportButton
+                                    data={exportDatasets.statusTimeline}
+                                    filename="district-boundary-status-timeline"
+                                    chartRef={statusTimelineChartRef}
+                                />
+                            </div>
                         </CardHeader>
                         <CardContent>
                             {!timelineData || statusTimelineData.length === 0 ? (
@@ -708,6 +781,7 @@ export function DistrictBoundaryTab({
                                     No status data available
                                 </div>
                             ) : (
+                                <div ref={statusTimelineChartRef} className="bg-background rounded-md p-2">
                                 <ChartContainer
                                     config={{
                                         online: {
@@ -736,14 +810,23 @@ export function DistrictBoundaryTab({
                                         </BarChart>
                                     </ResponsiveContainer>
                                 </ChartContainer>
+                                </div>
                             )}
                         </CardContent>
                     </Card>
 
                     <Card>
                         <CardHeader>
-                            <CardTitle>Meter Status Details</CardTitle>
-                            <CardDescription>Individual meter health and reporting status</CardDescription>
+                            <div className="flex items-start justify-between gap-3">
+                                <div>
+                                    <CardTitle>Meter Status Details</CardTitle>
+                                    <CardDescription>Individual meter health and reporting status</CardDescription>
+                                </div>
+                                <ExportButton
+                                    data={exportDatasets.meterStatus}
+                                    filename="district-boundary-meter-status"
+                                />
+                            </div>
                             <div className="flex items-center justify-between gap-4">
                                 <div className="flex items-center gap-2">
                                     <Button
@@ -981,12 +1064,17 @@ export function DistrictBoundaryTab({
             <div className="grid gap-4 md:grid-cols-2">
                 <Card className="md:col-span-2">
                     <CardHeader>
-                        <div className="flex items-center justify-between">
+                        <div className="flex items-center justify-between gap-3 flex-wrap">
                             <div>
                                 <CardTitle>District Energy Transfer Trends</CardTitle>
                                 <CardDescription>Import and export patterns across district points over time</CardDescription>
                             </div>
-                            <div className="flex items-center gap-4">
+                            <div className="flex items-center gap-4 flex-wrap">
+                                <ExportButton
+                                    data={exportDatasets.trends}
+                                    filename="district-boundary-trends"
+                                    chartRef={trendsChartRef}
+                                />
                                 <div className="flex items-center gap-2">
                                     <Checkbox id="trends-import" checked={showTrendsImport} onCheckedChange={setShowTrendsImport} />
                                     <Label htmlFor="trends-import" className="text-sm font-normal cursor-pointer">
@@ -1062,6 +1150,7 @@ export function DistrictBoundaryTab({
                                 No data available for the selected filters
                             </div>
                         ) : (
+                            <div ref={trendsChartRef} className="bg-background rounded-md p-2">
                             <ChartContainer
                                 config={{
                                     import: {
@@ -1128,18 +1217,24 @@ export function DistrictBoundaryTab({
                                     </LineChart>
                                 </ResponsiveContainer>
                             </ChartContainer>
+                            </div>
                         )}
                     </CardContent>
                 </Card>
 
                 <Card className="md:col-span-2">
                     <CardHeader>
-                        <div className="flex items-center justify-between">
+                        <div className="flex items-center justify-between gap-3 flex-wrap">
                             <div>
                                 <CardTitle>District Point Comparison</CardTitle>
                                 <CardDescription>Energy transfer by district metering point</CardDescription>
                             </div>
-                            <div className="flex items-center gap-4">
+                            <div className="flex items-center gap-4 flex-wrap">
+                                <ExportButton
+                                    data={exportDatasets.comparison}
+                                    filename="district-boundary-comparison"
+                                    chartRef={comparisonChartRef}
+                                />
                                 <div className="flex items-center gap-2">
                                     <Checkbox
                                         id="comparison-import"
@@ -1167,6 +1262,7 @@ export function DistrictBoundaryTab({
                         {isLoading ? (
                             <Skeleton className="h-[370px] w-full" />
                         ) : (
+                            <div ref={comparisonChartRef} className="bg-background rounded-md p-2">
                             <ChartContainer
                                 config={{
                                     importKwh: {
@@ -1196,16 +1292,25 @@ export function DistrictBoundaryTab({
                                     </BarChart>
                                 </ResponsiveContainer>
                             </ChartContainer>
+                            </div>
                         )}
                     </CardContent>
                 </Card>
 
                 <Card className="md:col-span-2">
                     <CardHeader>
-                        <CardTitle>District Point Details</CardTitle>
-                        <CardDescription>
-                            Detailed breakdown of energy transfers by district point (click to expand)
-                        </CardDescription>
+                        <div className="flex items-start justify-between gap-3">
+                            <div>
+                                <CardTitle>District Point Details</CardTitle>
+                                <CardDescription>
+                                    Detailed breakdown of energy transfers by district point (click to expand)
+                                </CardDescription>
+                            </div>
+                            <ExportButton
+                                data={exportDatasets.pointDetails}
+                                filename="district-boundary-point-details"
+                            />
+                        </div>
                     </CardHeader>
                     <CardContent>
                         {!meterRecords ? (
@@ -1347,18 +1452,24 @@ export function DistrictBoundaryTab({
 
                 <Card className="md:col-span-2">
                     <CardHeader>
-                        <div className="flex items-center justify-between">
+                        <div className="flex items-center justify-between gap-3 flex-wrap">
                             <div>
                                 <CardTitle>Boundary Flow Analysis(Online meters)</CardTitle>
                                 <CardDescription>Bidirectional energy flow across district boundary points</CardDescription>
                             </div>
-                            <button
-                                onClick={() => setIsFlowFlipped(!isFlowFlipped)}
-                                className="flex items-center gap-2 px-3 py-1.5 text-sm border rounded-md bg-background hover:bg-muted transition-colors"
-                            >
-                                <ArrowLeftRight className="h-4 w-4" />
-                                <span>{isFlowFlipped ? "Show Default View" : "Flip Direction"}</span>
-                            </button>
+                            <div className="flex items-center gap-2">
+                                <ExportButton
+                                    data={exportDatasets.flowAnalysis}
+                                    filename="district-boundary-flow-analysis"
+                                />
+                                <button
+                                    onClick={() => setIsFlowFlipped(!isFlowFlipped)}
+                                    className="flex items-center gap-2 px-3 py-1.5 text-sm border rounded-md bg-background hover:bg-muted transition-colors"
+                                >
+                                    <ArrowLeftRight className="h-4 w-4" />
+                                    <span>{isFlowFlipped ? "Show Default View" : "Flip Direction"}</span>
+                                </button>
+                            </div>
                         </div>
                     </CardHeader>
                     <CardContent>

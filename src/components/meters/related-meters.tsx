@@ -1,8 +1,10 @@
 "use client"
 
+import { useMemo } from "react"
 import Link from "next/link"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
+import { ExportButton } from "@/components/ui/export-button"
 import type { Meter } from "@/lib/types/api"
 import { ExternalLink } from "lucide-react"
 
@@ -10,9 +12,10 @@ interface RelatedMetersProps {
   meters: Meter[]
   currentMeterType: string
   filterType: "station" | "boundary" | "district"
+  filenamePrefix?: string
 }
 
-export function RelatedMeters({ meters, currentMeterType, filterType }: RelatedMetersProps) {
+export function RelatedMeters({ meters, currentMeterType, filterType, filenamePrefix = "meter" }: RelatedMetersProps) {
   const title =
     filterType === "station"
       ? "Same Station"
@@ -20,11 +23,35 @@ export function RelatedMeters({ meters, currentMeterType, filterType }: RelatedM
         ? "Same Boundary Point"
         : "Same District"
 
+  const exportData = useMemo(
+    () =>
+      meters.map((meter) => ({
+        meter_number: meter.meter_number,
+        meter_type: meter.meter_type,
+        location: meter.location ?? "",
+        station: meter.station ?? "",
+        region: meter.region ?? "",
+        district: meter.district ?? "",
+        status: meter.status ?? "",
+        boundary_metering_point: meter.boundary_metering_point ?? "",
+      })),
+    [meters]
+  )
+
   return (
     <Card>
       <CardHeader>
-        <CardTitle className="text-sm">Related Meters</CardTitle>
-        <p className="text-xs text-muted-foreground">{title}</p>
+        <div className="flex items-start justify-between gap-3">
+          <div>
+            <CardTitle className="text-sm">Related Meters</CardTitle>
+            <p className="text-xs text-muted-foreground">{title}</p>
+          </div>
+          <ExportButton
+            data={exportData}
+            filename={`${filenamePrefix}-related-meters`}
+            disabled={meters.length === 0}
+          />
+        </div>
       </CardHeader>
       <CardContent>
         <div className="space-y-2">

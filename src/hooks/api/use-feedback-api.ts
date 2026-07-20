@@ -63,7 +63,7 @@ interface UpdateStatusResponse {
 }
 
 // Hook to fetch all feedback with pagination
-export function useAllFeedback(limit = 50, offset = 0) {
+export function useAllFeedback(limit = 50, offset = 0, options?: { refreshInterval?: number }) {
   const url = `${API_BASE_URL}/api/v1/feedback?limit=${limit}&offset=${offset}`
 
   const { data, error, isLoading, mutate } = useSWR<FeedbackListResponse>(url, async (url: string) => {
@@ -72,7 +72,7 @@ export function useAllFeedback(limit = 50, offset = 0) {
       throw new Error("Failed to fetch feedback")
     }
     return response.json()
-  })
+  }, { refreshInterval: options?.refreshInterval })
 
   return {
     feedback: data?.data || [],

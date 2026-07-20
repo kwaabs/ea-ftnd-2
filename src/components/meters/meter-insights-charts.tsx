@@ -1,8 +1,9 @@
 "use client"
 
 import { Button } from "@/components/ui/button"
+import { ExportButton } from "@/components/ui/export-button"
 
-import { useState } from "react"
+import { useState, useRef } from "react"
 
 import { useMemo } from "react"
 import { format, parseISO, getDay, getISOWeek, getYear } from "date-fns"
@@ -32,14 +33,19 @@ interface StatusData {
 interface MeterInsightsChartsProps {
     consumptionData: ConsumptionData[]
     statusData: StatusData[]
+    filenamePrefix?: string
 }
 
 const WEEKDAY_NAMES = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"]
 
-export function MeterInsightsCharts({ consumptionData, statusData }: MeterInsightsChartsProps) {
+export function MeterInsightsCharts({ consumptionData, statusData, filenamePrefix = "meter" }: MeterInsightsChartsProps) {
     const [weeklyGrowthView, setWeeklyGrowthView] = useState<"import" | "export">("import")
     const [weeklyPatternView, setWeeklyPatternView] = useState<"import" | "export" | "both">("both")
-
+    const balanceChartRef = useRef<HTMLDivElement>(null)
+    const dowChartRef = useRef<HTMLDivElement>(null)
+    const qualityChartRef = useRef<HTMLDivElement>(null)
+    const varianceChartRef = useRef<HTMLDivElement>(null)
+    const wowChartRef = useRef<HTMLDivElement>(null)
     console.log("[v0] MeterInsightsCharts - Data received:", {
         consumptionDataLength: consumptionData.length,
         statusDataLength: statusData.length,
@@ -230,10 +236,17 @@ export function MeterInsightsCharts({ consumptionData, statusData }: MeterInsigh
                 {/* Import/Export Balance */}
                 <Card>
                     <CardHeader>
-                        <CardTitle className="text-base">Import/Export Balance</CardTitle>
+                        <div className="flex items-center justify-between gap-3 flex-wrap">
+                            <CardTitle className="text-base">Import/Export Balance</CardTitle>
+                            <ExportButton
+                                data={balanceData.map((d) => ({ type: d.name, kwh: d.value }))}
+                                filename={`${filenamePrefix}-import-export-balance`}
+                                chartRef={balanceChartRef}
+                            />
+                        </div>
                     </CardHeader>
                     <CardContent>
-                        <div className="flex items-center gap-6">
+                        <div ref={balanceChartRef} className="flex items-center gap-6 bg-background rounded-md p-2">
                             <div style={{ width: '50%', height: 180 }}>
                                 <ResponsiveContainer>
                                     <PieChart>
@@ -278,9 +291,18 @@ export function MeterInsightsCharts({ consumptionData, statusData }: MeterInsigh
 
                 {/* Day of Week Pattern */}
                 <Card>
-                    <CardHeader className="flex flex-row items-center justify-between">
+                    <CardHeader className="flex flex-row items-center justify-between flex-wrap gap-2">
                         <CardTitle className="text-base">D-O-W Consumption Pattern</CardTitle>
-                        <div className="flex gap-2">
+                        <div className="flex gap-2 flex-wrap items-center">
+                            <ExportButton
+                                data={weekdayPattern.map((d) => ({
+                                    day: d.day,
+                                    avg_import_kwh: d.avgImport,
+                                    avg_export_kwh: d.avgExport,
+                                }))}
+                                filename={`${filenamePrefix}-dow-pattern`}
+                                chartRef={dowChartRef}
+                            />
                             <Button
                                 variant={weeklyPatternView === "both" ? "default" : "outline"}
                                 size="sm"
@@ -306,7 +328,7 @@ export function MeterInsightsCharts({ consumptionData, statusData }: MeterInsigh
                     </CardHeader>
                     <CardContent>
                         {weekdayPattern && weekdayPattern.length > 0 ? (
-                            <div style={{ width: '100%', height: 180 }}>
+                            <div ref={dowChartRef} className="bg-background rounded-md p-2" style={{ width: '100%', height: 180 }}>
                                 <ResponsiveContainer>
                                     <BarChart data={weekdayPattern}>
                                         <CartesianGrid strokeDasharray="3 3" className="stroke-muted" />
@@ -336,9 +358,20 @@ export function MeterInsightsCharts({ consumptionData, statusData }: MeterInsigh
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
                 {/* Reading Quality */}
                 <Card>
-                    <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                    <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2 flex-wrap gap-2">
                         <CardTitle className="text-base">Data Quality & Completeness</CardTitle>
                         <div className="flex items-center gap-2">
+                            <ExportButton
+                                data={readingQuality.map((d) => ({
+                                    date: d.date,
+                                    reading_count: d.readingCount,
+                                    expected: d.expected,
+                                    completeness_pct: d.completeness,
+                                    status: d.status,
+                                }))}
+                                filename={`${filenamePrefix}-data-quality`}
+                                chartRef={qualityChartRef}
+                            />
                             {avgCompleteness >= 95 ? (
                                 <CheckCircle2 className="h-4 w-4 text-green-600" />
                             ) : (
@@ -349,7 +382,7 @@ export function MeterInsightsCharts({ consumptionData, statusData }: MeterInsigh
                     </CardHeader>
                     <CardContent>
                         {readingQuality && readingQuality.length > 0 ? (
-                            <div style={{ width: '100%', height: 180 }}>
+                            <div ref={qualityChartRef} className="bg-background rounded-md p-2" style={{ width: '100%', height: 180 }}>
                                 <ResponsiveContainer>
                                     <BarChart data={readingQuality}>
                                         <CartesianGrid strokeDasharray="3 3" className="stroke-muted" />
@@ -372,7 +405,7 @@ export function MeterInsightsCharts({ consumptionData, statusData }: MeterInsigh
 
                 {/* Consumption Variance & Anomalies */}
                 <Card>
-                    <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                    <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2 flex-wrap gap-2">
                         <div className="flex-1">
                             <CardTitle className="text-base">Consumption Variability</CardTitle>
                             <p className="text-xs text-muted-foreground mt-1">
@@ -394,16 +427,30 @@ export function MeterInsightsCharts({ consumptionData, statusData }: MeterInsigh
                                 })()}
                             </p>
                         </div>
-                        {anomalyCount > 0 && (
-                            <div className="flex items-center gap-2">
-                                <AlertTriangle className="h-4 w-4 text-orange-600" />
-                                <span className="text-sm font-semibold">{anomalyCount} outliers</span>
-                            </div>
-                        )}
+                        <div className="flex items-center gap-2">
+                            <ExportButton
+                                data={varianceData.map((d) => ({
+                                    date: d.date,
+                                    import_kwh: d.value,
+                                    avg_kwh: d.avg,
+                                    upper_bound: d.upper,
+                                    lower_bound: d.lower,
+                                    is_anomaly: d.isAnomaly,
+                                }))}
+                                filename={`${filenamePrefix}-variability`}
+                                chartRef={varianceChartRef}
+                            />
+                            {anomalyCount > 0 && (
+                                <div className="flex items-center gap-2">
+                                    <AlertTriangle className="h-4 w-4 text-orange-600" />
+                                    <span className="text-sm font-semibold">{anomalyCount} outliers</span>
+                                </div>
+                            )}
+                        </div>
                     </CardHeader>
                     <CardContent>
                         {varianceData && varianceData.length > 0 ? (
-                            <div style={{ width: '100%', height: 180 }}>
+                            <div ref={varianceChartRef} className="bg-background rounded-md p-2" style={{ width: '100%', height: 180 }}>
                                 <ResponsiveContainer>
                                     <AreaChart data={varianceData}>
                                         <CartesianGrid strokeDasharray="3 3" className="stroke-muted" />
@@ -438,9 +485,21 @@ export function MeterInsightsCharts({ consumptionData, statusData }: MeterInsigh
 
             {/* Row 3: Week-over-Week Growth */}
             <Card>
-                <CardHeader className="flex flex-row items-center justify-between">
+                <CardHeader className="flex flex-row items-center justify-between flex-wrap gap-2">
                     <CardTitle className="text-base">Week-over-Week Growth Trend</CardTitle>
-                    <div className="flex gap-2">
+                    <div className="flex gap-2 flex-wrap items-center">
+                        <ExportButton
+                            data={weeklyGrowth.map((d) => ({
+                                week: d.week,
+                                week_label: d.weekLabel,
+                                date_range: d.dateRange,
+                                total_kwh: d.total,
+                                growth_pct: d.growth,
+                                metric: weeklyGrowthView,
+                            }))}
+                            filename={`${filenamePrefix}-wow-growth`}
+                            chartRef={wowChartRef}
+                        />
                         <Button
                             variant={weeklyGrowthView === "import" ? "default" : "outline"}
                             size="sm"
@@ -459,7 +518,7 @@ export function MeterInsightsCharts({ consumptionData, statusData }: MeterInsigh
                 </CardHeader>
                 <CardContent>
                     {weeklyGrowth && weeklyGrowth.length > 0 ? (
-                        <div style={{ width: '100%', height: 180 }}>
+                        <div ref={wowChartRef} className="bg-background rounded-md p-2" style={{ width: '100%', height: 180 }}>
                             <ResponsiveContainer>
                                 <LineChart data={weeklyGrowth}>
                                     <CartesianGrid strokeDasharray="3 3" className="stroke-muted" />

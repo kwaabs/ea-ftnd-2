@@ -10,6 +10,7 @@ import { Skeleton } from "@/components/ui/skeleton"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { useMmsCustomerSalesDetail } from "@/hooks/api/use-mms-customer-sales-detail-api"
 import { ArrowUpDown, ChevronLeft, ChevronRight, Search, Zap } from "lucide-react"
+import { ExportButton } from "@/components/ui/export-button"
 
 interface MmsCustomerSalesDetailProps {
   dateRange: { start: string; end: string }
@@ -135,9 +136,27 @@ export function MmsCustomerSalesDetail({ dateRange, region, district }: MmsCusto
               Individual prepaid meter readings — sorted by highest kWh by default
             </CardDescription>
           </div>
-          <Badge variant="outline" className="text-sm font-medium px-3 py-1 border-green-300 text-green-700">
-            {filteredAndSorted.length.toLocaleString()} meters
-          </Badge>
+          <div className="flex items-center gap-2">
+            <ExportButton
+              data={filteredAndSorted.map((r: any) => ({
+                customer_name: r.customer_name,
+                meter_number: r.meter_number,
+                account_number: r.account_number,
+                region: r.region,
+                district: r.district,
+                manufacturer: r.manufacturer,
+                model: r.model,
+                last_month_kwh: r.sts_last_month_kwh_read,
+                last_month_credit: r.sts_last_month_credit_read,
+                credit_balance: r.sts_credit_balance_remaining,
+                date_time: r.date_time,
+              }))}
+              filename={`${(region || "all").replace(/\s+/g, "-").toLowerCase()}-mms-customer-sales`}
+            />
+            <Badge variant="outline" className="text-sm font-medium px-3 py-1 border-green-300 text-green-700">
+              {filteredAndSorted.length.toLocaleString()} meters
+            </Badge>
+          </div>
         </div>
       </CardHeader>
       <CardContent className="space-y-4">

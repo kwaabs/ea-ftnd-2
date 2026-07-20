@@ -1,10 +1,11 @@
 "use client"
 
-import { useMemo, useState } from "react"
+import { useMemo, useState, useRef } from "react"
 import { format, parseISO } from "date-fns"
 import { Area, AreaChart, Bar, BarChart, CartesianGrid, ComposedChart, Legend, Line, LineChart, ReferenceLine, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts"
 import { TrendingUp, TrendingDown, Zap, BarChart3, LineChart as LineChartIcon } from "lucide-react"
 import { Button } from "@/components/ui/button"
+import { ExportButton } from "@/components/ui/export-button"
 
 interface ConsumptionData {
   consumption_date: string
@@ -17,10 +18,12 @@ interface MeterConsumptionChartProps {
   data: ConsumptionData[]
   comparisonData?: ConsumptionData[]
   comparisonMode: "week" | "month"
+  filenamePrefix?: string
 }
 
-export function MeterConsumptionChart({ data, comparisonData, comparisonMode }: MeterConsumptionChartProps) {
+export function MeterConsumptionChart({ data, comparisonData, comparisonMode, filenamePrefix = "meter" }: MeterConsumptionChartProps) {
   const [visibleSeries, setVisibleSeries] = useState<("import" | "export" | "net")[]>(["import", "export", "net"])
+  const chartRef = useRef<HTMLDivElement>(null)
 
   const chartData = useMemo(() => {
     const grouped = new Map<string, { date: string; import: number; export: number; net: number; peak?: boolean }>()
@@ -53,6 +56,17 @@ export function MeterConsumptionChart({ data, comparisonData, comparisonMode }: 
     return result
   }, [data])
 
+  const exportData = useMemo(
+    () =>
+      chartData.map((d) => ({
+        date: d.date,
+        import_kwh: d.import,
+        export_kwh: d.export,
+        net_kwh: d.net,
+        is_peak: Boolean(d.peak),
+      })),
+    [chartData]
+  )
   const comparisonChartData = useMemo(() => {
     if (!comparisonData) return []
 
@@ -136,41 +150,48 @@ export function MeterConsumptionChart({ data, comparisonData, comparisonMode }: 
   return (
     <div className="space-y-4">
       {/* Series Selection */}
-      <div className="flex items-center gap-4">
-        <span className="text-sm font-medium text-muted-foreground">Display:</span>
-        <div className="flex gap-3">
-          <label className="flex items-center gap-2 cursor-pointer">
-            <input 
-              type="checkbox" 
-              checked={visibleSeries.includes("import")}
-              onChange={() => toggleSeries("import")}
-              className="w-4 h-4 rounded border-gray-300 text-green-600 focus:ring-green-500"
-            />
-            <span className="text-sm font-medium">Import Energy</span>
-          </label>
-          <label className="flex items-center gap-2 cursor-pointer">
-            <input 
-              type="checkbox" 
-              checked={visibleSeries.includes("export")}
-              onChange={() => toggleSeries("export")}
-              className="w-4 h-4 rounded border-gray-300 text-red-600 focus:ring-red-500"
-            />
-            <span className="text-sm font-medium">Export Energy</span>
-          </label>
-          <label className="flex items-center gap-2 cursor-pointer">
-            <input 
-              type="checkbox" 
-              checked={visibleSeries.includes("net")}
-              onChange={() => toggleSeries("net")}
-              className="w-4 h-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500"
-            />
-            <span className="text-sm font-medium">Net Consumption</span>
-          </label>
+      <div className="flex items-center justify-between gap-3 flex-wrap">
+        <div className="flex items-center gap-4 flex-wrap">
+          <span className="text-sm font-medium text-muted-foreground">Display:</span>
+          <div className="flex gap-3">
+            <label className="flex items-center gap-2 cursor-pointer">
+              <input 
+                type="checkbox" 
+                checked={visibleSeries.includes("import")}
+                onChange={() => toggleSeries("import")}
+                className="w-4 h-4 rounded border-gray-300 text-green-600 focus:ring-green-500"
+              />
+              <span className="text-sm font-medium">Import Energy</span>
+            </label>
+            <label className="flex items-center gap-2 cursor-pointer">
+              <input 
+                type="checkbox" 
+                checked={visibleSeries.includes("export")}
+                onChange={() => toggleSeries("export")}
+                className="w-4 h-4 rounded border-gray-300 text-red-600 focus:ring-red-500"
+              />
+              <span className="text-sm font-medium">Export Energy</span>
+            </label>
+            <label className="flex items-center gap-2 cursor-pointer">
+              <input 
+                type="checkbox" 
+                checked={visibleSeries.includes("net")}
+                onChange={() => toggleSeries("net")}
+                className="w-4 h-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+              />
+              <span className="text-sm font-medium">Net Consumption</span>
+            </label>
+          </div>
         </div>
+        <ExportButton
+          data={exportData}
+          filename={`${filenamePrefix}-daily-consumption`}
+          chartRef={chartRef}
+        />
       </div>
 
       {/* Main Chart */}
-      <div className="h-[350px]">
+      <div ref={chartRef} className="h-[350px] bg-background rounded-md p-2">
         <ResponsiveContainer width="100%" height="100%">
           <ComposedChart data={chartData}>
             <defs>

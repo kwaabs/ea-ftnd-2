@@ -1,17 +1,22 @@
 "use client"
-import Image from "next/image"
-import { Filter, Calendar } from "lucide-react"
+import Link from "next/link"
+import { Filter, Calendar, BarChart3 } from "lucide-react"
 import { useState, Suspense } from "react"
 import { Button } from "@/components/ui/button"
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
 import { useAppStore } from "@/stores/app-store"
+import { useUserStore } from "@/stores/user-store"
 import { HeaderFilterDropdown } from "@/components/layout/header-filter-dropdown"
-import { formatApiDate } from "@/lib/utils"
 import { Breadcrumbs } from "./breadcrumbs"
+import { NotificationBell } from "@/components/comments/notification-bell"
+import { NOTIFY_EMAILS } from "@/lib/notify-config"
 
 export function Header() {
     const [isFilterOpen, setIsFilterOpen] = useState(false)
     const { filters } = useAppStore()
+    const { user } = useUserStore()
+    const userEmail = user?.email || user?.username || ""
+    const canSeeNotifications = NOTIFY_EMAILS.includes(userEmail)
 
     const dateRange = {
         start: filters.dateRange?.start || new Date(new Date().setDate(new Date().getDate() - 30)).toISOString(),
@@ -34,19 +39,11 @@ export function Header() {
         endDateObj.getDate() === today.getDate()
 
     return (
-        <header className="sticky top-0 z-50 w-full border-b border-border bg-card">
+        <header className="sticky top-0 z-50 w-full border-b border-border bg-card shrink-0">
             <div className="flex h-16 items-center px-6 gap-4">
-                {/* Left section - Logo and Title */}
-                <div className="flex items-center gap-4">
-                    <Image src="/images/ecg-logo.jpg" alt="ECG Logo" width={48} height={48} />
-                    <h1 className="text-xl font-semibold text-foreground whitespace-nowrap">
-                        Electric energy accounting and monitoring
-                    </h1>
-                </div>
-
-                {/* Middle section - Breadcrumbs */}
+                {/* Breadcrumbs */}
                 <div className="flex-1 flex items-center min-w-0">
-                    <Suspense fallback={<div className="h-4 w-32 bg-gray-200 animate-pulse rounded" />}>
+                    <Suspense fallback={<div className="h-5 w-40 bg-gray-200 animate-pulse rounded" />}>
                         <Breadcrumbs />
                     </Suspense>
                 </div>
@@ -70,6 +67,16 @@ export function Header() {
                         )}
                     </div>
 
+
+                    {canSeeNotifications && (
+                        <Link href="/admin/logins">
+                            <Button variant="outline" size="icon" title="Login activity">
+                                <BarChart3 className="h-4 w-4" />
+                            </Button>
+                        </Link>
+                    )}
+
+                    {canSeeNotifications && <NotificationBell userEmail={userEmail} />}
 
                     <Popover open={isFilterOpen} onOpenChange={setIsFilterOpen}>
                         <PopoverTrigger asChild>

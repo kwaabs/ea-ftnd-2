@@ -2,7 +2,7 @@
 
 import Link from "next/link"
 import { usePathname } from "next/navigation"
-import { ChevronRight, Home } from "lucide-react"
+import { ChevronRight } from "lucide-react"
 import { Fragment } from "react"
 
 export function Breadcrumbs() {
@@ -23,17 +23,15 @@ export function Breadcrumbs() {
     return { href, label }
   })
 
-  return (
-    <nav className="flex items-center space-x-2 text-sm">
-      <Link href="/dashboard" className="flex items-center text-gray-600 hover:text-gray-900 transition-colors">
-        <Home className="h-4 w-4" />
-      </Link>
+  if (breadcrumbs.length === 0) return null
 
+  return (
+    <nav className="flex items-center space-x-2.5 text-base">
       {breadcrumbs.map((crumb, index) => (
         <Fragment key={crumb.href}>
-          <ChevronRight className="h-4 w-4 text-gray-400" />
+          {index > 0 && <ChevronRight className="h-5 w-5 text-gray-400 shrink-0" />}
           {index === breadcrumbs.length - 1 ? (
-            <span className="font-medium text-gray-900">{crumb.label}</span>
+            <span className="font-semibold text-gray-900">{crumb.label}</span>
           ) : (
             <Link href={crumb.href} className="text-gray-600 hover:text-gray-900 transition-colors">
               {crumb.label}

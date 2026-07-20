@@ -415,7 +415,15 @@ export interface RegionalMapResponse {
 }
 
 export interface CustomerConsumptionAggregateItem {
-  regionname: string
+  regionname?: string
+  districtname?: string
+  contractstatus?: string
+  servicetype?: string
+  serviceclass?: string
+  tariffclasscode?: string
+  customertype?: string
+  accounttype?: string
+  mda?: string
   customer_count: number
   sum_lastbillamount: number
   sum_lastbillconsumption: number | null
@@ -473,6 +481,10 @@ export interface MmsCustomerSalesAggregateItem {
   data_src: string
   region?: string | null
   district?: string | null
+  contract_type?: string | null
+  tariff?: string | null
+  manufacturer?: string | null
+  model?: string | null
   customer_count: number
   sum_credit_balance_remaining: number
   sum_last_month_credit_read: number
@@ -536,6 +548,11 @@ export interface AmrConsumptionAggregateItem {
   group_period: string
   system_name: "export_kwh" | "import_kwh"
   region: string
+  district?: string
+  community?: string
+  tariff_class?: string
+  customer_type?: string
+  slt_type?: string
   total_consumption: number
   active_meters: number
   total_meter_count: number

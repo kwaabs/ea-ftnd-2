@@ -1,6 +1,6 @@
 "use client"
 
-import { useMemo, useState } from "react"
+import { useMemo, useState, useRef } from "react"
 import Link from "next/link"
 
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
@@ -16,6 +16,7 @@ import {
     DialogTitle,
     DialogTrigger,
 } from "@/components/ui/dialog"
+import { ExportButton } from "@/components/ui/export-button"
 
 import {
     useRegionalBoundaryAggregate,
@@ -67,6 +68,9 @@ export function BoundaryDetail({ boundaryMeteringPoint, type }: BoundaryDetailPr
     const [statusFilter, setStatusFilter] = useState<"all" | "online" | "offline">("all")
     const [statusPage, setStatusPage] = useState(1)
     const [statusSearch, setStatusSearch] = useState("")
+    const dailyTrendChartRef = useRef<HTMLDivElement>(null)
+    const statusTimelineChartRef = useRef<HTMLDivElement>(null)
+    const rankingChartRef = useRef<HTMLDivElement>(null)
 
     // Use boundary metering point as-is (already decoded in page component)
     const bmpProperCase = boundaryMeteringPoint
@@ -267,6 +271,54 @@ export function BoundaryDetail({ boundaryMeteringPoint, type }: BoundaryDetailPr
         }
         return { from: sideA, to: sideB, label: "Balanced", netValue: 0 }
     }, [metrics, sideA, sideB])
+
+    const exportSlug = bmpProperCase.replace(/[/\s]+/g, "-").toLowerCase()
+
+    const exportDatasets = useMemo(() => {
+        const dailyTrend = chartData.map((d) => ({
+            date: d.date,
+            import_kwh: d.import,
+            export_kwh: d.export,
+            net_kwh: d.import - d.export,
+        }))
+
+        const meters = meterData.map((m) => ({
+            meter_number: m.meter,
+            location: m.location,
+            region: m.region,
+            status: m.status,
+            import_kwh: m.import,
+            export_kwh: m.export,
+            net_kwh: m.import - m.export,
+        }))
+
+        const rankingRows = (ranking?.allPoints || []).map((p, idx) => ({
+            rank: idx + 1,
+            boundary_point: p.name,
+            import_kwh: p.import,
+            export_kwh: p.export,
+            net_kwh: p.net,
+            is_current: p.name.toLowerCase() === bmpProperCase.toLowerCase(),
+        }))
+
+        const statusTimelineRows = (statusTimeline || []).map((row: any) => ({
+            date: row.date,
+            online: row.online,
+            offline: row.offline,
+        }))
+
+        const statusDetailsRows = (statusDetails?.data || []).map((meter: any) => ({
+            meter_number: meter.meter_number,
+            location: meter.location,
+            status: meter.status,
+            last_reading: meter.last_reading_time,
+            total_consumption_kwh: meter.total_consumption_kwh,
+            uptime_pct: meter.uptime_percentage,
+            days_offline: meter.days_offline,
+        }))
+
+        return { dailyTrend, meters, rankingRows, statusTimelineRows, statusDetailsRows }
+    }, [chartData, meterData, ranking, statusTimeline, statusDetails, bmpProperCase])
 
     const isLoading = pointLoading || dailyLoading
 
@@ -572,9 +624,19 @@ export function BoundaryDetail({ boundaryMeteringPoint, type }: BoundaryDetailPr
             {statusTimeline && statusTimeline.length > 0 && (
                 <Card>
                     <CardHeader>
-                        <CardTitle className="text-base">Meter Status Timeline</CardTitle>
+                        <div className="flex items-start justify-between gap-3">
+                            <CardTitle className="text-base">Meter Status Timeline</CardTitle>
+                            <div className="flex items-center gap-2 shrink-0">
+                                <ExportButton
+                                    data={exportDatasets.statusTimelineRows}
+                                    filename={`${exportSlug}-status-timeline`}
+                                    chartRef={statusTimelineChartRef}
+                                />
+                            </div>
+                        </div>
                     </CardHeader>
                     <CardContent>
+                        <div ref={statusTimelineChartRef} className="bg-background rounded-md p-2">
                         <ResponsiveContainer width="100%" height={300}>
                             <BarChart data={statusTimeline}>
                                 <CartesianGrid strokeDasharray="3 3" className="stroke-muted" />
@@ -614,6 +676,7 @@ export function BoundaryDetail({ boundaryMeteringPoint, type }: BoundaryDetailPr
                                 <Bar dataKey="offline" stackId="status" fill="hsl(0, 84%, 60%)" name="Offline" radius={[4, 4, 0, 0]} />
                             </BarChart>
                         </ResponsiveContainer>
+                        </div>
                     </CardContent>
                 </Card>
             )}
@@ -621,7 +684,13 @@ export function BoundaryDetail({ boundaryMeteringPoint, type }: BoundaryDetailPr
             {/* Meter Status Details */}
             <Card>
                 <CardHeader>
-                    <CardTitle>Meter Status Details</CardTitle>
+                    <div className="flex items-start justify-between gap-3">
+                        <CardTitle>Meter Status Details</CardTitle>
+                        <ExportButton
+                            data={exportDatasets.statusDetailsRows}
+                            filename={`${exportSlug}-meter-status`}
+                        />
+                    </div>
                 </CardHeader>
                 <CardContent className="space-y-4">
                     <div className="flex items-center justify-between gap-4">
@@ -808,10 +877,16 @@ export function BoundaryDetail({ boundaryMeteringPoint, type }: BoundaryDetailPr
                 {/* Top Consumers */}
                 <Card>
                     <CardHeader className="pb-3">
-                        <CardTitle className="text-base flex items-center gap-2">
-                            <TrendingUp className="h-4 w-4 text-green-600" />
-                            Top 5 Consuming Meters
-                        </CardTitle>
+                        <div className="flex items-start justify-between gap-3">
+                            <CardTitle className="text-base flex items-center gap-2">
+                                <TrendingUp className="h-4 w-4 text-green-600" />
+                                Top 5 Consuming Meters
+                            </CardTitle>
+                            <ExportButton
+                                data={exportDatasets.meters.slice(0, 5)}
+                                filename={`${exportSlug}-top-meters`}
+                            />
+                        </div>
                     </CardHeader>
                     <CardContent>
                         <div className="space-y-3">
@@ -972,10 +1047,21 @@ export function BoundaryDetail({ boundaryMeteringPoint, type }: BoundaryDetailPr
             {/* Daily Consumption Trend */}
             <Card>
                 <CardHeader>
-                    <CardTitle className="text-base">Daily Import / Export Trend</CardTitle>
+                    <div className="flex items-start justify-between gap-3">
+                        <CardTitle className="text-base">Daily Import / Export Trend</CardTitle>
+                        <div className="flex items-center gap-2 shrink-0">
+                            <ExportButton
+                                data={exportDatasets.dailyTrend}
+                                filename={`${exportSlug}-daily-trend`}
+                                chartRef={dailyTrendChartRef}
+                                disabled={chartData.length === 0}
+                            />
+                        </div>
+                    </div>
                 </CardHeader>
                 <CardContent>
                     {chartData.length > 0 ? (
+                        <div ref={dailyTrendChartRef} className="bg-background rounded-md p-2">
                         <ResponsiveContainer width="100%" height={350}>
                             <AreaChart data={chartData}>
                                 <CartesianGrid strokeDasharray="3 3" opacity={0.3} />
@@ -1016,6 +1102,7 @@ export function BoundaryDetail({ boundaryMeteringPoint, type }: BoundaryDetailPr
                                 />
                             </AreaChart>
                         </ResponsiveContainer>
+                        </div>
                     ) : (
                         <div className="flex items-center justify-center h-48 text-muted-foreground">
                             No daily data available for the selected period
@@ -1028,12 +1115,17 @@ export function BoundaryDetail({ boundaryMeteringPoint, type }: BoundaryDetailPr
             {ranking && ranking.allPoints.length > 1 && (
                 <Card>
                     <CardHeader>
-                        <div className="flex items-center justify-between">
+                        <div className="flex items-center justify-between gap-3 flex-wrap">
                             <CardTitle className="text-base flex items-center gap-2">
                                 <Trophy className="h-4 w-4" />
                                 {typeLabel} Point Ranking
                             </CardTitle>
-                            <div className="flex items-center gap-2">
+                            <div className="flex items-center gap-2 flex-wrap">
+                                <ExportButton
+                                    data={exportDatasets.rankingRows}
+                                    filename={`${exportSlug}-ranking`}
+                                    chartRef={rankingChartRef}
+                                />
                                 <Tabs value={rankingSort} onValueChange={(v: any) => setRankingSort(v)}>
                                     <TabsList>
                                         <TabsTrigger value="import">By Import</TabsTrigger>
@@ -1051,6 +1143,12 @@ export function BoundaryDetail({ boundaryMeteringPoint, type }: BoundaryDetailPr
                                         <DialogHeader>
                                             <DialogTitle>All {typeLabel} Points - Ranked by {rankingSort === "import" ? "Import" : "Export"}</DialogTitle>
                                         </DialogHeader>
+                                        <div className="flex justify-end mb-2">
+                                            <ExportButton
+                                                data={exportDatasets.rankingRows}
+                                                filename={`${exportSlug}-ranking-all`}
+                                            />
+                                        </div>
                                         <Table>
                                             <TableHeader>
                                                 <TableRow>
@@ -1098,6 +1196,7 @@ export function BoundaryDetail({ boundaryMeteringPoint, type }: BoundaryDetailPr
                         </div>
                     </CardHeader>
                     <CardContent>
+                        <div ref={rankingChartRef} className="bg-background rounded-md p-2">
                         <ResponsiveContainer width="100%" height={Math.min(ranking.allPoints.length * 40 + 40, 500)}>
                             <BarChart
                                 data={ranking.allPoints.slice(0, 15)}
@@ -1135,6 +1234,7 @@ export function BoundaryDetail({ boundaryMeteringPoint, type }: BoundaryDetailPr
                                 </Bar>
                             </BarChart>
                         </ResponsiveContainer>
+                        </div>
                     </CardContent>
                 </Card>
             )}
@@ -1142,7 +1242,13 @@ export function BoundaryDetail({ boundaryMeteringPoint, type }: BoundaryDetailPr
             {/* Meter Table */}
             <Card>
                 <CardHeader>
-                    <CardTitle className="text-base">Meters at this Boundary Point</CardTitle>
+                    <div className="flex items-start justify-between gap-3">
+                        <CardTitle className="text-base">Meters at this Boundary Point</CardTitle>
+                        <ExportButton
+                            data={exportDatasets.meters}
+                            filename={`${exportSlug}-meters`}
+                        />
+                    </div>
                 </CardHeader>
                 <CardContent>
                     {meterData.length > 0 ? (

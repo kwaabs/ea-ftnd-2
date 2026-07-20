@@ -9,6 +9,7 @@ import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { useCustomerConsumptionDetail } from "@/hooks/api/use-customer-consumption-detail-api"
 import { ArrowUpDown, ChevronLeft, ChevronRight, Search } from "lucide-react"
+import { ExportButton } from "@/components/ui/export-button"
 
 interface RegionalCustomerSalesTableProps {
   region: string
@@ -118,22 +119,36 @@ export function RegionalCustomerSalesTable({ region, dateRange }: RegionalCustom
   return (
     <Card>
       <CardHeader>
-        <div className="flex items-center justify-between">
+        <div className="flex items-center justify-between gap-3 flex-wrap">
           <div>
             <CardTitle>Customer Records</CardTitle>
             <CardDescription>Individual customer consumption and billing — {filteredData.length} records</CardDescription>
           </div>
-          <div className="flex items-center gap-2 relative">
-            <Search className="absolute left-2 h-4 w-4 text-muted-foreground pointer-events-none" />
-            <Input
-              placeholder="Search by name, account, service point..."
-              value={searchTerm}
-              onChange={(e) => {
-                setSearchTerm(e.target.value)
-                setPage(1)
-              }}
-              className="pl-8 w-64"
+          <div className="flex items-center gap-2">
+            <ExportButton
+              data={sortedData.map((r: any) => ({
+                customer_name: r.fullname,
+                account_number: r.accountnumber,
+                service_point: r.servicepointnumber,
+                last_bill_consumption_kwh: r.lastbillconsumption,
+                current_balance: r.currentbalance,
+                last_bill_date: r.lastbilldate,
+                data_src: r.data_src,
+              }))}
+              filename={`${region.replace(/\s+/g, "-").toLowerCase()}-zeus-customer-sales`}
             />
+            <div className="relative">
+              <Search className="absolute left-2 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground pointer-events-none" />
+              <Input
+                placeholder="Search by name, account, service point..."
+                value={searchTerm}
+                onChange={(e) => {
+                  setSearchTerm(e.target.value)
+                  setPage(1)
+                }}
+                className="pl-8 w-64"
+              />
+            </div>
           </div>
         </div>
       </CardHeader>

@@ -30,6 +30,8 @@ interface DrillRow {
     value: number;
     href?: string;
     precise?: boolean;
+    /** Nested breakdown (e.g. SLT types under AMR) */
+    children?: DrillRow[];
 }
 
 interface EnergyFlowShape {
@@ -53,8 +55,18 @@ interface FeederLike {
     feederName: string;
     totalImport?: number;
     totalExport?: number;
-    sendingMeter: { station: string; region: string };
-    receivingMeter: { station: string; region: string };
+    sendingMeter: {
+        station: string;
+        region: string;
+        importKwh?: number;
+        exportKwh?: number;
+    };
+    receivingMeter: {
+        station: string;
+        region: string;
+        importKwh?: number;
+        exportKwh?: number;
+    };
 }
 
 interface EnergyFlowDiagramProps {
@@ -68,6 +80,8 @@ interface EnergyFlowDiagramProps {
     expressInbound: FeederLike[];
     expressOutbound: FeederLike[];
     customerBySrc: Map<string, number>;
+    /** When AMR is present, further drill into SLT type under the AMR row */
+    amrBySltType?: Map<string, number>;
 }
 
 interface NodeConfig {
@@ -123,16 +137,26 @@ export function EnergyFlowDiagram({
     expressInbound,
     expressOutbound,
     customerBySrc,
+    amrBySltType,
 }: EnergyFlowDiagramProps) {
     const containerRef = useRef<HTMLDivElement>(null);
     const headerRefs = useRef<Record<string, HTMLDivElement | null>>({});
     const [paths, setPaths] = useState<PipePath[]>([]);
     const [dims, setDims] = useState({ w: 0, h: 0 });
     const [expanded, setExpanded] = useState<Set<string>>(new Set());
+    const [expandedRows, setExpandedRows] = useState<Set<string>>(new Set());
     const [showFootnote, setShowFootnote] = useState(false);
 
     const toggle = (id: string) =>
         setExpanded((prev) => {
+            const next = new Set(prev);
+            if (next.has(id)) next.delete(id);
+            else next.add(id);
+            return next;
+        });
+
+    const toggleRow = (id: string) =>
+        setExpandedRows((prev) => {
             const next = new Set(prev);
             if (next.has(id)) next.delete(id);
             else next.add(id);
@@ -185,27 +209,75 @@ export function EnergyFlowDiagram({
         )
         .sort((a, b) => b.value - a.value);
 
+    // Inbound energy into the region = receiving meter's import_kwh
     const expressInRows: DrillRow[] = [...expressInbound]
-        .sort((a, b) => (b.totalImport ?? 0) - (a.totalImport ?? 0))
         .map((f) => ({
+            feeder: f,
+            value: f.receivingMeter.importKwh ?? f.totalImport ?? 0,
+        }))
+        .sort((a, b) => b.value - a.value)
+        .map(({ feeder: f, value }) => ({
             label: f.feederName,
             sub: `${f.sendingMeter.station} → ${f.receivingMeter.station}`,
-            value: f.totalImport ?? 0,
+            value,
             href: `/express-feeders/${encodeURIComponent(f.feederName)}`,
         }));
 
+    // Outbound energy leaving the region = sending meter's export_kwh
     const expressOutRows: DrillRow[] = [...expressOutbound]
-        .sort((a, b) => (b.totalExport ?? 0) - (a.totalExport ?? 0))
         .map((f) => ({
+            feeder: f,
+            value: f.sendingMeter.exportKwh ?? f.totalExport ?? 0,
+        }))
+        .sort((a, b) => b.value - a.value)
+        .map(({ feeder: f, value }) => ({
             label: f.feederName,
             sub: `${f.sendingMeter.station} → ${f.receivingMeter.station}`,
-            value: f.totalExport ?? 0,
+            value,
             href: `/express-feeders/${encodeURIComponent(f.feederName)}`,
         }));
+
+    const amrSltChildren: DrillRow[] = Array.from(amrBySltType?.entries() || [])
+        .filter(([, kwh]) => kwh > 0)
+        .sort((a, b) => b[1] - a[1])
+        .map(([slt, kwh]) => ({
+            label: slt.replace(/_/g, " "),
+            value: kwh,
+        }));
+
+    const formatCustomerSource = (src: string) => {
+        const key = src.trim().toLowerCase();
+        if (key === "amr" || key.startsWith("amr")) return "AMR";
+        if (key === "zeus" || key.includes("zeus")) return "Zeus (Postpaid)";
+        if (key === "mms" || key.includes("mms")) return "MMS (Prepaid)";
+        return src;
+    };
 
     const customerRows: DrillRow[] = Array.from(customerBySrc.entries())
         .sort((a, b) => b[1] - a[1])
-        .map(([src, kwh]) => ({ label: src, value: kwh }));
+        .map(([src, kwh]) => {
+            const label = formatCustomerSource(src);
+            const isAmr = label === "AMR";
+            return {
+                label,
+                value: kwh,
+                sub: isAmr
+                    ? amrSltChildren.length > 0
+                        ? `${amrSltChildren.length} SLT type${amrSltChildren.length !== 1 ? "s" : ""}`
+                        : undefined
+                    : label.startsWith("Zeus")
+                      ? "Postpaid billing"
+                      : label.startsWith("MMS")
+                        ? "Prepaid sales"
+                        : undefined,
+                children: isAmr && amrSltChildren.length > 0 ? amrSltChildren : undefined,
+            };
+        });
+
+    const customerSourceSummary =
+        customerRows.length === 0
+            ? "no sources"
+            : customerRows.map((r) => r.label).join(" + ");
 
     const nodeMap: Record<string, NodeConfig> = {
         bsp: { id: "bsp", title: "BSP Import", value: energyFlow.bspImport, color: "emerald", sub: `${bspByStation.size} stations`, rows: bspRows },
@@ -215,12 +287,25 @@ export function EnergyFlowDiagram({
         dtx: { id: "dtx", title: "DTX Distribution", value: energyFlow.dtxConsumption, color: "slate", sub: `${dtxByDistrict.size} districts`, rows: dtxRows },
         bexp: { id: "bexp", title: "Boundary Export", value: energyFlow.boundaryExport, color: "blue", sub: "out of region", rows: boundaryExportRows, leaves: true },
         xexp: { id: "xexp", title: "Express Export", value: energyFlow.expressFeederExport, color: "purple", sub: "out of region", rows: expressOutRows, leaves: true },
-        cust: { id: "cust", title: "Customer Sales", value: energyFlow.customerSales, color: "emerald", sub: `${customerRows.length} source${customerRows.length !== 1 ? "s" : ""} · Zeus + MMS`, rows: customerRows, big: true },
+        cust: {
+            id: "cust",
+            title: "Customer Sales",
+            value: energyFlow.customerSales,
+            color: "emerald",
+            sub: customerSourceSummary,
+            rows: customerRows,
+            big: true,
+        },
     };
 
-    // Required nodes always render; optional ones only when they carry energy.
-    const isVisible = (id: string) =>
-        ["bsp", "pool", "dtx", "cust"].includes(id) || nodeMap[id].value > 0;
+    // Required nodes always render. Express nodes also show when feeders exist
+    // (even if kWh is currently 0) so EXPRESS_FEEDER meters are never hidden.
+    const isVisible = (id: string) => {
+        if (["bsp", "pool", "dtx", "cust"].includes(id)) return true;
+        if (id === "exp") return nodeMap.exp.value > 0 || expressInbound.length > 0;
+        if (id === "xexp") return nodeMap.xexp.value > 0 || expressOutbound.length > 0;
+        return nodeMap[id].value > 0;
+    };
 
     const showLeavesGroup = isVisible("bexp") || isVisible("xexp");
     const maxVol = Math.max(
@@ -284,7 +369,7 @@ export function EnergyFlowDiagram({
 
     useIsomorphicLayoutEffect(() => {
         recompute();
-    }, [recompute, expanded, showLeavesGroup]);
+    }, [recompute, expanded, expandedRows, showLeavesGroup]);
 
     useEffect(() => {
         const cont = containerRef.current;
@@ -301,11 +386,16 @@ export function EnergyFlowDiagram({
     const renderRows = (node: NodeConfig) => {
         const total = node.rows.reduce((s, r) => s + r.value, 0) || node.value || 1;
         return (
-            <div className="mt-2 pt-2 border-t border-dashed border-current/20 space-y-0.5 max-h-64 overflow-y-auto">
+            <div className="mt-2 pt-2 border-t border-dashed border-current/20 space-y-1 max-h-80 overflow-y-auto">
                 {node.rows.length === 0 && (
                     <p className="text-[11px] text-muted-foreground px-1 py-1">No breakdown available</p>
                 )}
                 {node.rows.map((row) => {
+                    const rowKey = `${node.id}-${row.label}`;
+                    const hasChildren = (row.children?.length ?? 0) > 0;
+                    const rowOpen = expandedRows.has(rowKey);
+                    const childTotal = row.children?.reduce((s, c) => s + c.value, 0) || row.value || 1;
+
                     const labelEl = row.href ? (
                         <Link
                             href={row.href}
@@ -317,32 +407,72 @@ export function EnergyFlowDiagram({
                     ) : (
                         <span className="font-medium break-words">{row.label}</span>
                     );
+
                     return (
-                        <div
-                            key={`${node.id}-${row.label}`}
-                            className="flex items-start justify-between gap-3 py-1.5 px-1.5 rounded hover:bg-background/60 text-xs"
-                        >
-                            <div className="min-w-0 flex-1">
-                                <div className="break-words leading-snug">{labelEl}</div>
-                                {row.sub && (
-                                    <span className="text-muted-foreground text-[11px] break-words block leading-snug">{row.sub}</span>
-                                )}
-                            </div>
-                            <div className="flex items-center gap-2 shrink-0 pt-0.5">
-                                <span className="text-muted-foreground tabular-nums">
-                                    {row.precise ? (
-                                        <>
-                                            {row.value.toLocaleString("en-US", { maximumFractionDigits: 4 })}
-                                            <span className="text-muted-foreground/70"> kWh</span>
-                                        </>
-                                    ) : (
-                                        formatNumber(row.value)
+                        <div key={rowKey}>
+                            <div
+                                className={`flex items-start justify-between gap-3 py-1.5 px-1.5 rounded hover:bg-background/60 text-xs ${hasChildren ? "cursor-pointer" : ""}`}
+                                onClick={(e) => {
+                                    if (!hasChildren) return;
+                                    e.stopPropagation();
+                                    toggleRow(rowKey);
+                                }}
+                            >
+                                <div className="min-w-0 flex-1 flex items-start gap-1.5">
+                                    {hasChildren && (
+                                        <ChevronRight
+                                            className={`h-3 w-3 shrink-0 mt-0.5 text-muted-foreground transition-transform ${rowOpen ? "rotate-90" : ""}`}
+                                        />
                                     )}
-                                </span>
-                                <span className="font-semibold w-12 text-right tabular-nums">
-                                    {formatNumber((row.value / total) * 100, 1)}%
-                                </span>
+                                    <div className="min-w-0 flex-1">
+                                        {labelEl}
+                                        {row.sub && (
+                                            <div className="text-muted-foreground text-[11px] mt-0.5">
+                                                {row.sub}
+                                            </div>
+                                        )}
+                                    </div>
+                                </div>
+                                <div className="shrink-0 text-right leading-tight">
+                                    <div className="text-muted-foreground tabular-nums whitespace-nowrap">
+                                        {row.precise
+                                            ? row.value.toLocaleString("en-US", { maximumFractionDigits: 4 })
+                                            : formatNumber(row.value)}
+                                        <span className="text-muted-foreground/70"> kWh</span>
+                                    </div>
+                                    <div className="font-semibold tabular-nums">
+                                        {formatNumber((row.value / total) * 100, 1)}%
+                                    </div>
+                                </div>
                             </div>
+                            {hasChildren && rowOpen && (
+                                <div className="ml-4 mt-0.5 mb-1 border-l border-dashed border-current/20 pl-2 space-y-1">
+                                    {row.children!.map((child) => (
+                                        <div
+                                            key={`${rowKey}-${child.label}`}
+                                            className="flex items-start justify-between gap-3 py-1 px-1.5 rounded hover:bg-background/60 text-[11px]"
+                                        >
+                                            <div className="min-w-0 flex-1">
+                                                <span className="font-medium break-words">{child.label}</span>
+                                                {child.sub && (
+                                                    <div className="text-muted-foreground mt-0.5">
+                                                        {child.sub}
+                                                    </div>
+                                                )}
+                                            </div>
+                                            <div className="shrink-0 text-right leading-tight">
+                                                <div className="text-muted-foreground tabular-nums whitespace-nowrap">
+                                                    {formatNumber(child.value)}
+                                                    <span className="text-muted-foreground/70"> kWh</span>
+                                                </div>
+                                                <div className="font-semibold tabular-nums">
+                                                    {formatNumber((child.value / childTotal) * 100, 1)}%
+                                                </div>
+                                            </div>
+                                        </div>
+                                    ))}
+                                </div>
+                            )}
                         </div>
                     );
                 })}
@@ -407,9 +537,10 @@ export function EnergyFlowDiagram({
     };
 
     return (
-        <div>
-            <div className="overflow-x-auto overflow-y-hidden pt-4 pb-2">
-            <div ref={containerRef} className="relative min-w-[900px] pt-4">
+        <div className="w-full min-w-0">
+            {/* min-w-0 + overflow-x-auto: keep BSP sources visible and scroll the diagram instead of crushing/clipping */}
+            <div className="w-full min-w-0 overflow-x-auto overflow-y-hidden pt-4 pb-2">
+            <div ref={containerRef} className="relative min-w-[1200px] pt-4">
                 {/* Animated connector layer (behind cards) */}
                 <svg
                     className="absolute inset-0"
@@ -439,9 +570,9 @@ export function EnergyFlowDiagram({
                 </svg>
 
                 {/* Card layout */}
-                <div className="relative flex gap-x-12 lg:gap-x-20 items-start" style={{ zIndex: 1 }}>
-                    {/* Sources (external) */}
-                    <div className="flex-1 min-w-[190px] flex flex-col">
+                <div className="relative flex gap-x-10 lg:gap-x-14 items-start" style={{ zIndex: 1 }}>
+                    {/* Sources (external) — wide enough for full station names in BSP drill-down */}
+                    <div className="w-[300px] shrink-0 flex flex-col">
                         <div className="text-center text-[11px] font-bold tracking-widest uppercase text-muted-foreground pb-3">
                             sources
                         </div>
@@ -453,15 +584,15 @@ export function EnergyFlowDiagram({
                     </div>
 
                     {/* In-region column: boundary box, with exports directly beneath it */}
-                    <div className="flex-[3] flex flex-col">
+                    <div className="min-w-[820px] flex-1 flex flex-col">
                         {/* Region boundary — encloses in-region pool, distribution & end use */}
-                        <div className="relative rounded-2xl border-2 border-dashed border-slate-400/70 dark:border-slate-500/60 pt-9 pb-7 px-8 lg:px-12">
+                        <div className="relative rounded-2xl border-2 border-dashed border-slate-400/70 dark:border-slate-500/60 pt-9 pb-7 px-6 lg:px-10">
                             <span className="absolute -top-3 left-6 bg-card px-2.5 text-[11px] font-bold tracking-widest uppercase text-slate-500">
                                 {region} region
                             </span>
                             <div
-                                className="grid items-center gap-x-12 lg:gap-x-20"
-                                style={{ gridTemplateColumns: "1fr 1fr 1fr" }}
+                                className="grid items-center gap-x-8 lg:gap-x-12"
+                                style={{ gridTemplateColumns: "minmax(200px, 1fr) minmax(200px, 1fr) minmax(200px, 1fr)" }}
                             >
                                 {["Available supply", "Distribution", "End use"].map((h) => (
                                     <div key={h} className="text-center text-[11px] font-bold tracking-widest uppercase text-muted-foreground pb-3">
@@ -474,14 +605,14 @@ export function EnergyFlowDiagram({
                             </div>
                         </div>
 
-                        {/* Out-of-region exports, just below the boundary, under Available Supply */}
+                        {/* Out-of-region exports — full width so drill-downs aren't crushed */}
                         {showLeavesGroup && (
                             <div className="px-8 lg:px-12 mt-3">
-                                <div className="grid gap-x-12 lg:gap-x-20" style={{ gridTemplateColumns: "1fr 1fr 1fr" }}>
-                                    <div className="rounded-xl bg-amber-50/50 border-2 border-dashed border-amber-300 p-4 space-y-3">
-                                        <div className="text-[10px] font-bold tracking-wide uppercase text-amber-700 text-center">
-                                            ↗ Leaves region · to neighbours
-                                        </div>
+                                <div className="rounded-xl bg-amber-50/50 border-2 border-dashed border-amber-300 p-4 space-y-3">
+                                    <div className="text-[10px] font-bold tracking-wide uppercase text-amber-700 text-center">
+                                        ↗ Leaves region · to neighbours
+                                    </div>
+                                    <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
                                         {isVisible("bexp") && <NodeCard node={nodeMap.bexp} />}
                                         {isVisible("xexp") && <NodeCard node={nodeMap.xexp} />}
                                     </div>
@@ -546,7 +677,7 @@ export function EnergyFlowDiagram({
                         <div>
                             <span className="font-medium text-foreground">Distribution — Customer Sales</span>
                             <p className="mt-0.5 leading-relaxed">
-                                Energy billed to customers, drawn from DTX distribution. The gap between DTX Distribution and Customer Sales reflects unbilled energy and system losses.
+                                Energy billed or metered to customers (Zeus, MMS, AMR), drawn from DTX distribution. Expand Customer Sales to see sources; when AMR is present, expand AMR further by SLT type. The gap between DTX Distribution and Customer Sales reflects unbilled energy and system losses.
                             </p>
                         </div>
                         <div>
