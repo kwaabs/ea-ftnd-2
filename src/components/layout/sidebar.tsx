@@ -13,6 +13,7 @@ import { usePathname, useRouter } from "next/navigation"
 import { useFilterOptionsWithAvailability } from "@/hooks/api/use-filter-options"
 import { LayoutDashboard, Map, BarChart3, Globe, Users, ChevronRight, ChevronLeft, Settings, LogOut, User, MessageSquare } from "lucide-react"
 import { useCommentsSheetStore } from "@/stores/comments-sheet-store"
+import { logoutSession } from "@/lib/auth-session"
 
 interface SidebarSubItem {
     id: string
@@ -40,7 +41,7 @@ interface MenuItem {
 
 export function Sidebar() {
     const { isCollapsed, toggleCollapsed, openMenus, toggleMenu } = useSidebarStore()
-    const { user, logout } = useUserStore()
+    const { user } = useUserStore()
     const pathname = usePathname()
     const router = useRouter()
     const openCommentsSheet = useCommentsSheetStore(s => s.open)
@@ -48,8 +49,7 @@ export function Sidebar() {
     const { data: filterOptions, isLoading: isLoadingFilters } = useFilterOptionsWithAvailability()
 
     const handleLogout = async () => {
-        await fetch("/api/auth/logout", { method: "POST" })
-        logout()
+        await logoutSession()
         router.push("/")
     }
 

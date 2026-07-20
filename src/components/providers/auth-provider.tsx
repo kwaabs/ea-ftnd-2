@@ -5,21 +5,46 @@ import { useEffect } from "react"
 import { useUserStore } from "@/stores/user-store"
 import { LoginDialog } from "@/components/auth/login-dialog"
 import { saveAuthReturnUrl } from "@/lib/auth-return-url"
+import { needsTokenRefresh, refreshAccessToken } from "@/lib/auth-session"
 
 export function AuthProvider({ children }: { children: React.ReactNode }) {
     useEffect(() => {
-        // Check token expiration every minute
-        const tokenCheckInterval = setInterval(() => {
-            const store = useUserStore.getState()
-            if (store.isAuthenticated && store.isTokenExpired()) {
-                console.log("[v0] AuthProvider - Token expired, logging out")
-                // Keep deep link so Azure re-login can restore it
-                saveAuthReturnUrl()
-                store.logout()
-            }
-        }, 60000) // Check every minute
+        let cancelled = false
 
-        return () => clearInterval(tokenCheckInterval)
+        const ensureFreshSession = async () => {
+            const store = useUserStore.getState()
+            if (!store.hasHydrated || !store.isAuthenticated) return
+            if (!needsTokenRefresh()) return
+
+            const ok = await refreshAccessToken()
+            if (cancelled) return
+
+            // Only force re-login when access is already expired and refresh failed.
+            const after = useUserStore.getState()
+            if (!ok && after.isAuthenticated && after.isTokenExpired()) {
+                console.log("[auth] Session refresh failed; logging out")
+                saveAuthReturnUrl()
+                after.logout()
+            }
+        }
+
+        // After zustand rehydrate (and once shortly after mount as a fallback)
+        const unsub = useUserStore.persist.onFinishHydration(() => {
+            void ensureFreshSession()
+        })
+        if (useUserStore.persist.hasHydrated()) {
+            void ensureFreshSession()
+        }
+
+        const interval = setInterval(() => {
+            void ensureFreshSession()
+        }, 30_000)
+
+        return () => {
+            cancelled = true
+            unsub()
+            clearInterval(interval)
+        }
     }, [])
 
     return (

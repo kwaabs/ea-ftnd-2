@@ -5,19 +5,7 @@ import { MsalProvider } from "@azure/msal-react"
 import { msalInstance } from "@/lib/msal-config"
 import { useUserStore } from "@/stores/user-store"
 import { consumeAuthReturnUrl } from "@/lib/auth-return-url"
-
-function parseExpiresAt(data: Record<string, unknown>): number {
-  const raw = data.access_expires_at ?? data.expiresAt ?? data.expires_at
-  if (typeof raw === "number" && Number.isFinite(raw)) {
-    // treat values under year 2100-in-ms threshold as unix seconds
-    return raw < 1e12 ? raw * 1000 : raw
-  }
-  if (typeof raw === "string" && raw) {
-    const ms = Date.parse(raw)
-    if (!Number.isNaN(ms)) return ms
-  }
-  return Date.now() + 24 * 60 * 60 * 1000
-}
+import { parseExpiresAt } from "@/lib/auth-session"
 
 export default function Providers({ children }: { children: React.ReactNode }) {
   const [isHandlingRedirect, setIsHandlingRedirect] = useState(true)
@@ -46,7 +34,12 @@ export default function Providers({ children }: { children: React.ReactNode }) {
 
           const data = await res.json()
           const { login } = useUserStore.getState()
-          login(data.user, data.access_token, parseExpiresAt(data))
+          login(
+            data.user,
+            data.access_token,
+            parseExpiresAt(data),
+            typeof data.refresh_token === "string" ? data.refresh_token : null,
+          )
 
           // Restore the page the user was on before Azure AD redirect
           const returnUrl = consumeAuthReturnUrl("/dashboard")

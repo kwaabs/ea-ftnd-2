@@ -93,12 +93,14 @@ export interface User {
 interface UserState {
     user: User | null
     token: string | null
+    refreshToken: string | null
     tokenExpiresAt: number | null
     isAuthenticated: boolean
     isLoading: boolean
     hasHydrated: boolean
     setUser: (user: User | null) => void
-    login: (user: User, token: string, expiresAt: number) => void
+    login: (user: User, token: string, expiresAt: number, refreshToken?: string | null) => void
+    setTokens: (token: string, expiresAt: number, refreshToken?: string | null) => void
     logout: () => void
     setLoading: (loading: boolean) => void
     setHasHydrated: (hydrated: boolean) => void
@@ -110,18 +112,41 @@ export const useUserStore = create<UserState>()(
         (set, get) => ({
             user: null,
             token: null,
+            refreshToken: null,
             tokenExpiresAt: null,
             isAuthenticated: false,
             isLoading: true, // Always starts true, will be set to false after rehydration
             hasHydrated: false, // Tracks if store has been rehydrated from storage
             setUser: (user) => set({ user, isAuthenticated: !!user }),
-            login: (user, token, expiresAt) => {
+            login: (user, token, expiresAt, refreshToken = null) => {
                 console.log("[v0] UserStore - Login called", { userId: user.id, hasToken: !!token, expiresAt })
-                set({ user, token, tokenExpiresAt: expiresAt, isAuthenticated: true, isLoading: false, hasHydrated: true })
+                set({
+                    user,
+                    token,
+                    refreshToken: refreshToken ?? null,
+                    tokenExpiresAt: expiresAt,
+                    isAuthenticated: true,
+                    isLoading: false,
+                    hasHydrated: true,
+                })
+            },
+            setTokens: (token, expiresAt, refreshToken) => {
+                set((state) => ({
+                    token,
+                    tokenExpiresAt: expiresAt,
+                    refreshToken: refreshToken !== undefined ? refreshToken : state.refreshToken,
+                    isAuthenticated: true,
+                }))
             },
             logout: () => {
                 console.log("[v0] UserStore - Logout called")
-                set({ user: null, token: null, tokenExpiresAt: null, isAuthenticated: false })
+                set({
+                    user: null,
+                    token: null,
+                    refreshToken: null,
+                    tokenExpiresAt: null,
+                    isAuthenticated: false,
+                })
             },
             setLoading: (loading) => set({ isLoading: loading }),
             setHasHydrated: (hydrated) => set({ hasHydrated: hydrated }),
@@ -133,10 +158,11 @@ export const useUserStore = create<UserState>()(
         }),
         {
             name: "user-storage",
-            // Only persist user, token, tokenExpiresAt and isAuthenticated - NOT isLoading
+            // Only persist user, tokens, tokenExpiresAt and isAuthenticated - NOT isLoading
             partialize: (state) => ({
                 user: state.user,
                 token: state.token,
+                refreshToken: state.refreshToken,
                 tokenExpiresAt: state.tokenExpiresAt,
                 isAuthenticated: state.isAuthenticated,
             }),
@@ -155,6 +181,7 @@ export const useUserStore = create<UserState>()(
                         console.log("[v0] UserStore - No valid session in storage, clearing auth")
                         state.user = null
                         state.token = null
+                        state.refreshToken = null
                         state.isAuthenticated = false
                     }
                     state.isLoading = false
