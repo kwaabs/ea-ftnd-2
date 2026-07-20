@@ -99,7 +99,7 @@ export function AmrPageView({ dateRange, region, district }: AmrPageViewProps) {
       search: statusSearch.trim() || undefined,
       page: statusPage,
       limit: statusPageSize,
-      sortBy: "uptime_percentage",
+      sortBy: "uptime",
       sortOrder: "asc",
     });
 
