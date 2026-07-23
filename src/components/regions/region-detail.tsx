@@ -6146,7 +6146,7 @@ export function RegionDetail({ region }: RegionDetailProps) {
       </Card>
 
       {/* Energy Flow Visualization */}
-      <Card className="min-w-0">
+      <Card className="min-w-0 overflow-visible">
         <CardHeader>
           <div className="flex items-start justify-between gap-3">
             <div>

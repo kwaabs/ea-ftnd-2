@@ -484,13 +484,14 @@ export function EnergyFlowDiagram({
         const tint = TINTS[node.color];
         const isOpen = expanded.has(node.id);
         const canDrill = node.rows.length > 0;
+        const valueLabel = formatNumber(node.value);
 
         if (node.big) {
             return (
-                <div className="rounded-xl border-[3px] border-slate-800 bg-slate-50 dark:bg-slate-900/40 overflow-hidden shadow-sm">
+                <div className="w-full rounded-xl border-[3px] border-slate-800 bg-slate-50 dark:bg-slate-900/40 shadow-sm">
                     <div
                         ref={(el) => { headerRefs.current[node.id] = el; }}
-                        className={`p-5 text-center ${canDrill ? "cursor-pointer hover:bg-slate-100/60" : ""}`}
+                        className={`px-4 py-5 text-center ${canDrill ? "cursor-pointer hover:bg-slate-100/60" : ""}`}
                         onClick={() => canDrill && toggle(node.id)}
                     >
                         <div className="text-xs font-semibold text-muted-foreground flex items-center justify-center gap-1">
@@ -499,7 +500,12 @@ export function EnergyFlowDiagram({
                                 <ChevronRight className={`h-3.5 w-3.5 transition-transform ${isOpen ? "rotate-90" : ""}`} />
                             )}
                         </div>
-                        <div className="text-2xl lg:text-3xl font-extrabold mt-1 tabular-nums">{formatNumber(node.value)}</div>
+                        <div
+                            className="mt-1 text-lg font-extrabold tabular-nums"
+                            title={`${valueLabel} kWh`}
+                        >
+                            {valueLabel}
+                        </div>
                         <div className="text-[11px] text-muted-foreground mt-0.5">kWh · {node.sub}</div>
                     </div>
                     {isOpen && <div className="px-4 pb-4">{renderRows(node)}</div>}
@@ -508,24 +514,28 @@ export function EnergyFlowDiagram({
         }
 
         return (
-            <div className={`rounded-lg border-2 ${tint.border} ${tint.bg} overflow-hidden ${node.leaves ? "border-dashed" : ""}`}>
+            <div className={`w-full rounded-lg border-2 ${tint.border} ${tint.bg} ${node.leaves ? "border-dashed" : ""}`}>
                 <div
                     ref={(el) => { headerRefs.current[node.id] = el; }}
                     className={`p-4 ${canDrill ? "cursor-pointer hover:brightness-[0.98]" : ""}`}
                     onClick={() => canDrill && toggle(node.id)}
                 >
-                    <div className="flex items-center justify-between">
+                    <div className="flex items-center justify-between gap-2">
                         <span className={`text-sm font-semibold ${tint.text}`}>{node.title}</span>
                         {node.leaves ? (
-                            <span className="text-[10px] font-bold text-amber-700">↗ OUT</span>
+                            <span className="text-[10px] font-bold text-amber-700 shrink-0">↗ OUT</span>
                         ) : (
                             canDrill && (
-                                <ChevronRight className={`h-3.5 w-3.5 ${tint.text} transition-transform ${isOpen ? "rotate-90" : ""}`} />
+                                <ChevronRight className={`h-3.5 w-3.5 shrink-0 ${tint.text} transition-transform ${isOpen ? "rotate-90" : ""}`} />
                             )
                         )}
                     </div>
-                    <div className="text-lg lg:text-xl font-bold mt-1 tabular-nums">
-                        {formatNumber(node.value)} <span className="text-[11px] font-normal text-muted-foreground">kWh</span>
+                    <div
+                        className="mt-1 text-lg font-bold tabular-nums"
+                        title={`${valueLabel} kWh`}
+                    >
+                        {valueLabel}{" "}
+                        <span className="text-[11px] font-normal text-muted-foreground">kWh</span>
                     </div>
                     <div className="text-[11px] text-muted-foreground mt-0.5">
                         {node.sub} · {pct(node.value)} of supply
@@ -538,9 +548,8 @@ export function EnergyFlowDiagram({
 
     return (
         <div className="w-full min-w-0">
-            {/* min-w-0 + overflow-x-auto: keep BSP sources visible and scroll the diagram instead of crushing/clipping */}
-            <div className="w-full min-w-0 overflow-x-auto overflow-y-hidden pt-4 pb-2">
-            <div ref={containerRef} className="relative min-w-[1200px] pt-4">
+            <div className="w-full min-w-0 overflow-x-auto pt-4 pb-2">
+            <div ref={containerRef} className="relative min-w-[980px] w-full pt-4">
                 {/* Animated connector layer (behind cards) */}
                 <svg
                     className="absolute inset-0"
@@ -569,10 +578,9 @@ export function EnergyFlowDiagram({
                     ))}
                 </svg>
 
-                {/* Card layout */}
-                <div className="relative flex gap-x-10 lg:gap-x-14 items-start" style={{ zIndex: 1 }}>
-                    {/* Sources (external) — wide enough for full station names in BSP drill-down */}
-                    <div className="w-[300px] shrink-0 flex flex-col">
+                {/* Fluid layout: fills the card; scrolls only below ~1100px content width */}
+                <div className="relative flex gap-x-8 items-start w-full" style={{ zIndex: 1 }}>
+                    <div className="w-[260px] shrink-0 flex flex-col">
                         <div className="text-center text-[11px] font-bold tracking-widest uppercase text-muted-foreground pb-3">
                             sources
                         </div>
@@ -583,36 +591,30 @@ export function EnergyFlowDiagram({
                         </div>
                     </div>
 
-                    {/* In-region column: boundary box, with exports directly beneath it */}
-                    <div className="min-w-[820px] flex-1 flex flex-col">
-                        {/* Region boundary — encloses in-region pool, distribution & end use */}
-                        <div className="relative rounded-2xl border-2 border-dashed border-slate-400/70 dark:border-slate-500/60 pt-9 pb-7 px-6 lg:px-10">
+                    <div className="min-w-0 flex-1 flex flex-col">
+                        <div className="relative rounded-2xl border-2 border-dashed border-slate-400/70 dark:border-slate-500/60 pt-9 pb-7 px-4 sm:px-6">
                             <span className="absolute -top-3 left-6 bg-card px-2.5 text-[11px] font-bold tracking-widest uppercase text-slate-500">
                                 {region} region
                             </span>
-                            <div
-                                className="grid items-center gap-x-8 lg:gap-x-12"
-                                style={{ gridTemplateColumns: "minmax(200px, 1fr) minmax(200px, 1fr) minmax(200px, 1fr)" }}
-                            >
+                            <div className="grid grid-cols-3 gap-x-5 items-start">
                                 {["Available supply", "Distribution", "End use"].map((h) => (
                                     <div key={h} className="text-center text-[11px] font-bold tracking-widest uppercase text-muted-foreground pb-3">
                                         {h}
                                     </div>
                                 ))}
-                                <div className="flex justify-center"><div className="w-full"><NodeCard node={nodeMap.pool} /></div></div>
-                                <div className="flex justify-center"><div className="w-full"><NodeCard node={nodeMap.dtx} /></div></div>
-                                <div className="flex justify-center"><div className="w-full"><NodeCard node={nodeMap.cust} /></div></div>
+                                <NodeCard node={nodeMap.pool} />
+                                <NodeCard node={nodeMap.dtx} />
+                                <NodeCard node={nodeMap.cust} />
                             </div>
                         </div>
 
-                        {/* Out-of-region exports — full width so drill-downs aren't crushed */}
                         {showLeavesGroup && (
-                            <div className="px-8 lg:px-12 mt-3">
+                            <div className="mt-3">
                                 <div className="rounded-xl bg-amber-50/50 border-2 border-dashed border-amber-300 p-4 space-y-3">
                                     <div className="text-[10px] font-bold tracking-wide uppercase text-amber-700 text-center">
                                         ↗ Leaves region · to neighbours
                                     </div>
-                                    <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 max-w-3xl mx-auto">
                                         {isVisible("bexp") && <NodeCard node={nodeMap.bexp} />}
                                         {isVisible("xexp") && <NodeCard node={nodeMap.xexp} />}
                                     </div>
