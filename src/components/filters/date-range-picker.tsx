@@ -12,23 +12,35 @@ interface DateRangePickerProps {
     onChange: (range: { start: Date; end: Date }) => void
 }
 
+/** Latest date users can select — always yesterday (today is incomplete). */
+function getMaxSelectableDate() {
+    const d = new Date()
+    d.setHours(0, 0, 0, 0)
+    d.setDate(d.getDate() - 1)
+    return d
+}
+
+function startOfDay(date: Date) {
+    const d = new Date(date)
+    d.setHours(0, 0, 0, 0)
+    return d
+}
+
 export function DateRangePicker({ value, onChange }: DateRangePickerProps) {
-    // Disable future dates
-    const disabledDates = (date: Date) => {
-        const today = new Date()
-        today.setHours(0, 0, 0, 0)
-        return date > today
-    }
+    const maxDate = getMaxSelectableDate()
 
     const handleDateChange = (range: ReactDayPickerDateRange | undefined) => {
         if (!range) return
 
-        // If both dates are selected, update the range
         if (range.from && range.to) {
-            onChange({
-                start: range.from,
-                end: range.to,
-            })
+            const start = startOfDay(range.from)
+            let end = startOfDay(range.to)
+            if (end > maxDate) end = new Date(maxDate)
+            if (start > end) {
+                onChange({ start: end, end })
+                return
+            }
+            onChange({ start, end })
         }
     }
 
@@ -50,7 +62,8 @@ export function DateRangePicker({ value, onChange }: DateRangePickerProps) {
                         to: value.end,
                     }}
                     onSelect={handleDateChange}
-                    disabled={disabledDates}
+                    disabled={{ after: maxDate }}
+                    endMonth={maxDate}
                     numberOfMonths={2}
                 />
             </PopoverContent>

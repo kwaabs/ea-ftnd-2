@@ -16,12 +16,24 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
             if (!store.hasHydrated || !store.isAuthenticated) return
             if (!needsTokenRefresh()) return
 
-            const ok = await refreshAccessToken()
+            let result = await refreshAccessToken()
+
+            // One retry for transient failures (network blip / brief backend restart)
+            if (result === "transient") {
+                await new Promise((r) => setTimeout(r, 1500))
+                if (cancelled) return
+                result = await refreshAccessToken()
+            }
+
             if (cancelled) return
 
-            // Only force re-login when access is already expired and refresh failed.
+            // Only force re-login when access is already expired and refresh was rejected.
             const after = useUserStore.getState()
-            if (!ok && after.isAuthenticated && after.isTokenExpired()) {
+            if (
+                result === "auth_failed" &&
+                after.isAuthenticated &&
+                after.isTokenExpired()
+            ) {
                 console.log("[auth] Session refresh failed; logging out")
                 saveAuthReturnUrl()
                 after.logout()

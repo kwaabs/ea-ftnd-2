@@ -370,7 +370,7 @@ export function OverviewMainTabV3({
       );
   }, [aggregateData?.rawData]);
 
-  const energySales = useMemo(() => {
+  const energySalesBreakdown = useMemo(() => {
     const zeusKwh =
       customerConsumptionDataArray && customerConsumptionDataArray.length > 0
         ? customerConsumptionDataArray.reduce(
@@ -397,10 +397,21 @@ export function OverviewMainTabV3({
           )
         : 0;
 
-    if (zeusKwh === 0 && mmsKwh === 0 && amrKwh === 0) return null;
+    const total = zeusKwh + mmsKwh + amrKwh;
+    if (total === 0) return null;
 
-    return zeusKwh + mmsKwh + amrKwh;
+    return { zeusKwh, mmsKwh, amrKwh, total };
   }, [customerConsumptionDataArray, mmsAggregateData, amrAggregateData]);
+
+  const energySales = energySalesBreakdown?.total ?? null;
+
+  const formatSalesKwh = (value: number) => {
+    if (value >= 1_000_000_000)
+      return `${(value / 1_000_000_000).toFixed(2)} GWh`;
+    if (value >= 1_000_000) return `${(value / 1_000_000).toFixed(2)} MWh`;
+    if (value >= 1_000) return `${(value / 1_000).toFixed(2)} MWh`;
+    return `${value.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })} kWh`;
+  };
 
   const systemLosses = useMemo(() => {
     if (energySales === null || energyPurchases === 0) {
@@ -7944,13 +7955,35 @@ export function OverviewMainTabV3({
           </Card>
           <Card className="shadow-none border bg-card">
             <CardContent className="py-2.5 px-4">
-              <p className="text-sm font-medium text-muted-foreground">Sales (Zeus + MMS + AMR)</p>
+              <p className="text-sm font-medium text-muted-foreground">Sales</p>
               <p className="text-2xl font-bold tabular-nums tracking-tight mt-0.5">
                 {energySales === null ? "—" : formatNumber(energySales)}
                 {energySales !== null && (
                   <span className="text-sm font-normal text-muted-foreground ml-1.5">kWh</span>
                 )}
               </p>
+              {energySalesBreakdown && (
+                <div className="flex items-center gap-1.5 mt-1.5 flex-wrap">
+                  <Badge
+                    variant="outline"
+                    className="text-[10px] gap-1 border-blue-300 text-blue-700"
+                  >
+                    Zeus {formatSalesKwh(energySalesBreakdown.zeusKwh)}
+                  </Badge>
+                  <Badge
+                    variant="outline"
+                    className="text-[10px] gap-1 border-green-300 text-green-700"
+                  >
+                    MMS {formatSalesKwh(energySalesBreakdown.mmsKwh)}
+                  </Badge>
+                  <Badge
+                    variant="outline"
+                    className="text-[10px] gap-1 border-orange-300 text-orange-700"
+                  >
+                    AMR {formatSalesKwh(energySalesBreakdown.amrKwh)}
+                  </Badge>
+                </div>
+              )}
             </CardContent>
           </Card>
           <Card className="shadow-none border bg-card">
@@ -8234,6 +8267,28 @@ export function OverviewMainTabV3({
             <p className="text-xs text-muted-foreground mt-1">
               {energySales === null ? "Not Applicable" : "kWh"}
             </p>
+            {energySalesBreakdown && (
+              <div className="flex items-center gap-1.5 mt-2 flex-wrap">
+                <Badge
+                  variant="outline"
+                  className="text-[10px] gap-1 border-blue-300 text-blue-700"
+                >
+                  Zeus {formatSalesKwh(energySalesBreakdown.zeusKwh)}
+                </Badge>
+                <Badge
+                  variant="outline"
+                  className="text-[10px] gap-1 border-green-300 text-green-700"
+                >
+                  MMS {formatSalesKwh(energySalesBreakdown.mmsKwh)}
+                </Badge>
+                <Badge
+                  variant="outline"
+                  className="text-[10px] gap-1 border-orange-300 text-orange-700"
+                >
+                  AMR {formatSalesKwh(energySalesBreakdown.amrKwh)}
+                </Badge>
+              </div>
+            )}
           </CardContent>
         </Card>
         <Card>

@@ -31,13 +31,17 @@ interface AppState {
 }
 
 const getDefaultDateRange = () => {
-  const today = new Date()
-  const lastMonth = new Date(today)
-  lastMonth.setMonth(lastMonth.getMonth() - 1)
+  // Max selectable date is yesterday — today's data is incomplete
+  const end = new Date()
+  end.setHours(0, 0, 0, 0)
+  end.setDate(end.getDate() - 1)
+
+  const start = new Date(end)
+  start.setMonth(start.getMonth() - 1)
 
   return {
-    start: lastMonth,
-    end: today,
+    start,
+    end,
   }
 }
 

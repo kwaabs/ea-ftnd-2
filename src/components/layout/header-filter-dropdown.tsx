@@ -502,12 +502,13 @@ export function HeaderFilterDropdown() {
     // wouldn't do anything on these pages.
     const isMapPage = pathname === "/map"
     const isCustomerSalesPage = pathname === "/customer-sales"
+    const isAdminLoginsPage = pathname === "/admin/logins"
     // Zeus / MMS / AMR list: date + region + district; AMR meter detail: date only
     const isZeusPage = pathname === "/customer-sales/zeus"
     const isMmsPage = pathname === "/customer-sales/mms"
     const isAmrPage = pathname === "/amr"
     const isAmrMeterDetailPage = Boolean(pathname?.startsWith("/amr/") && pathname.split("/").length === 3)
-    const isDateOnlyPage = isMeterDetailsPage || isStationDetailsPage || isBoundaryDetailsPage || isRegionDetailsPage || isDistrictDetailsPage || isExpressFeederDetailPage || isMapPage || isCustomerSalesPage || isAmrMeterDetailPage
+    const isDateOnlyPage = isMeterDetailsPage || isStationDetailsPage || isBoundaryDetailsPage || isRegionDetailsPage || isDistrictDetailsPage || isExpressFeederDetailPage || isMapPage || isCustomerSalesPage || isAmrMeterDetailPage || isAdminLoginsPage
 
     // Regions overview page — show only date + region filters
     const isRegionsOverviewPage = pathname === "/regions"
@@ -573,15 +574,19 @@ export function HeaderFilterDropdown() {
     const hasVoltageData = filterOptions?.voltages && filterOptions.voltages.length > 0
 
     const handleDatePreset = (preset: string) => {
+        // Max end date is always yesterday (today excluded)
         const end = new Date()
-        const start = new Date()
+        end.setHours(0, 0, 0, 0)
+        end.setDate(end.getDate() - 1)
+
+        const start = new Date(end)
 
         switch (preset) {
             case "lastDay":
-                start.setDate(end.getDate() - 1)
+                // Most recent complete day only
                 break
             case "lastWeek":
-                start.setDate(end.getDate() - 7)
+                start.setDate(end.getDate() - 6)
                 break
             case "lastMonth":
                 start.setMonth(end.getMonth() - 1)
@@ -597,15 +602,37 @@ export function HeaderFilterDropdown() {
     }
 
     const handleApplyFilters = () => {
-        setFilters(pendingFilters)
+        const maxEnd = new Date()
+        maxEnd.setHours(0, 0, 0, 0)
+        maxEnd.setDate(maxEnd.getDate() - 1)
+
+        const start = new Date(pendingFilters.dateRange.start)
+        start.setHours(0, 0, 0, 0)
+        let end = new Date(pendingFilters.dateRange.end)
+        end.setHours(0, 0, 0, 0)
+        if (end > maxEnd) end = new Date(maxEnd)
+        if (start > end) {
+            start.setTime(end.getTime())
+        }
+
+        setFilters({
+            ...pendingFilters,
+            dateRange: { start, end },
+        })
     }
 
     const handleReset = () => {
+        const end = new Date()
+        end.setHours(0, 0, 0, 0)
+        end.setDate(end.getDate() - 1)
+        const start = new Date(end)
+        start.setMonth(start.getMonth() - 1)
+
         const defaultFilters = {
             preset: "lastMonth" as const,
             dateRange: {
-                start: new Date(new Date().setMonth(new Date().getMonth() - 1)),
-                end: new Date(),
+                start,
+                end,
             },
             regions: [],
             districts: [],
