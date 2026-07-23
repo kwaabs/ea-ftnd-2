@@ -36,6 +36,31 @@ interface ZeusPageViewProps {
   district?: string;
 }
 
+type ZeusServiceType = "Postpaid" | "Prepaid" | "AMR";
+
+const ZEUS_SERVICE_TYPES: ZeusServiceType[] = ["Postpaid", "Prepaid", "AMR"];
+
+const ZEUS_SERVICE_META: Record<
+  ZeusServiceType,
+  { label: string; blurb: string; accent: string }
+> = {
+  Postpaid: {
+    label: "Postpaid",
+    blurb: "Postpaid billed consumption, billing and balance",
+    accent: "text-blue-700",
+  },
+  Prepaid: {
+    label: "Prepaid",
+    blurb: "Zeus prepaid accounts — billed consumption and balance",
+    accent: "text-emerald-700",
+  },
+  AMR: {
+    label: "AMR",
+    blurb: "Zeus AMR accounts — billed consumption and balance",
+    accent: "text-orange-700",
+  },
+};
+
 const ZEUS_COLORS = [
   "#1d4ed8",
   "#2563eb",
@@ -78,8 +103,10 @@ export function ZeusPageView({
   region,
   district,
 }: ZeusPageViewProps) {
+  const [serviceType, setServiceType] = useState<ZeusServiceType>("Postpaid");
   const [selectedRegion, setSelectedRegion] = useState<string | null>(null);
   const effectiveRegion = selectedRegion || region;
+  const serviceMeta = ZEUS_SERVICE_META[serviceType];
 
   const { data: regionAgg = [], isLoading: regionLoading } =
     useCustomerConsumptionAggregate({
@@ -88,6 +115,7 @@ export function ZeusPageView({
       groupBy: "regionname",
       region,
       district,
+      serviceType,
     });
 
   const { data: districtAgg = [], isLoading: districtLoading } =
@@ -97,6 +125,7 @@ export function ZeusPageView({
       groupBy: "districtname",
       region: effectiveRegion,
       district,
+      serviceType,
       enabled: Boolean(effectiveRegion),
     });
 
@@ -107,6 +136,7 @@ export function ZeusPageView({
       groupBy: "customertype",
       region: effectiveRegion,
       district,
+      serviceType,
     });
 
   const { data: accountTypeAgg = [], isLoading: accountLoading } =
@@ -116,6 +146,7 @@ export function ZeusPageView({
       groupBy: "accounttype",
       region: effectiveRegion,
       district,
+      serviceType,
     });
 
   const stats = useMemo(() => {
@@ -184,22 +215,47 @@ export function ZeusPageView({
     setSelectedRegion((prev) => (prev === value ? null : value));
   };
 
+  const onServiceTypeChange = (value: string) => {
+    setServiceType(value as ZeusServiceType);
+    setSelectedRegion(null);
+  };
+
   return (
     <div className="space-y-6">
       <div>
         <h2 className="text-3xl font-semibold tracking-tight text-foreground">
-          Zeus — Postpaid
+          Zeus
         </h2>
         <p className="text-muted-foreground mt-1">
-          Postpaid customer consumption, billing and balance analysis
+          {serviceMeta.blurb}
           {selectedRegion ? (
-            <span className="text-blue-700">
+            <span className={serviceMeta.accent}>
               {" "}
               · filtered by {selectedRegion}
             </span>
           ) : null}
         </p>
       </div>
+
+      <Tabs value={serviceType} onValueChange={onServiceTypeChange}>
+        <TabsList className="grid w-full grid-cols-3 max-w-md">
+          {ZEUS_SERVICE_TYPES.map((st) => (
+            <TabsTrigger
+              key={st}
+              value={st}
+              className={
+                st === "Postpaid"
+                  ? "data-[state=active]:text-blue-700"
+                  : st === "Prepaid"
+                    ? "data-[state=active]:text-emerald-700"
+                    : "data-[state=active]:text-orange-700"
+              }
+            >
+              {ZEUS_SERVICE_META[st].label}
+            </TabsTrigger>
+          ))}
+        </TabsList>
+      </Tabs>
 
       {/* KPIs */}
       <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
@@ -211,7 +267,7 @@ export function ZeusPageView({
             {regionLoading ? (
               <Skeleton className="h-8 w-32" />
             ) : (
-              <p className="text-2xl font-bold text-blue-700 tabular-nums">
+              <p className={`text-2xl font-bold tabular-nums ${serviceMeta.accent}`}>
                 {formatKwhRaw(stats.totalKwh)}
               </p>
             )}
@@ -233,7 +289,7 @@ export function ZeusPageView({
               </p>
             )}
             <p className="text-xs text-muted-foreground mt-1">
-              Postpaid accounts
+              {serviceMeta.label} accounts
             </p>
           </CardContent>
         </Card>
@@ -272,7 +328,9 @@ export function ZeusPageView({
         <Card>
           <CardHeader>
             <CardTitle>Consumption by region</CardTitle>
-            <CardDescription>Billed kWh per region — postpaid</CardDescription>
+            <CardDescription>
+              Billed kWh per region — Zeus {serviceMeta.label}
+            </CardDescription>
           </CardHeader>
           <CardContent>
             {regionLoading ? (
@@ -822,6 +880,7 @@ export function ZeusPageView({
         dateRange={dateRange}
         region={effectiveRegion}
         district={district}
+        serviceType={serviceType}
       />
     </div>
   );

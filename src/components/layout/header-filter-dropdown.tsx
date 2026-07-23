@@ -503,12 +503,18 @@ export function HeaderFilterDropdown() {
     const isMapPage = pathname === "/map"
     const isCustomerSalesPage = pathname === "/customer-sales"
     const isAdminLoginsPage = pathname === "/admin/logins"
+    const isCustomerSalesAccountPage = Boolean(
+        pathname?.startsWith("/customer-sales/account/"),
+    )
+    const isCustomerSalesServicePointPage = Boolean(
+        pathname?.startsWith("/customer-sales/service-point/"),
+    )
     // Zeus / MMS / AMR list: date + region + district; AMR meter detail: date only
     const isZeusPage = pathname === "/customer-sales/zeus"
     const isMmsPage = pathname === "/customer-sales/mms"
     const isAmrPage = pathname === "/amr"
     const isAmrMeterDetailPage = Boolean(pathname?.startsWith("/amr/") && pathname.split("/").length === 3)
-    const isDateOnlyPage = isMeterDetailsPage || isStationDetailsPage || isBoundaryDetailsPage || isRegionDetailsPage || isDistrictDetailsPage || isExpressFeederDetailPage || isMapPage || isCustomerSalesPage || isAmrMeterDetailPage || isAdminLoginsPage
+    const isDateOnlyPage = isMeterDetailsPage || isStationDetailsPage || isBoundaryDetailsPage || isRegionDetailsPage || isDistrictDetailsPage || isExpressFeederDetailPage || isMapPage || isCustomerSalesPage || isAmrMeterDetailPage || isAdminLoginsPage || isCustomerSalesAccountPage || isCustomerSalesServicePointPage
 
     // Regions overview page — show only date + region filters
     const isRegionsOverviewPage = pathname === "/regions"

@@ -15,6 +15,7 @@ interface CustomerSalesDetailProps {
     dateRange: { start: string; end: string }
     region?: string
     district?: string
+    serviceType?: string
 }
 
 type SortField = "lastbilldate" | "lastbillconsumption" | "lastbillamount" | "currentbalance" | "lastpaymentdate" | "fullname"
@@ -44,7 +45,7 @@ function dateValue(v: string | null | undefined) {
     return new Date(v).getTime()
 }
 
-export function CustomerSalesDetail({ dateRange, region, district }: CustomerSalesDetailProps) {
+export function CustomerSalesDetail({ dateRange, region, district, serviceType }: CustomerSalesDetailProps) {
     const [page, setPage] = useState(1)
     const [searchTerm, setSearchTerm] = useState("")
     const [sortField, setSortField] = useState<SortField>("lastbilldate")
@@ -55,6 +56,7 @@ export function CustomerSalesDetail({ dateRange, region, district }: CustomerSal
         dateTo: dateRange.end,
         region,
         district,
+        serviceType,
         page: 1,
         limit: 2000,
     })

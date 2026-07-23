@@ -38,7 +38,8 @@ function DetailRow({ label, value }: { label: string; value: React.ReactNode }) 
 
 export function ServicePointDetailView() {
   const params = useParams()
-  const rawParam = params.service_point_number
+  // Folder is [service-point-number] → param key uses hyphens, not underscores
+  const rawParam = params["service-point-number"] ?? params.service_point_number
   const servicePointNumber = rawParam ? decodeURIComponent(rawParam as string) : undefined
   const searchParams = useSearchParams()
   const dateFrom = searchParams.get("dateFrom") ?? undefined

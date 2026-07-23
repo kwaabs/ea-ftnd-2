@@ -338,7 +338,10 @@ export function OverviewMainTabV3({
   const {
     data: customerConsumptionDataArray,
     isLoading: customerConsumptionLoading,
-  } = useCustomerConsumptionAggregate(customerSalesParams);
+  } = useCustomerConsumptionAggregate({
+    ...customerSalesParams,
+    groupBy: ["servicetype"],
+  });
 
   const { data: mmsAggregateData, isLoading: mmsAggregateLoading } =
     useMmsCustomerSalesAggregate({
@@ -371,14 +374,18 @@ export function OverviewMainTabV3({
   }, [aggregateData?.rawData]);
 
   const energySalesBreakdown = useMemo(() => {
-    const zeusKwh =
-      customerConsumptionDataArray && customerConsumptionDataArray.length > 0
-        ? customerConsumptionDataArray.reduce(
-            (sum: number, item: any) =>
-              sum + (item.sum_lastbillconsumption || 0),
-            0,
-          )
-        : 0;
+    const zeusByType = { Postpaid: 0, Prepaid: 0, AMR: 0 };
+    if (customerConsumptionDataArray && customerConsumptionDataArray.length > 0) {
+      customerConsumptionDataArray.forEach((item: any) => {
+        const t = String(item.servicetype || "")
+          .trim()
+          .toLowerCase();
+        const kwh = item.sum_lastbillconsumption || 0;
+        if (t === "postpaid") zeusByType.Postpaid += kwh;
+        else if (t === "prepaid") zeusByType.Prepaid += kwh;
+        else if (t === "amr") zeusByType.AMR += kwh;
+      });
+    }
 
     const mmsKwh =
       mmsAggregateData && mmsAggregateData.length > 0
@@ -397,10 +404,26 @@ export function OverviewMainTabV3({
           )
         : 0;
 
-    const total = zeusKwh + mmsKwh + amrKwh;
-    if (total === 0) return null;
+    // Combined sales for losses uses Zeus Postpaid only (+ MMS + daily AMR)
+    // so Zeus Prepaid / Zeus AMR are not double-counted against MMS / daily AMR.
+    const total = zeusByType.Postpaid + mmsKwh + amrKwh;
+    if (
+      total === 0 &&
+      zeusByType.Prepaid === 0 &&
+      zeusByType.AMR === 0
+    ) {
+      return null;
+    }
 
-    return { zeusKwh, mmsKwh, amrKwh, total };
+    return {
+      zeusPostpaidKwh: zeusByType.Postpaid,
+      zeusPrepaidKwh: zeusByType.Prepaid,
+      zeusAmrKwh: zeusByType.AMR,
+      zeusKwh: zeusByType.Postpaid,
+      mmsKwh,
+      amrKwh,
+      total,
+    };
   }, [customerConsumptionDataArray, mmsAggregateData, amrAggregateData]);
 
   const energySales = energySalesBreakdown?.total ?? null;
@@ -7968,7 +7991,19 @@ export function OverviewMainTabV3({
                     variant="outline"
                     className="text-[10px] gap-1 border-blue-300 text-blue-700"
                   >
-                    Zeus {formatSalesKwh(energySalesBreakdown.zeusKwh)}
+                    Zeus Postpaid {formatSalesKwh(energySalesBreakdown.zeusPostpaidKwh)}
+                  </Badge>
+                  <Badge
+                    variant="outline"
+                    className="text-[10px] gap-1 border-cyan-300 text-cyan-700"
+                  >
+                    Zeus Prepaid {formatSalesKwh(energySalesBreakdown.zeusPrepaidKwh)}
+                  </Badge>
+                  <Badge
+                    variant="outline"
+                    className="text-[10px] gap-1 border-indigo-300 text-indigo-700"
+                  >
+                    Zeus AMR {formatSalesKwh(energySalesBreakdown.zeusAmrKwh)}
                   </Badge>
                   <Badge
                     variant="outline"
@@ -7980,7 +8015,7 @@ export function OverviewMainTabV3({
                     variant="outline"
                     className="text-[10px] gap-1 border-orange-300 text-orange-700"
                   >
-                    AMR {formatSalesKwh(energySalesBreakdown.amrKwh)}
+                    Daily AMR {formatSalesKwh(energySalesBreakdown.amrKwh)}
                   </Badge>
                 </div>
               )}
@@ -8255,7 +8290,7 @@ export function OverviewMainTabV3({
         <Card>
           <CardHeader className="pb-2">
             <CardTitle className="text-sm font-medium text-muted-foreground">
-              Energy Sales (Zeus + MMS + AMR)
+              Energy Sales (Zeus Postpaid + MMS + Daily AMR)
             </CardTitle>
           </CardHeader>
           <CardContent>
@@ -8273,7 +8308,19 @@ export function OverviewMainTabV3({
                   variant="outline"
                   className="text-[10px] gap-1 border-blue-300 text-blue-700"
                 >
-                  Zeus {formatSalesKwh(energySalesBreakdown.zeusKwh)}
+                  Zeus Postpaid {formatSalesKwh(energySalesBreakdown.zeusPostpaidKwh)}
+                </Badge>
+                <Badge
+                  variant="outline"
+                  className="text-[10px] gap-1 border-cyan-300 text-cyan-700"
+                >
+                  Zeus Prepaid {formatSalesKwh(energySalesBreakdown.zeusPrepaidKwh)}
+                </Badge>
+                <Badge
+                  variant="outline"
+                  className="text-[10px] gap-1 border-indigo-300 text-indigo-700"
+                >
+                  Zeus AMR {formatSalesKwh(energySalesBreakdown.zeusAmrKwh)}
                 </Badge>
                 <Badge
                   variant="outline"
@@ -8285,7 +8332,7 @@ export function OverviewMainTabV3({
                   variant="outline"
                   className="text-[10px] gap-1 border-orange-300 text-orange-700"
                 >
-                  AMR {formatSalesKwh(energySalesBreakdown.amrKwh)}
+                  Daily AMR {formatSalesKwh(energySalesBreakdown.amrKwh)}
                 </Badge>
               </div>
             )}

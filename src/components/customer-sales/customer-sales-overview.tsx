@@ -116,8 +116,12 @@ export function CustomerSalesOverview({
 }: CustomerSalesOverviewProps) {
   const params = { dateFrom: dateRange.start, dateTo: dateRange.end };
 
+  // Option B: one Zeus call grouped by servicetype + region, then partition client-side
   const { data: zeusData, isLoading: zeusLoading } =
-    useCustomerConsumptionAggregate(params);
+    useCustomerConsumptionAggregate({
+      ...params,
+      groupBy: ["servicetype", "regionname"],
+    });
   const { data: mmsData, isLoading: mmsLoading } = useMmsCustomerSalesAggregate(
     {
       ...params,
@@ -129,44 +133,49 @@ export function CustomerSalesOverview({
     dateTo: dateRange.end,
   });
 
-  const zeusItems = zeusData || [];
+  const zeusRaw = zeusData || [];
   const mmsItems = mmsData || [];
   const amrItems = amrData || [];
 
-  // ── Zeus stats ──
-  const zeusStats = useMemo(() => {
-    if (!zeusItems.length)
-      return {
-        totalKwh: 0,
-        totalCustomers: 0,
-        totalBilling: 0,
-        totalBalance: 0,
-        avgKwh: 0,
-      };
-    const totalKwh = zeusItems.reduce(
-      (s, i) => s + (i.sum_lastbillconsumption || 0),
-      0,
-    );
-    const totalCustomers = zeusItems.reduce(
-      (s, i) => s + (i.customer_count || 0),
-      0,
-    );
-    const totalBilling = zeusItems.reduce(
-      (s, i) => s + (i.sum_lastbillamount || 0),
-      0,
-    );
-    const totalBalance = zeusItems.reduce(
-      (s, i) => s + (i.sum_currentbalance || 0),
-      0,
-    );
-    return {
-      totalKwh,
-      totalCustomers,
-      totalBilling,
-      totalBalance,
-      avgKwh: totalCustomers > 0 ? totalKwh / totalCustomers : 0,
+  const normalizeZeusType = (raw?: string | null) => {
+    const t = (raw || "").trim().toLowerCase();
+    if (t === "postpaid") return "Postpaid" as const;
+    if (t === "prepaid") return "Prepaid" as const;
+    if (t === "amr") return "AMR" as const;
+    return "Other" as const;
+  };
+
+  // Zeus Postpaid only for region charts / combined Zeus column (avoid double-count with MMS / daily AMR)
+  const zeusItems = useMemo(
+    () => zeusRaw.filter((i) => normalizeZeusType(i.servicetype) === "Postpaid"),
+    [zeusRaw],
+  );
+
+  const zeusByServiceType = useMemo(() => {
+    const totals = {
+      Postpaid: { totalKwh: 0, totalCustomers: 0, totalBilling: 0, totalBalance: 0 },
+      Prepaid: { totalKwh: 0, totalCustomers: 0, totalBilling: 0, totalBalance: 0 },
+      AMR: { totalKwh: 0, totalCustomers: 0, totalBilling: 0, totalBalance: 0 },
     };
-  }, [zeusItems]);
+    zeusRaw.forEach((i) => {
+      const key = normalizeZeusType(i.servicetype);
+      if (key === "Other") return;
+      totals[key].totalKwh += i.sum_lastbillconsumption || 0;
+      totals[key].totalCustomers += i.customer_count || 0;
+      totals[key].totalBilling += i.sum_lastbillamount || 0;
+      totals[key].totalBalance += i.sum_currentbalance || 0;
+    });
+    return totals;
+  }, [zeusRaw]);
+
+  // ── Zeus stats (Postpaid — used where Zeus is combined with MMS / daily AMR) ──
+  const zeusStats = useMemo(() => {
+    const t = zeusByServiceType.Postpaid;
+    return {
+      ...t,
+      avgKwh: t.totalCustomers > 0 ? t.totalKwh / t.totalCustomers : 0,
+    };
+  }, [zeusByServiceType]);
 
   // ── MMS stats ──
   const mmsStats = useMemo(() => {
@@ -342,7 +351,7 @@ export function CustomerSalesOverview({
                   Total Customer Consumption
                 </CardTitle>
                 <CardDescription className="text-[11px]">
-                  Zeus + MMS + AMR combined
+                  Zeus Postpaid + MMS + daily AMR
                 </CardDescription>
               </div>
             </div>
@@ -360,7 +369,19 @@ export function CustomerSalesOverview({
                     variant="outline"
                     className="text-[10px] gap-1 border-blue-300 text-blue-700"
                   >
-                    Zeus {formatKwh(zeusStats.totalKwh)}
+                    Zeus Postpaid {formatKwh(zeusByServiceType.Postpaid.totalKwh)}
+                  </Badge>
+                  <Badge
+                    variant="outline"
+                    className="text-[10px] gap-1 border-cyan-300 text-cyan-700"
+                  >
+                    Zeus Prepaid {formatKwh(zeusByServiceType.Prepaid.totalKwh)}
+                  </Badge>
+                  <Badge
+                    variant="outline"
+                    className="text-[10px] gap-1 border-indigo-300 text-indigo-700"
+                  >
+                    Zeus AMR {formatKwh(zeusByServiceType.AMR.totalKwh)}
                   </Badge>
                   <Badge
                     variant="outline"
@@ -372,7 +393,7 @@ export function CustomerSalesOverview({
                     variant="outline"
                     className="text-[10px] gap-1 border-orange-300 text-orange-700"
                   >
-                    AMR {formatKwh(amrStats.totalKwh)}
+                    Daily AMR {formatKwh(amrStats.totalKwh)}
                   </Badge>
                 </div>
               </>
@@ -449,8 +470,7 @@ export function CustomerSalesOverview({
         <CardHeader>
           <CardTitle>Consumption by Region — All Sources</CardTitle>
           <CardDescription>
-            Zeus (postpaid), MMS (prepaid), and AMR (daily meters) kWh per
-            region
+            Zeus Postpaid, MMS (prepaid system), and daily AMR kWh per region
           </CardDescription>
         </CardHeader>
         <CardContent>
