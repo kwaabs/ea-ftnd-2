@@ -118,11 +118,17 @@ export function CustomerSalesOverview({
 }: CustomerSalesOverviewProps) {
   const params = { dateFrom: dateRange.start, dateTo: dateRange.end };
 
-  // Option B: one Zeus call grouped by servicetype + region, then partition client-side
+  // Regional Zeus (for charts / region tables)
   const { data: zeusData, isLoading: zeusLoading } =
     useCustomerConsumptionAggregate({
       ...params,
       groupBy: ["servicetype", "regionname"],
+    });
+  // National Zeus by service type — distinct customers (no region sum inflation)
+  const { data: zeusNationalData, isLoading: zeusNationalLoading } =
+    useCustomerConsumptionAggregate({
+      ...params,
+      groupBy: ["servicetype"],
     });
   const { data: mmsData, isLoading: mmsLoading } = useMmsCustomerSalesAggregate(
     {
@@ -130,13 +136,20 @@ export function CustomerSalesOverview({
       groupBy: "region",
     },
   );
+  // National MMS — distinct (account, meter) without summing regions
+  const { data: mmsNationalData, isLoading: mmsNationalLoading } =
+    useMmsCustomerSalesAggregate({
+      ...params,
+    });
   const { data: amrData, isLoading: amrLoading } = useAmrConsumptionAggregate({
     dateFrom: dateRange.start,
     dateTo: dateRange.end,
   });
 
   const zeusRaw = zeusData || [];
+  const zeusNationalRaw = zeusNationalData || [];
   const mmsItems = mmsData || [];
+  const mmsNationalItems = mmsNationalData || [];
   const amrItems = amrData || [];
 
   const normalizeZeusType = (raw?: string | null) => {
@@ -164,20 +177,26 @@ export function CustomerSalesOverview({
       Prepaid: { totalKwh: 0, totalCustomers: 0, totalBilling: 0, totalBalance: 0 },
       AMR: { totalKwh: 0, totalCustomers: 0, totalBilling: 0, totalBalance: 0 },
     };
+    // kWh / billing / balance: sum regional rows (additive)
     zeusRaw.forEach((i) => {
       const key = normalizeZeusType(i.servicetype);
       if (key === "Other") return;
       totals[key].totalKwh += i.sum_lastbillconsumption || 0;
-      totals[key].totalCustomers += i.customer_count || 0;
       totals[key].totalBilling += i.sum_lastbillamount || 0;
       totals[key].totalBalance += i.sum_currentbalance || 0;
     });
+    // customers: national distinct (account, service point) — do not sum regions
+    zeusNationalRaw.forEach((i) => {
+      const key = normalizeZeusType(i.servicetype);
+      if (key === "Other") return;
+      totals[key].totalCustomers += i.customer_count || 0;
+    });
     return totals;
-  }, [zeusRaw]);
+  }, [zeusRaw, zeusNationalRaw]);
 
   // ── MMS stats ──
   const mmsStats = useMemo(() => {
-    if (!mmsItems.length)
+    if (!mmsItems.length && !mmsNationalItems.length)
       return {
         totalKwh: 0,
         totalCustomers: 0,
@@ -189,16 +208,16 @@ export function CustomerSalesOverview({
       (s, i) => s + (i.sum_last_month_kwh_read || 0),
       0,
     );
-    const totalCustomers = mmsItems.reduce(
-      (s, i) => s + (i.customer_count || 0),
-      0,
-    );
     const totalCredit = mmsItems.reduce(
       (s, i) => s + (i.sum_last_month_credit_read || 0),
       0,
     );
     const totalBalance = mmsItems.reduce(
       (s, i) => s + (i.sum_credit_balance_remaining || 0),
+      0,
+    );
+    const totalCustomers = mmsNationalItems.reduce(
+      (s, i) => s + (i.customer_count || 0),
       0,
     );
     return {
@@ -208,7 +227,7 @@ export function CustomerSalesOverview({
       totalBalance,
       avgKwh: totalCustomers > 0 ? totalKwh / totalCustomers : 0,
     };
-  }, [mmsItems]);
+  }, [mmsItems, mmsNationalItems]);
 
   // ── AMR stats (aggregate import + export) ──
   const amrStats = useMemo(() => {
@@ -234,6 +253,9 @@ export function CustomerSalesOverview({
     zeusByServiceType.Postpaid.totalCustomers +
     zeusByServiceType.Prepaid.totalCustomers +
     mmsStats.totalCustomers;
+  const postpaidCustomers = zeusByServiceType.Postpaid.totalCustomers;
+  const prepaidCustomers =
+    zeusByServiceType.Prepaid.totalCustomers + mmsStats.totalCustomers;
 
   // Keep zeusStats as Postpaid for legacy chart sections that expect it
   const zeusStats = {
@@ -348,7 +370,12 @@ export function CustomerSalesOverview({
     );
   }, [zeusItems, zeusPrepaidItems, mmsItems, amrItems]);
 
-  const isLoading = zeusLoading || mmsLoading || amrLoading;
+  const isLoading =
+    zeusLoading ||
+    zeusNationalLoading ||
+    mmsLoading ||
+    mmsNationalLoading ||
+    amrLoading;
 
   return (
     <div className="space-y-6">
@@ -420,15 +447,10 @@ export function CustomerSalesOverview({
                 </div>
                 <div className="flex items-center gap-2 mt-1">
                   <span className="text-[10px] text-blue-600">
-                    Postpaid Zeus:{" "}
-                    {formatNumber(zeusByServiceType.Postpaid.totalCustomers)}
+                    Postpaid: {formatNumber(postpaidCustomers)}
                   </span>
                   <span className="text-[10px] text-emerald-600">
-                    Prepaid:{" "}
-                    {formatNumber(
-                      zeusByServiceType.Prepaid.totalCustomers +
-                        mmsStats.totalCustomers,
-                    )}
+                    Prepaid: {formatNumber(prepaidCustomers)}
                   </span>
                 </div>
               </>
