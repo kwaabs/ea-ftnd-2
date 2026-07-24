@@ -1,7 +1,6 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import Link from "next/link";
 import { DollarSign, Scale, Users, Zap } from "lucide-react";
 import {
   Bar,
@@ -866,29 +865,13 @@ export function ZeusPageView({
                             (b.sum_lastbillconsumption || 0) -
                             (a.sum_lastbillconsumption || 0),
                         )
-                        .map((item) => {
-                          const accountType = (item.accounttype || "").trim();
-                          const amrSltHref =
-                            serviceType === "Postpaid" &&
-                            /^(slt|nslt)$/i.test(accountType)
-                              ? `/customer-sales/postpaid/amr/${encodeURIComponent(accountType)}`
-                              : null;
-                          return (
+                        .map((item) => (
                           <tr
                             key={item.accounttype || "unknown"}
                             className="border-b last:border-0 hover:bg-muted/40"
                           >
                             <td className="py-2.5 pr-4 font-medium">
-                              {amrSltHref ? (
-                                <Link
-                                  href={amrSltHref}
-                                  className="text-primary hover:underline"
-                                >
-                                  {accountType || "—"}
-                                </Link>
-                              ) : (
-                                accountType || "—"
-                              )}
+                              {item.accounttype || "—"}
                             </td>
                             <td className="py-2.5 px-4 text-right font-semibold text-blue-700 tabular-nums">
                               {formatKwhRaw(item.sum_lastbillconsumption)}
@@ -903,8 +886,7 @@ export function ZeusPageView({
                               {formatMoney(item.sum_currentbalance)}
                             </td>
                           </tr>
-                          );
-                        })}
+                        ))}
                     </tbody>
                   </table>
                 </div>
