@@ -1,6 +1,7 @@
 "use client";
 
 import { useMemo, useState } from "react";
+import Link from "next/link";
 import { DollarSign, Scale, Users, Zap } from "lucide-react";
 import {
   Bar,
@@ -34,6 +35,10 @@ interface ZeusPageViewProps {
   dateRange: DateRange;
   region?: string;
   district?: string;
+  /** Lock aggregates + detail to this Zeus service type (hides type tabs). */
+  serviceType?: "Postpaid" | "Prepaid";
+  /** When true, omit the page-level Zeus heading (hub provides context). */
+  embedded?: boolean;
 }
 
 type ZeusServiceType = "Postpaid" | "Prepaid" | "AMR";
@@ -102,8 +107,13 @@ export function ZeusPageView({
   dateRange,
   region,
   district,
+  serviceType: lockedServiceType,
+  embedded = false,
 }: ZeusPageViewProps) {
-  const [serviceType, setServiceType] = useState<ZeusServiceType>("Postpaid");
+  const [unlockedServiceType, setUnlockedServiceType] =
+    useState<ZeusServiceType>("Postpaid");
+  const serviceType: ZeusServiceType = lockedServiceType ?? unlockedServiceType;
+  const isLocked = Boolean(lockedServiceType);
   const [selectedRegion, setSelectedRegion] = useState<string | null>(null);
   const effectiveRegion = selectedRegion || region;
   const serviceMeta = ZEUS_SERVICE_META[serviceType];
@@ -216,46 +226,57 @@ export function ZeusPageView({
   };
 
   const onServiceTypeChange = (value: string) => {
-    setServiceType(value as ZeusServiceType);
+    if (isLocked) return;
+    setUnlockedServiceType(value as ZeusServiceType);
     setSelectedRegion(null);
   };
 
   return (
     <div className="space-y-6">
-      <div>
-        <h2 className="text-3xl font-semibold tracking-tight text-foreground">
-          Zeus
-        </h2>
-        <p className="text-muted-foreground mt-1">
-          {serviceMeta.blurb}
-          {selectedRegion ? (
-            <span className={serviceMeta.accent}>
-              {" "}
-              · filtered by {selectedRegion}
-            </span>
-          ) : null}
-        </p>
-      </div>
+      {!embedded && (
+        <div>
+          <h2 className="text-3xl font-semibold tracking-tight text-foreground">
+            Zeus{isLocked ? ` — ${serviceMeta.label}` : ""}
+          </h2>
+          <p className="text-muted-foreground mt-1">
+            {serviceMeta.blurb}
+            {selectedRegion ? (
+              <span className={serviceMeta.accent}>
+                {" "}
+                · filtered by {selectedRegion}
+              </span>
+            ) : null}
+          </p>
+        </div>
+      )}
 
-      <Tabs value={serviceType} onValueChange={onServiceTypeChange}>
-        <TabsList className="grid w-full grid-cols-3 max-w-md">
-          {ZEUS_SERVICE_TYPES.map((st) => (
-            <TabsTrigger
-              key={st}
-              value={st}
-              className={
-                st === "Postpaid"
-                  ? "data-[state=active]:text-blue-700"
-                  : st === "Prepaid"
-                    ? "data-[state=active]:text-emerald-700"
-                    : "data-[state=active]:text-orange-700"
-              }
-            >
-              {ZEUS_SERVICE_META[st].label}
-            </TabsTrigger>
-          ))}
-        </TabsList>
-      </Tabs>
+      {!isLocked && (
+        <Tabs value={serviceType} onValueChange={onServiceTypeChange}>
+          <TabsList className="grid w-full grid-cols-3 max-w-md">
+            {ZEUS_SERVICE_TYPES.map((st) => (
+              <TabsTrigger
+                key={st}
+                value={st}
+                className={
+                  st === "Postpaid"
+                    ? "data-[state=active]:text-blue-700"
+                    : st === "Prepaid"
+                      ? "data-[state=active]:text-emerald-700"
+                      : "data-[state=active]:text-orange-700"
+                }
+              >
+                {ZEUS_SERVICE_META[st].label}
+              </TabsTrigger>
+            ))}
+          </TabsList>
+        </Tabs>
+      )}
+
+      {embedded && selectedRegion ? (
+        <p className={`text-sm ${serviceMeta.accent}`}>
+          Filtered by {selectedRegion}
+        </p>
+      ) : null}
 
       {/* KPIs */}
       <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
@@ -845,13 +866,29 @@ export function ZeusPageView({
                             (b.sum_lastbillconsumption || 0) -
                             (a.sum_lastbillconsumption || 0),
                         )
-                        .map((item) => (
+                        .map((item) => {
+                          const accountType = (item.accounttype || "").trim();
+                          const amrSltHref =
+                            serviceType === "Postpaid" &&
+                            /^(slt|nslt)$/i.test(accountType)
+                              ? `/customer-sales/postpaid/amr/${encodeURIComponent(accountType)}`
+                              : null;
+                          return (
                           <tr
                             key={item.accounttype || "unknown"}
                             className="border-b last:border-0 hover:bg-muted/40"
                           >
                             <td className="py-2.5 pr-4 font-medium">
-                              {item.accounttype || "—"}
+                              {amrSltHref ? (
+                                <Link
+                                  href={amrSltHref}
+                                  className="text-primary hover:underline"
+                                >
+                                  {accountType || "—"}
+                                </Link>
+                              ) : (
+                                accountType || "—"
+                              )}
                             </td>
                             <td className="py-2.5 px-4 text-right font-semibold text-blue-700 tabular-nums">
                               {formatKwhRaw(item.sum_lastbillconsumption)}
@@ -866,7 +903,8 @@ export function ZeusPageView({
                               {formatMoney(item.sum_currentbalance)}
                             </td>
                           </tr>
-                        ))}
+                          );
+                        })}
                     </tbody>
                   </table>
                 </div>

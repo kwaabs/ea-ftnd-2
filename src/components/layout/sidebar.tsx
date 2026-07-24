@@ -208,19 +208,14 @@ export function Sidebar() {
                     href: "/customer-sales",
                 },
                 {
-                    id: "customer-zeus",
-                    label: "Zeus — Postpaid",
-                    href: "/customer-sales/zeus",
+                    id: "customer-postpaid",
+                    label: "Postpaid",
+                    href: "/customer-sales/postpaid",
                 },
                 {
-                    id: "customer-mms",
-                    label: "MMS — Prepaid",
-                    href: "/customer-sales/mms",
-                },
-                {
-                    id: "customer-amr",
-                    label: "AMR Meters",
-                    href: "/amr",
+                    id: "customer-prepaid",
+                    label: "Prepaid",
+                    href: "/customer-sales/prepaid",
                 },
             ],
         },
@@ -286,7 +281,11 @@ export function Sidebar() {
                                     (item.subItems?.some(
                                         (sub) =>
                                             pathname === sub.href ||
-                                            (sub.href === "/amr" && pathname.startsWith("/amr/")) ||
+                                            (sub.href === "/customer-sales/postpaid" &&
+                                                (pathname.startsWith("/amr/") ||
+                                                    pathname.startsWith(
+                                                        "/customer-sales/postpaid/",
+                                                    ))) ||
                                             (sub.children?.some((child) => pathname === child.href) ?? false),
                                     ) ?? false)
                                 const isOpen = openMenus.includes(item.id)
@@ -327,8 +326,11 @@ export function Sidebar() {
                                                         const isSubActive =
                                                             subItem.href !== "#" &&
                                                             (pathname === subItem.href ||
-                                                                (subItem.href === "/amr" &&
-                                                                    pathname.startsWith("/amr/")) ||
+                                                                (subItem.href === "/customer-sales/postpaid" &&
+                                                                    (pathname.startsWith("/amr/") ||
+                                                                        pathname.startsWith(
+                                                                            "/customer-sales/postpaid/",
+                                                                        ))) ||
                                                                 (subItem.children?.some(
                                                                     (child) => pathname === child.href,
                                                                 ) ?? false) ||

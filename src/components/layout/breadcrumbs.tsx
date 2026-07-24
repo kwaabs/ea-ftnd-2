@@ -11,6 +11,13 @@ const BREADCRUMB_HREF_OVERRIDES: Record<string, string> = {
   "/customer-sales/account": "/customer-sales",
 }
 
+const BREADCRUMB_LABEL_OVERRIDES: Record<string, string> = {
+  "customer-sales": "Customer Consumption",
+  amr: "AMR",
+  postpaid: "Postpaid",
+  prepaid: "Prepaid",
+}
+
 export function Breadcrumbs() {
   const pathname = usePathname()
 
@@ -22,10 +29,12 @@ export function Breadcrumbs() {
     const hrefPath = "/" + segments.slice(0, index + 1).join("/")
     const href = BREADCRUMB_HREF_OVERRIDES[hrefPath] ?? hrefPath
     // Decode URI component and format display name
-    const label = decodeURIComponent(segment)
-      .split("-")
-      .map((word) => word.charAt(0).toUpperCase() + word.slice(1))
-      .join(" ")
+    const label =
+      BREADCRUMB_LABEL_OVERRIDES[segment] ??
+      decodeURIComponent(segment)
+        .split("-")
+        .map((word) => word.charAt(0).toUpperCase() + word.slice(1))
+        .join(" ")
 
     return { href, label }
   })

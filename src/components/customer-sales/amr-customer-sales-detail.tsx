@@ -32,6 +32,8 @@ interface AmrCustomerSalesDetailProps {
   onSelectedSltTypeChange?: (value: string | null) => void;
   /** Hide the SLT card strip (e.g. when parent page renders its own) */
   hideSltCards?: boolean;
+  /** When true, SLT cards navigate to dedicated Postpaid AMR SLT pages */
+  linkSltTypes?: boolean;
 }
 
 const formatKwhRaw = (value: number | null | undefined) => {
@@ -65,6 +67,7 @@ export function AmrCustomerSalesDetail({
   selectedSltType: controlledSltType,
   onSelectedSltTypeChange,
   hideSltCards = false,
+  linkSltTypes = false,
 }: AmrCustomerSalesDetailProps) {
   const [searchTerm, setSearchTerm] = useState("");
   const [page, setPage] = useState(1);
@@ -236,38 +239,51 @@ export function AmrCustomerSalesDetail({
             </div>
           ) : (
             <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-              <button
-                type="button"
-                onClick={() => selectSlt(null)}
-                className={cn(
-                  "text-left rounded-lg border bg-card p-4 transition-colors hover:bg-muted/40",
-                  selectedSltType === null &&
-                    "border-orange-500 ring-1 ring-orange-500/40",
-                )}
-              >
-                <p className="text-xs font-medium text-muted-foreground">
-                  All types
-                </p>
-                <p className="text-lg font-bold tabular-nums text-orange-700 mt-1">
-                  {formatKwhRaw(allSltTotals.kwh)}
-                </p>
-                <p className="text-xs text-muted-foreground mt-1">
-                  {formatNumber(allSltTotals.meters)} meters
-                </p>
-              </button>
+              {linkSltTypes ? (
+                <Link
+                  href="/customer-sales/postpaid/amr"
+                  className={cn(
+                    "text-left rounded-lg border bg-card p-4 transition-colors hover:bg-muted/40",
+                    selectedSltType === null &&
+                      "border-orange-500 ring-1 ring-orange-500/40",
+                  )}
+                >
+                  <p className="text-xs font-medium text-muted-foreground">
+                    All types
+                  </p>
+                  <p className="text-lg font-bold tabular-nums text-orange-700 mt-1">
+                    {formatKwhRaw(allSltTotals.kwh)}
+                  </p>
+                  <p className="text-xs text-muted-foreground mt-1">
+                    {formatNumber(allSltTotals.meters)} meters
+                  </p>
+                </Link>
+              ) : (
+                <button
+                  type="button"
+                  onClick={() => selectSlt(null)}
+                  className={cn(
+                    "text-left rounded-lg border bg-card p-4 transition-colors hover:bg-muted/40",
+                    selectedSltType === null &&
+                      "border-orange-500 ring-1 ring-orange-500/40",
+                  )}
+                >
+                  <p className="text-xs font-medium text-muted-foreground">
+                    All types
+                  </p>
+                  <p className="text-lg font-bold tabular-nums text-orange-700 mt-1">
+                    {formatKwhRaw(allSltTotals.kwh)}
+                  </p>
+                  <p className="text-xs text-muted-foreground mt-1">
+                    {formatNumber(allSltTotals.meters)} meters
+                  </p>
+                </button>
+              )}
               {sltCards.map((card) => {
                 const value = card.sltType || "";
                 const selected = selectedSltType === value;
-                return (
-                  <button
-                    key={card.sltType || "__unknown__"}
-                    type="button"
-                    onClick={() => selectSlt(value)}
-                    className={cn(
-                      "text-left rounded-lg border bg-card p-4 transition-colors hover:bg-muted/40",
-                      selected && "border-orange-500 ring-1 ring-orange-500/40",
-                    )}
-                  >
+                const cardInner = (
+                  <>
                     <p className="text-xs font-medium text-muted-foreground truncate">
                       {formatSltLabel(card.sltType)}
                     </p>
@@ -277,6 +293,31 @@ export function AmrCustomerSalesDetail({
                     <p className="text-xs text-muted-foreground mt-1">
                       {formatNumber(card.meters)} meters
                     </p>
+                  </>
+                );
+                const cardClass = cn(
+                  "text-left rounded-lg border bg-card p-4 transition-colors hover:bg-muted/40 block",
+                  selected && "border-orange-500 ring-1 ring-orange-500/40",
+                );
+                if (linkSltTypes && value) {
+                  return (
+                    <Link
+                      key={card.sltType || "__unknown__"}
+                      href={`/customer-sales/postpaid/amr/${encodeURIComponent(value)}`}
+                      className={cardClass}
+                    >
+                      {cardInner}
+                    </Link>
+                  );
+                }
+                return (
+                  <button
+                    key={card.sltType || "__unknown__"}
+                    type="button"
+                    onClick={() => selectSlt(value)}
+                    className={cardClass}
+                  >
+                    {cardInner}
                   </button>
                 );
               })}

@@ -1,13 +1,14 @@
 "use client"
 
 import Link from "next/link"
-import { useState, useMemo } from "react"
+import { useEffect, useState } from "react"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Skeleton } from "@/components/ui/skeleton"
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { useCustomerConsumptionDetail } from "@/hooks/api/use-customer-consumption-detail-api"
 import { ArrowUpDown, ChevronLeft, ChevronRight, ExternalLink, Search, Zap } from "lucide-react"
 
@@ -20,6 +21,7 @@ interface CustomerSalesDetailProps {
 
 type SortField = "lastbilldate" | "lastbillconsumption" | "lastbillamount" | "currentbalance" | "lastpaymentdate" | "fullname"
 type SortOrder = "asc" | "desc"
+type CustomerTypeFilter = "all" | "Individual" | "Organization"
 
 const PAGE_SIZE = 50
 
@@ -40,67 +42,42 @@ function formatDate(value: string | null | undefined) {
     return d.toLocaleDateString("en-GB", { day: "2-digit", month: "short", year: "numeric" })
 }
 
-function dateValue(v: string | null | undefined) {
-    if (!v) return 0
-    return new Date(v).getTime()
-}
-
 export function CustomerSalesDetail({ dateRange, region, district, serviceType }: CustomerSalesDetailProps) {
     const [page, setPage] = useState(1)
     const [searchTerm, setSearchTerm] = useState("")
-    const [sortField, setSortField] = useState<SortField>("lastbilldate")
+    const [debouncedSearch, setDebouncedSearch] = useState("")
+    const [customerType, setCustomerType] = useState<CustomerTypeFilter>("all")
+    const [sortField, setSortField] = useState<SortField>("lastbillconsumption")
     const [sortOrder, setSortOrder] = useState<SortOrder>("desc")
 
-    const { data: detailData, isLoading } = useCustomerConsumptionDetail({
+    useEffect(() => {
+        const t = setTimeout(() => setDebouncedSearch(searchTerm.trim()), 300)
+        return () => clearTimeout(t)
+    }, [searchTerm])
+
+    useEffect(() => {
+        setPage(1)
+    }, [debouncedSearch, customerType, dateRange.start, dateRange.end, region, district, serviceType])
+
+    const { data: detailData, isLoading, isFetching } = useCustomerConsumptionDetail({
         dateFrom: dateRange.start,
         dateTo: dateRange.end,
         region,
         district,
         serviceType,
-        page: 1,
-        limit: 2000,
+        customerType: customerType === "all" ? undefined : customerType,
+        search: debouncedSearch || undefined,
+        page,
+        limit: PAGE_SIZE,
+        sortBy: sortField,
+        sortDir: sortOrder,
     })
 
-    const rawRecords = detailData?.data || []
-
-    const filteredAndSorted = useMemo(() => {
-        let filtered = rawRecords
-
-        if (searchTerm) {
-            const q = searchTerm.toLowerCase()
-            filtered = filtered.filter(
-                (c) =>
-                    c.fullname?.toLowerCase().includes(q) ||
-                    c.accountnumber?.toLowerCase().includes(q) ||
-                    c.servicepointnumber?.toLowerCase().includes(q) ||
-                    c.districtname?.toLowerCase().includes(q) ||
-                    c.regionname?.toLowerCase().includes(q)
-            )
-        }
-
-        return [...filtered].sort((a, b) => {
-            let aVal: number
-            let bVal: number
-
-            if (sortField === "fullname") {
-                const cmp = (a.fullname || "").localeCompare(b.fullname || "")
-                return sortOrder === "asc" ? cmp : -cmp
-            }
-
-            if (sortField === "lastbilldate" || sortField === "lastpaymentdate") {
-                aVal = dateValue(a[sortField])
-                bVal = dateValue(b[sortField])
-            } else {
-                aVal = (a[sortField] as number) ?? 0
-                bVal = (b[sortField] as number) ?? 0
-            }
-
-            return sortOrder === "desc" ? bVal - aVal : aVal - bVal
-        })
-    }, [rawRecords, searchTerm, sortField, sortOrder])
-
-    const totalPages = Math.max(1, Math.ceil(filteredAndSorted.length / PAGE_SIZE))
-    const paginated = filteredAndSorted.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE)
+    const records = detailData?.data || []
+    const total = detailData?.total || 0
+    const totalPages = Math.max(1, detailData?.total_pages || 1)
+    const from = total === 0 ? 0 : (page - 1) * PAGE_SIZE + 1
+    const to = Math.min(page * PAGE_SIZE, total)
 
     const toggleSort = (field: SortField) => {
         if (sortField === field) {
@@ -125,6 +102,9 @@ export function CustomerSalesDetail({ dateRange, region, district, serviceType }
         )
     }
 
+    const typeLabel =
+        customerType === "all" ? "All customer types" : customerType
+
     return (
         <Card>
             <CardHeader>
@@ -132,27 +112,42 @@ export function CustomerSalesDetail({ dateRange, region, district, serviceType }
                     <div>
                         <CardTitle>Customer Records</CardTitle>
                         <CardDescription>
-                            Individual customer consumption and billing — default sorted by highest kWh
+                            {typeLabel} — consumption and billing, sorted by highest kWh by default
                         </CardDescription>
                     </div>
                     <Badge variant="outline" className="text-sm font-medium px-3 py-1">
-                        {filteredAndSorted.length.toLocaleString()} customers
+                        {total.toLocaleString()} customers
                     </Badge>
                 </div>
             </CardHeader>
             <CardContent className="space-y-4">
 
-                <div className="relative">
-                    <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
-                    <Input
-                        placeholder="Search by name, account, service point, or district..."
-                        value={searchTerm}
-                        onChange={(e) => { setSearchTerm(e.target.value); setPage(1) }}
-                        className="pl-8"
-                    />
+                <div className="flex flex-col sm:flex-row gap-3">
+                    <div className="relative flex-1">
+                        <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
+                        <Input
+                            placeholder="Search by name, account, service point, or district..."
+                            value={searchTerm}
+                            onChange={(e) => setSearchTerm(e.target.value)}
+                            className="pl-8"
+                        />
+                    </div>
+                    <Select
+                        value={customerType}
+                        onValueChange={(v) => setCustomerType(v as CustomerTypeFilter)}
+                    >
+                        <SelectTrigger className="w-full sm:w-[200px]">
+                            <SelectValue placeholder="Customer type" />
+                        </SelectTrigger>
+                        <SelectContent>
+                            <SelectItem value="all">All types</SelectItem>
+                            <SelectItem value="Individual">Individual</SelectItem>
+                            <SelectItem value="Organization">Organization</SelectItem>
+                        </SelectContent>
+                    </Select>
                 </div>
 
-                <div className="border rounded-lg overflow-hidden">
+                <div className={`border rounded-lg overflow-hidden ${isFetching && !isLoading ? "opacity-70" : ""}`}>
                     <div className="overflow-x-auto">
                         <Table>
                             <TableHeader>
@@ -167,7 +162,6 @@ export function CustomerSalesDetail({ dateRange, region, district, serviceType }
                                     <TableHead>Service Type</TableHead>
                                     <TableHead>Customer Type</TableHead>
                                     <TableHead>Data Source</TableHead>
-                                    {/* kWh — primary column */}
                                     <TableHead className="text-right bg-blue-50">
                                         <div className="flex items-center justify-end gap-1.5">
                                             <Zap className="h-3.5 w-3.5 text-blue-600" />
@@ -182,7 +176,6 @@ export function CustomerSalesDetail({ dateRange, region, district, serviceType }
                                     <TableHead className="text-right">
                                         <SortButton field="currentbalance">Balance (₵)</SortButton>
                                     </TableHead>
-                                    {/* lastbilldate — driving column for understanding multi-month data */}
                                     <TableHead className="bg-amber-50 min-w-[140px]">
                                         <SortButton field="lastbilldate">
                                             <span className="text-amber-700">Bill Date</span>
@@ -205,21 +198,18 @@ export function CustomerSalesDetail({ dateRange, region, district, serviceType }
                                             ))}
                                         </TableRow>
                                     ))
-                                ) : paginated.length === 0 ? (
+                                ) : records.length === 0 ? (
                                     <TableRow>
                                         <TableCell colSpan={16} className="text-center py-12 text-muted-foreground">
-                                            No records found for the selected date range
+                                            No records found for the selected filters
                                         </TableCell>
                                     </TableRow>
                                 ) : (
-                                    paginated.map((c, idx) => (
+                                    records.map((c, idx) => (
                                         <TableRow key={`${c.accountnumber}-${c.servicepointnumber}-${c.billmonth}-${idx}`} className="hover:bg-muted/40">
-
                                             <TableCell className="font-medium truncate max-w-[190px]" title={c.fullname}>
                                                 {c.fullname || "—"}
                                             </TableCell>
-
-                                            {/* Account number — opens account detail (all service points for this account) */}
                                             <TableCell>
                                                 <Link
                                                     href={`/customer-sales/account/${encodeURIComponent(c.accountnumber)}?dateFrom=${dateRange.start}&dateTo=${dateRange.end}`}
@@ -229,8 +219,6 @@ export function CustomerSalesDetail({ dateRange, region, district, serviceType }
                                                     <ExternalLink className="h-3 w-3 shrink-0" />
                                                 </Link>
                                             </TableCell>
-
-                                            {/* Service point number — opens service point detail */}
                                             <TableCell>
                                                 <Link
                                                     href={`/customer-sales/service-point/${encodeURIComponent(c.servicepointnumber)}?dateFrom=${dateRange.start}&dateTo=${dateRange.end}`}
@@ -240,7 +228,6 @@ export function CustomerSalesDetail({ dateRange, region, district, serviceType }
                                                     <ExternalLink className="h-3 w-3 shrink-0" />
                                                 </Link>
                                             </TableCell>
-
                                             <TableCell className="text-xs text-muted-foreground">{c.regionname || "—"}</TableCell>
                                             <TableCell className="text-xs text-muted-foreground">{c.districtname || "—"}</TableCell>
                                             <TableCell className="text-xs">{c.servicetype || "—"}</TableCell>
@@ -248,48 +235,36 @@ export function CustomerSalesDetail({ dateRange, region, district, serviceType }
                                                 <Badge variant="outline" className="text-xs font-normal">{c.customertype || "Unknown"}</Badge>
                                             </TableCell>
                                             <TableCell className="text-xs text-muted-foreground">{c.data_src || "—"}</TableCell>
-
-                                            {/* kWh hero */}
                                             <TableCell className="text-right bg-blue-50/50">
-                        <span className="font-bold text-blue-700 tabular-nums text-sm">
-                          {formatKwh(c.lastbillconsumption)}
-                        </span>
+                                                <span className="font-bold text-blue-700 tabular-nums text-sm">
+                                                    {formatKwh(c.lastbillconsumption)}
+                                                </span>
                                             </TableCell>
-
                                             <TableCell className="text-right tabular-nums text-xs text-muted-foreground">
                                                 {formatMoney(c.lastbillamount)}
                                             </TableCell>
-
                                             <TableCell className="text-right tabular-nums text-xs">
-                        <span className={c.currentbalance != null && c.currentbalance > 0 ? "text-red-600 font-medium" : "text-green-600 font-medium"}>
-                          {formatMoney(c.currentbalance)}
-                        </span>
+                                                <span className={c.currentbalance != null && c.currentbalance > 0 ? "text-red-600 font-medium" : "text-green-600 font-medium"}>
+                                                    {formatMoney(c.currentbalance)}
+                                                </span>
                                             </TableCell>
-
-                                            {/* Bill Date — highlighted amber, primary temporal anchor */}
                                             <TableCell className="bg-amber-50/40 whitespace-nowrap text-xs font-medium text-amber-900">
                                                 {formatDate(c.lastbilldate)}
                                             </TableCell>
-
-                                            {/* Bill Month */}
                                             <TableCell className="text-xs text-muted-foreground whitespace-nowrap">
                                                 {c.billmonth || "—"}
                                             </TableCell>
-
                                             <TableCell className="text-xs text-muted-foreground whitespace-nowrap">
                                                 {formatDate(c.lastpaymentdate)}
                                             </TableCell>
-
                                             <TableCell className="text-xs text-muted-foreground whitespace-nowrap">
                                                 {formatDate(c.lastreadingdate)}
                                             </TableCell>
-
                                             <TableCell>
                                                 <Badge variant={c.contractstatus === "Active" ? "default" : "secondary"} className="text-xs">
                                                     {c.contractstatus || "Unknown"}
                                                 </Badge>
                                             </TableCell>
-
                                         </TableRow>
                                     ))
                                 )}
@@ -299,15 +274,15 @@ export function CustomerSalesDetail({ dateRange, region, district, serviceType }
                 </div>
 
                 <div className="flex items-center justify-between text-sm">
-          <span className="text-muted-foreground">
-            Showing {paginated.length > 0 ? (page - 1) * PAGE_SIZE + 1 : 0}–{Math.min(page * PAGE_SIZE, filteredAndSorted.length)} of {filteredAndSorted.length.toLocaleString()} records
-          </span>
+                    <span className="text-muted-foreground">
+                        Showing {from}–{to} of {total.toLocaleString()} records
+                    </span>
                     <div className="flex items-center gap-2">
-                        <Button variant="outline" size="sm" onClick={() => setPage(Math.max(1, page - 1))} disabled={page === 1}>
+                        <Button variant="outline" size="sm" onClick={() => setPage(Math.max(1, page - 1))} disabled={page <= 1 || isFetching}>
                             <ChevronLeft className="h-4 w-4" />
                         </Button>
-                        <span className="font-medium px-1">Page {page} of {totalPages}</span>
-                        <Button variant="outline" size="sm" onClick={() => setPage(page + 1)} disabled={page >= totalPages}>
+                        <span className="font-medium px-1">Page {page} of {totalPages.toLocaleString()}</span>
+                        <Button variant="outline" size="sm" onClick={() => setPage(page + 1)} disabled={page >= totalPages || isFetching}>
                             <ChevronRight className="h-4 w-4" />
                         </Button>
                     </div>

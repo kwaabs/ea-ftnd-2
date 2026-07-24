@@ -168,15 +168,6 @@ export function CustomerSalesOverview({
     return totals;
   }, [zeusRaw]);
 
-  // ── Zeus stats (Postpaid — used where Zeus is combined with MMS / daily AMR) ──
-  const zeusStats = useMemo(() => {
-    const t = zeusByServiceType.Postpaid;
-    return {
-      ...t,
-      avgKwh: t.totalCustomers > 0 ? t.totalKwh / t.totalCustomers : 0,
-    };
-  }, [zeusByServiceType]);
-
   // ── MMS stats ──
   const mmsStats = useMemo(() => {
     if (!mmsItems.length)
@@ -224,10 +215,28 @@ export function CustomerSalesOverview({
     return { totalKwh: importKwh + exportKwh, importKwh, exportKwh };
   }, [amrItems]);
 
-  // ── Combined ──
-  const combinedKwh =
-    zeusStats.totalKwh + mmsStats.totalKwh + amrStats.totalKwh;
-  const combinedCustomers = zeusStats.totalCustomers + mmsStats.totalCustomers;
+  // ── Category buckets (Customer Consumption IA) ──
+  // Postpaid = Zeus Postpaid + daily AMR; Prepaid = Zeus Prepaid + MMS
+  // Zeus servicetype=AMR is shown as a badge only (not in category totals).
+  const postpaidKwh =
+    zeusByServiceType.Postpaid.totalKwh + amrStats.totalKwh;
+  const prepaidKwh =
+    zeusByServiceType.Prepaid.totalKwh + mmsStats.totalKwh;
+  const combinedKwh = postpaidKwh + prepaidKwh;
+  const combinedCustomers =
+    zeusByServiceType.Postpaid.totalCustomers +
+    zeusByServiceType.Prepaid.totalCustomers +
+    mmsStats.totalCustomers;
+
+  // Keep zeusStats as Postpaid for legacy chart sections that expect it
+  const zeusStats = {
+    ...zeusByServiceType.Postpaid,
+    avgKwh:
+      zeusByServiceType.Postpaid.totalCustomers > 0
+        ? zeusByServiceType.Postpaid.totalKwh /
+          zeusByServiceType.Postpaid.totalCustomers
+        : 0,
+  };
 
   // ── Chart data ──
   const zeusByConsumption = useMemo(
@@ -351,7 +360,7 @@ export function CustomerSalesOverview({
                   Total Customer Consumption
                 </CardTitle>
                 <CardDescription className="text-[11px]">
-                  Zeus Postpaid + MMS + daily AMR
+                  Postpaid (Zeus + AMR) + Prepaid (Zeus + MMS)
                 </CardDescription>
               </div>
             </div>
@@ -367,9 +376,27 @@ export function CustomerSalesOverview({
                 <div className="flex items-center gap-2 mt-2 flex-wrap">
                   <Badge
                     variant="outline"
+                    className="text-[10px] gap-1 border-blue-400 text-blue-800 font-medium"
+                  >
+                    Postpaid {formatKwh(postpaidKwh)}
+                  </Badge>
+                  <Badge
+                    variant="outline"
+                    className="text-[10px] gap-1 border-emerald-400 text-emerald-800 font-medium"
+                  >
+                    Prepaid {formatKwh(prepaidKwh)}
+                  </Badge>
+                  <Badge
+                    variant="outline"
                     className="text-[10px] gap-1 border-blue-300 text-blue-700"
                   >
                     Zeus Postpaid {formatKwh(zeusByServiceType.Postpaid.totalKwh)}
+                  </Badge>
+                  <Badge
+                    variant="outline"
+                    className="text-[10px] gap-1 border-orange-300 text-orange-700"
+                  >
+                    Daily AMR {formatKwh(amrStats.totalKwh)}
                   </Badge>
                   <Badge
                     variant="outline"
@@ -379,21 +406,9 @@ export function CustomerSalesOverview({
                   </Badge>
                   <Badge
                     variant="outline"
-                    className="text-[10px] gap-1 border-indigo-300 text-indigo-700"
-                  >
-                    Zeus AMR {formatKwh(zeusByServiceType.AMR.totalKwh)}
-                  </Badge>
-                  <Badge
-                    variant="outline"
                     className="text-[10px] gap-1 border-green-300 text-green-700"
                   >
                     MMS {formatKwh(mmsStats.totalKwh)}
-                  </Badge>
-                  <Badge
-                    variant="outline"
-                    className="text-[10px] gap-1 border-orange-300 text-orange-700"
-                  >
-                    Daily AMR {formatKwh(amrStats.totalKwh)}
                   </Badge>
                 </div>
               </>

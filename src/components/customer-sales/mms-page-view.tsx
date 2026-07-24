@@ -39,6 +39,8 @@ interface MmsPageViewProps {
   dateRange: DateRange;
   region?: string;
   district?: string;
+  /** When true, omit the page-level MMS heading (hub provides context). */
+  embedded?: boolean;
 }
 
 const MMS_COLORS = [
@@ -78,7 +80,12 @@ function formatMoney(value: number | null | undefined) {
   })}`;
 }
 
-export function MmsPageView({ dateRange, region, district }: MmsPageViewProps) {
+export function MmsPageView({
+  dateRange,
+  region,
+  district,
+  embedded = false,
+}: MmsPageViewProps) {
   const [selectedRegion, setSelectedRegion] = useState<string | null>(null);
 
   const effectiveRegion = selectedRegion || region;
@@ -175,20 +182,26 @@ export function MmsPageView({ dateRange, region, district }: MmsPageViewProps) {
 
   return (
     <div className="space-y-6">
-      <div>
-        <h2 className="text-3xl font-semibold tracking-tight text-foreground">
-          MMS — Prepaid
-        </h2>
-        <p className="text-muted-foreground mt-1">
-          Prepaid customer consumption, credit purchases and balances
-          {selectedRegion ? (
-            <span className="text-green-700">
-              {" "}
-              · filtered by {selectedRegion}
-            </span>
-          ) : null}
-        </p>
-      </div>
+      {!embedded && (
+        <div>
+          <h2 className="text-3xl font-semibold tracking-tight text-foreground">
+            MMS — Prepaid
+          </h2>
+          <p className="text-muted-foreground mt-1">
+            Prepaid customer consumption, credit purchases and balances
+            {selectedRegion ? (
+              <span className="text-green-700">
+                {" "}
+                · filtered by {selectedRegion}
+              </span>
+            ) : null}
+          </p>
+        </div>
+      )}
+
+      {embedded && selectedRegion ? (
+        <p className="text-sm text-green-700">Filtered by {selectedRegion}</p>
+      ) : null}
 
       {/* KPIs */}
       <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">

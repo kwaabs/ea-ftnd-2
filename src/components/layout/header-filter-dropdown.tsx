@@ -510,9 +510,18 @@ export function HeaderFilterDropdown() {
         pathname?.startsWith("/customer-sales/service-point/"),
     )
     // Zeus / MMS / AMR list: date + region + district; AMR meter detail: date only
+    // Postpaid / Prepaid hubs use the same filter set as former Zeus/MMS/AMR list pages
     const isZeusPage = pathname === "/customer-sales/zeus"
     const isMmsPage = pathname === "/customer-sales/mms"
     const isAmrPage = pathname === "/amr"
+    const isPostpaidHub =
+      pathname === "/customer-sales/postpaid" ||
+      Boolean(pathname?.startsWith("/customer-sales/postpaid/"))
+    const isPrepaidHub =
+      pathname === "/customer-sales/prepaid" ||
+      Boolean(pathname?.startsWith("/customer-sales/prepaid/"))
+    const isCustomerConsumptionSourcePage =
+        isZeusPage || isMmsPage || isAmrPage || isPostpaidHub || isPrepaidHub
     const isAmrMeterDetailPage = Boolean(pathname?.startsWith("/amr/") && pathname.split("/").length === 3)
     const isDateOnlyPage = isMeterDetailsPage || isStationDetailsPage || isBoundaryDetailsPage || isRegionDetailsPage || isDistrictDetailsPage || isExpressFeederDetailPage || isMapPage || isCustomerSalesPage || isAmrMeterDetailPage || isAdminLoginsPage || isCustomerSalesAccountPage || isCustomerSalesServicePointPage
 
@@ -653,13 +662,13 @@ export function HeaderFilterDropdown() {
         setFilters(defaultFilters)
     }
 
-    const showMeterType = !isZeusPage && !isMmsPage && !isAmrPage && !isRegionsOverviewPage && !isExpressFeedersPage && !["bsp", "dtx", "district-boundary", "regional-boundary"].includes(meterCategory || "")
-    const showStation = !isZeusPage && !isMmsPage && !isAmrPage && !isRegionsOverviewPage && !["dtx", "district-boundary", "regional-boundary"].includes(meterCategory || "")
+    const showMeterType = !isCustomerConsumptionSourcePage && !isRegionsOverviewPage && !isExpressFeedersPage && !["bsp", "dtx", "district-boundary", "regional-boundary"].includes(meterCategory || "")
+    const showStation = !isCustomerConsumptionSourcePage && !isRegionsOverviewPage && !["dtx", "district-boundary", "regional-boundary"].includes(meterCategory || "")
     const showRegion = !["district-boundary", "regional-boundary"].includes(meterCategory || "")
     const showDistrict = !isRegionsOverviewPage && !["bsp", "district-boundary", "regional-boundary"].includes(meterCategory || "")
-    const showBoundaryPoint = !isZeusPage && !isMmsPage && !isAmrPage && !isRegionsOverviewPage && !isExpressFeedersPage && !["bsp", "dtx"].includes(meterCategory || "")
-    const showLocation = !isZeusPage && !isMmsPage && !isAmrPage && !isRegionsOverviewPage && !isExpressFeedersPage && ["district-boundary", "regional-boundary"].includes(meterCategory || "")
-    const showVoltage = !isZeusPage && !isMmsPage && !isAmrPage && !isRegionsOverviewPage && hasVoltageData
+    const showBoundaryPoint = !isCustomerConsumptionSourcePage && !isRegionsOverviewPage && !isExpressFeedersPage && !["bsp", "dtx"].includes(meterCategory || "")
+    const showLocation = !isCustomerConsumptionSourcePage && !isRegionsOverviewPage && !isExpressFeedersPage && ["district-boundary", "regional-boundary"].includes(meterCategory || "")
+    const showVoltage = !isCustomerConsumptionSourcePage && !isRegionsOverviewPage && hasVoltageData
 
     // Transform options for react-select
     const regionOptions = (filterOptions?.regions || []).map((r) => ({ value: r, label: r }))

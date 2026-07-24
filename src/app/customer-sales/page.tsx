@@ -30,27 +30,20 @@ export default function CustomerSalesPage() {
     end: formatDateToString(globalFilters.dateRange?.end, defaultEnd),
   };
 
-  const sources = [
+  const categories = [
     {
-      href: "/customer-sales/zeus",
-      title: "Zeus — Postpaid",
-      description: "Postpaid billing, consumption and balances",
+      href: "/customer-sales/postpaid",
+      title: "Postpaid",
+      description: "Zeus postpaid billing + daily AMR (SLT / NSLT)",
       accent: "border-blue-200 bg-blue-50/60 text-blue-900",
       linkClass: "bg-blue-600 hover:bg-blue-700",
     },
     {
-      href: "/customer-sales/mms",
-      title: "MMS — Prepaid",
-      description: "Prepaid sales and customer consumption",
-      accent: "border-green-200 bg-green-50/60 text-green-900",
-      linkClass: "bg-green-600 hover:bg-green-700",
-    },
-    {
-      href: "/amr",
-      title: "AMR Meters",
-      description: "Daily AMR readings, health and SLT detail",
-      accent: "border-orange-200 bg-orange-50/60 text-orange-900",
-      linkClass: "bg-orange-600 hover:bg-orange-700",
+      href: "/customer-sales/prepaid",
+      title: "Prepaid",
+      description: "Zeus prepaid accounts + MMS prepaid meters",
+      accent: "border-emerald-200 bg-emerald-50/60 text-emerald-900",
+      linkClass: "bg-emerald-600 hover:bg-emerald-700",
     },
   ];
 
@@ -62,25 +55,25 @@ export default function CustomerSalesPage() {
             Customer Consumption
           </h2>
           <p className="text-muted-foreground mt-1">
-            Overview across Zeus (postpaid), MMS (prepaid), and AMR meters
+            Overview across Postpaid (Zeus + AMR) and Prepaid (Zeus + MMS)
           </p>
         </div>
 
         <CustomerSalesOverview dateRange={dateRange} />
 
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
-          {sources.map((source) => (
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+          {categories.map((category) => (
             <div
-              key={source.href}
-              className={`flex items-center justify-between gap-3 rounded-lg border px-4 py-3 ${source.accent}`}
+              key={category.href}
+              className={`flex items-center justify-between gap-3 rounded-lg border px-4 py-3 ${category.accent}`}
             >
               <div>
-                <p className="text-sm font-medium">{source.title}</p>
-                <p className="text-xs opacity-80 mt-0.5">{source.description}</p>
+                <p className="text-sm font-medium">{category.title}</p>
+                <p className="text-xs opacity-80 mt-0.5">{category.description}</p>
               </div>
               <Link
-                href={source.href}
-                className={`inline-flex shrink-0 items-center gap-1.5 rounded-md px-3 py-1.5 text-xs font-medium text-white ${source.linkClass}`}
+                href={category.href}
+                className={`inline-flex shrink-0 items-center gap-1.5 rounded-md px-3 py-1.5 text-xs font-medium text-white ${category.linkClass}`}
               >
                 Open
                 <ArrowRight className="h-3.5 w-3.5" />

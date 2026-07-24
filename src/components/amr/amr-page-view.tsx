@@ -48,6 +48,10 @@ interface AmrPageViewProps {
   dateRange: DateRange;
   region?: string;
   district?: string;
+  /** When true, omit the page-level AMR heading (hub provides context). */
+  embedded?: boolean;
+  /** Lock the view to a single SLT type (hides in-page SLT filter cards). */
+  lockedSltType?: string;
 }
 
 function formatKwh(value: number | null | undefined) {
@@ -69,8 +73,16 @@ function formatDate(date: string | null | undefined) {
   }
 }
 
-export function AmrPageView({ dateRange, region, district }: AmrPageViewProps) {
-  const [selectedSltType, setSelectedSltType] = useState<string | null>(null);
+export function AmrPageView({
+  dateRange,
+  region,
+  district,
+  embedded = false,
+  lockedSltType,
+}: AmrPageViewProps) {
+  const [selectedSltType, setSelectedSltType] = useState<string | null>(
+    lockedSltType ?? null,
+  );
   const [statusFilter, setStatusFilter] = useState<"all" | "ONLINE" | "OFFLINE">(
     "all",
   );
@@ -78,12 +90,14 @@ export function AmrPageView({ dateRange, region, district }: AmrPageViewProps) {
   const [statusPage, setStatusPage] = useState(1);
   const statusPageSize = 50;
 
+  const effectiveSltType = lockedSltType ?? selectedSltType;
+
   const statusParams = {
     dateFrom: dateRange.start,
     dateTo: dateRange.end,
     region,
     district,
-    sltType: selectedSltType || undefined,
+    sltType: effectiveSltType || undefined,
   };
 
   const { data: statusSummary, isLoading: summaryLoading } =
@@ -117,22 +131,30 @@ export function AmrPageView({ dateRange, region, district }: AmrPageViewProps) {
 
   return (
     <div className="space-y-6">
-      <div>
-        <h2 className="text-3xl font-semibold tracking-tight text-foreground flex items-center gap-2">
-          <Radio className="h-7 w-7 text-orange-600" />
-          AMR Meters
-        </h2>
-        <p className="text-muted-foreground mt-1">
-          Online/offline health, SLT breakdown, and daily consumption for AMR
-          customer meters
-          {selectedSltType ? (
-            <span className="text-orange-700">
-              {" "}
-              · filtered by {selectedSltType.replace(/_/g, " ")}
-            </span>
-          ) : null}
+      {!embedded && (
+        <div>
+          <h2 className="text-3xl font-semibold tracking-tight text-foreground flex items-center gap-2">
+            <Radio className="h-7 w-7 text-orange-600" />
+            AMR Meters
+          </h2>
+          <p className="text-muted-foreground mt-1">
+            Online/offline health, SLT breakdown, and daily consumption for AMR
+            customer meters
+          {effectiveSltType ? (
+              <span className="text-orange-700">
+                {" "}
+                · filtered by {effectiveSltType.replace(/_/g, " ")}
+              </span>
+            ) : null}
+          </p>
+        </div>
+      )}
+
+      {embedded && effectiveSltType && !lockedSltType ? (
+        <p className="text-sm text-orange-700">
+          Filtered by {effectiveSltType.replace(/_/g, " ")}
         </p>
-      </div>
+      ) : null}
 
       {/* Meter health */}
       <Card>
@@ -366,8 +388,12 @@ export function AmrPageView({ dateRange, region, district }: AmrPageViewProps) {
             dateRange={dateRange}
             region={region}
             district={district}
-            selectedSltType={selectedSltType}
-            onSelectedSltTypeChange={setSelectedSltType}
+            selectedSltType={effectiveSltType}
+            onSelectedSltTypeChange={
+              lockedSltType ? undefined : setSelectedSltType
+            }
+            hideSltCards={Boolean(lockedSltType)}
+            linkSltTypes={!lockedSltType}
           />
         </TabsContent>
 
@@ -522,8 +548,8 @@ export function AmrPageView({ dateRange, region, district }: AmrPageViewProps) {
                 <div className="flex items-center justify-between text-sm text-muted-foreground">
                   <span>
                     {formatNumber(pagination.total_records)} meters
-                    {selectedSltType
-                      ? ` · ${selectedSltType.replace(/_/g, " ")}`
+                    {effectiveSltType
+                      ? ` · ${effectiveSltType.replace(/_/g, " ")}`
                       : ""}
                   </span>
                   <div className="flex items-center gap-2">

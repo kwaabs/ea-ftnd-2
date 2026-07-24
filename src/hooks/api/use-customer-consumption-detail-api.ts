@@ -18,6 +18,8 @@ interface CustomerConsumptionDetailParams {
   servicePointNumber?: string
   dateFrom?: string
   dateTo?: string
+  sortBy?: string
+  sortDir?: "asc" | "desc"
   enabled?: boolean
 }
 
@@ -46,6 +48,8 @@ export function useCustomerConsumptionDetail(params: CustomerConsumptionDetailPa
   if (params.servicePointNumber) queryString.append("servicePointNumber", params.servicePointNumber)
   if (params.dateFrom) queryString.append("lastBillDateFrom", params.dateFrom)
   if (params.dateTo) queryString.append("lastBillDateTo", params.dateTo)
+  if (params.sortBy) queryString.append("sortBy", params.sortBy)
+  if (params.sortDir) queryString.append("sortDir", params.sortDir)
 
   return useQuery<ProcessedDetailResponse>({
     queryKey: [
@@ -64,6 +68,8 @@ export function useCustomerConsumptionDetail(params: CustomerConsumptionDetailPa
       params.servicePointNumber,
       params.dateFrom,
       params.dateTo,
+      params.sortBy,
+      params.sortDir,
     ],
     queryFn: async () => {
       const url = `${API_BASE_URL}/api/v1/meters/consumption/customer-sales-zeus/detail?${queryString.toString()}`
@@ -84,6 +90,6 @@ export function useCustomerConsumptionDetail(params: CustomerConsumptionDetailPa
     },
     enabled: params.enabled !== false,
     staleTime: 5 * 60 * 1000,
-    refetchOnMount: false,
+    placeholderData: (prev) => prev,
   })
 }
