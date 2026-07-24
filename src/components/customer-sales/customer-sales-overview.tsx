@@ -1,6 +1,7 @@
 "use client";
 
 import { useMemo } from "react";
+import Link from "next/link";
 import {
   Card,
   CardContent,
@@ -32,6 +33,7 @@ import {
   DollarSign,
   BatteryCharging,
   Wallet,
+  ArrowRight,
 } from "lucide-react";
 
 interface CustomerSalesOverviewProps {
@@ -145,9 +147,14 @@ export function CustomerSalesOverview({
     return "Other" as const;
   };
 
-  // Zeus Postpaid only for region charts / combined Zeus column (avoid double-count with MMS / daily AMR)
+  // Zeus Postpaid / Prepaid partitions
   const zeusItems = useMemo(
     () => zeusRaw.filter((i) => normalizeZeusType(i.servicetype) === "Postpaid"),
+    [zeusRaw],
+  );
+
+  const zeusPrepaidItems = useMemo(
+    () => zeusRaw.filter((i) => normalizeZeusType(i.servicetype) === "Prepaid"),
     [zeusRaw],
   );
 
@@ -310,37 +317,36 @@ export function CustomerSalesOverview({
       .sort((a, b) => b.importKwh + b.exportKwh - (a.importKwh + a.exportKwh));
   }, [amrItems]);
 
-  // ── Combined chart: Zeus vs MMS vs AMR kWh by region ──
+  // ── Combined chart: Postpaid vs Prepaid kWh by region ──
   const combinedChartData = useMemo(() => {
     const regionMap = new Map<
       string,
-      { region: string; zeus: number; mms: number; amr: number }
+      { region: string; postpaid: number; prepaid: number }
     >();
+    const ensure = (r: string) => {
+      if (!regionMap.has(r)) {
+        regionMap.set(r, { region: r, postpaid: 0, prepaid: 0 });
+      }
+      return regionMap.get(r)!;
+    };
     zeusItems.forEach((i) => {
-      const r = i.regionname || "Unknown";
-      if (!regionMap.has(r)) {
-        regionMap.set(r, { region: r, zeus: 0, mms: 0, amr: 0 });
-      }
-      regionMap.get(r)!.zeus += i.sum_lastbillconsumption || 0;
-    });
-    mmsItems.forEach((i) => {
-      const r = i.region || "Unknown";
-      if (!regionMap.has(r)) {
-        regionMap.set(r, { region: r, zeus: 0, mms: 0, amr: 0 });
-      }
-      regionMap.get(r)!.mms += i.sum_last_month_kwh_read || 0;
+      ensure(i.regionname || "Unknown").postpaid +=
+        i.sum_lastbillconsumption || 0;
     });
     amrItems.forEach((i) => {
-      const r = i.region || "Unknown";
-      if (!regionMap.has(r)) {
-        regionMap.set(r, { region: r, zeus: 0, mms: 0, amr: 0 });
-      }
-      regionMap.get(r)!.amr += i.total_consumption || 0;
+      ensure(i.region || "Unknown").postpaid += i.total_consumption || 0;
+    });
+    zeusPrepaidItems.forEach((i) => {
+      ensure(i.regionname || "Unknown").prepaid +=
+        i.sum_lastbillconsumption || 0;
+    });
+    mmsItems.forEach((i) => {
+      ensure(i.region || "Unknown").prepaid += i.sum_last_month_kwh_read || 0;
     });
     return [...regionMap.values()].sort(
-      (a, b) => b.zeus + b.mms + b.amr - (a.zeus + a.mms + a.amr),
+      (a, b) => b.postpaid + b.prepaid - (a.postpaid + a.prepaid),
     );
-  }, [zeusItems, mmsItems, amrItems]);
+  }, [zeusItems, zeusPrepaidItems, mmsItems, amrItems]);
 
   const isLoading = zeusLoading || mmsLoading || amrLoading;
 
@@ -360,7 +366,7 @@ export function CustomerSalesOverview({
                   Total Customer Consumption
                 </CardTitle>
                 <CardDescription className="text-[11px]">
-                  Postpaid (Zeus + AMR) + Prepaid (Zeus + MMS)
+                  Postpaid + Prepaid
                 </CardDescription>
               </div>
             </div>
@@ -385,30 +391,6 @@ export function CustomerSalesOverview({
                     className="text-[10px] gap-1 border-emerald-400 text-emerald-800 font-medium"
                   >
                     Prepaid {formatKwh(prepaidKwh)}
-                  </Badge>
-                  <Badge
-                    variant="outline"
-                    className="text-[10px] gap-1 border-blue-300 text-blue-700"
-                  >
-                    Zeus Postpaid {formatKwh(zeusByServiceType.Postpaid.totalKwh)}
-                  </Badge>
-                  <Badge
-                    variant="outline"
-                    className="text-[10px] gap-1 border-orange-300 text-orange-700"
-                  >
-                    Daily AMR {formatKwh(amrStats.totalKwh)}
-                  </Badge>
-                  <Badge
-                    variant="outline"
-                    className="text-[10px] gap-1 border-cyan-300 text-cyan-700"
-                  >
-                    Zeus Prepaid {formatKwh(zeusByServiceType.Prepaid.totalKwh)}
-                  </Badge>
-                  <Badge
-                    variant="outline"
-                    className="text-[10px] gap-1 border-green-300 text-green-700"
-                  >
-                    MMS {formatKwh(mmsStats.totalKwh)}
                   </Badge>
                 </div>
               </>
@@ -438,10 +420,15 @@ export function CustomerSalesOverview({
                 </div>
                 <div className="flex items-center gap-2 mt-1">
                   <span className="text-[10px] text-blue-600">
-                    Zeus: {formatNumber(zeusStats.totalCustomers)}
+                    Postpaid Zeus:{" "}
+                    {formatNumber(zeusByServiceType.Postpaid.totalCustomers)}
                   </span>
-                  <span className="text-[10px] text-green-600">
-                    MMS: {formatNumber(mmsStats.totalCustomers)}
+                  <span className="text-[10px] text-emerald-600">
+                    Prepaid:{" "}
+                    {formatNumber(
+                      zeusByServiceType.Prepaid.totalCustomers +
+                        mmsStats.totalCustomers,
+                    )}
                   </span>
                 </div>
               </>
@@ -472,7 +459,7 @@ export function CustomerSalesOverview({
                   )}
                 </div>
                 <p className="text-xs text-muted-foreground mt-1">
-                  Across Zeus + MMS customers
+                  Across Postpaid + Prepaid customers
                 </p>
               </>
             )}
@@ -483,9 +470,9 @@ export function CustomerSalesOverview({
       {/* ── COMBINED COMPARISON CHART ── */}
       <Card>
         <CardHeader>
-          <CardTitle>Consumption by Region — All Sources</CardTitle>
+          <CardTitle>Consumption by Region — Postpaid vs Prepaid</CardTitle>
           <CardDescription>
-            Zeus Postpaid, MMS (prepaid system), and daily AMR kWh per region
+            Postpaid (Zeus + daily AMR) and Prepaid (Zeus + MMS) kWh per region
           </CardDescription>
         </CardHeader>
         <CardContent>
@@ -523,39 +510,29 @@ export function CustomerSalesOverview({
                 <Tooltip
                   formatter={(value: number, name: string) => [
                     formatKwhRaw(value),
-                    name === "zeus"
-                      ? "Zeus (Postpaid)"
-                      : name === "mms"
-                        ? "MMS (Prepaid)"
-                        : "AMR",
+                    name === "postpaid"
+                      ? "Postpaid (Zeus + AMR)"
+                      : "Prepaid (Zeus + MMS)",
                   ]}
                 />
                 <Legend
                   formatter={(v) =>
-                    v === "zeus"
-                      ? "Zeus (Postpaid)"
-                      : v === "mms"
-                        ? "MMS (Prepaid)"
-                        : "AMR (Daily)"
+                    v === "postpaid"
+                      ? "Postpaid (Zeus + AMR)"
+                      : "Prepaid (Zeus + MMS)"
                   }
                 />
                 <Bar
-                  dataKey="zeus"
-                  fill="#3b82f6"
+                  dataKey="postpaid"
+                  fill="#2563eb"
                   radius={[4, 4, 0, 0]}
-                  name="zeus"
+                  name="postpaid"
                 />
                 <Bar
-                  dataKey="mms"
-                  fill="#16a34a"
+                  dataKey="prepaid"
+                  fill="#059669"
                   radius={[4, 4, 0, 0]}
-                  name="mms"
-                />
-                <Bar
-                  dataKey="amr"
-                  fill="#f97316"
-                  radius={[4, 4, 0, 0]}
-                  name="amr"
+                  name="prepaid"
                 />
               </BarChart>
             </ResponsiveContainer>
@@ -567,7 +544,7 @@ export function CustomerSalesOverview({
       <div className="space-y-6">
         {/* ── REGION BREAKDOWN TABS ── */}
         <Tabs defaultValue="combined" className="w-full">
-          <TabsList className="grid w-full grid-cols-4 mb-4">
+          <TabsList className="grid w-full grid-cols-3 mb-4">
             <TabsTrigger
               value="combined"
               className="data-[state=active]:text-purple-700"
@@ -575,22 +552,16 @@ export function CustomerSalesOverview({
               Combined
             </TabsTrigger>
             <TabsTrigger
-              value="zeus"
+              value="postpaid"
               className="data-[state=active]:text-blue-700"
             >
-              Zeus — Postpaid
+              Postpaid
             </TabsTrigger>
             <TabsTrigger
-              value="mms"
-              className="data-[state=active]:text-green-700"
+              value="prepaid"
+              className="data-[state=active]:text-emerald-700"
             >
-              MMS — Prepaid
-            </TabsTrigger>
-            <TabsTrigger
-              value="amr"
-              className="data-[state=active]:text-orange-700"
-            >
-              AMR
+              Prepaid
             </TabsTrigger>
           </TabsList>
 
@@ -599,10 +570,10 @@ export function CustomerSalesOverview({
             <Card>
               <CardHeader>
                 <CardTitle>
-                  Region Breakdown — Combined (Zeus + MMS + AMR)
+                  Region Breakdown — Combined (Postpaid + Prepaid)
                 </CardTitle>
                 <CardDescription>
-                  Postpaid, prepaid, and AMR consumption by region
+                  Postpaid (Zeus + AMR) and Prepaid (Zeus + MMS) by region
                 </CardDescription>
               </CardHeader>
               <CardContent>
@@ -632,7 +603,7 @@ export function CustomerSalesOverview({
                             colSpan={3}
                             className="text-center py-2 px-4 font-medium text-orange-700"
                           >
-                            AMR
+                            AMR (Postpaid)
                           </th>
                           <th
                             colSpan={3}
@@ -832,8 +803,23 @@ export function CustomerSalesOverview({
             </Card>
           </TabsContent>
 
-          {/* ── ZEUS TAB ── */}
-          <TabsContent value="zeus" className="space-y-6 mt-6">
+          {/* ── POSTPAID TAB (Zeus Postpaid) ── */}
+          <TabsContent value="postpaid" className="space-y-6 mt-6">
+            <div className="flex items-center justify-between gap-3 flex-wrap">
+              <div>
+                <p className="text-sm font-medium">Postpaid</p>
+                <p className="text-xs text-muted-foreground">
+                  Zeus postpaid billing + daily AMR (SLT / NSLT)
+                </p>
+              </div>
+              <Link
+                href="/customer-sales/postpaid"
+                className="inline-flex items-center gap-1.5 rounded-md bg-blue-600 hover:bg-blue-700 px-3 py-1.5 text-xs font-medium text-white"
+              >
+                Open Postpaid hub
+                <ArrowRight className="h-3.5 w-3.5" />
+              </Link>
+            </div>
             {/* Zeus KPIs */}
             <div className="grid gap-4 md:grid-cols-2">
               <Card className="border-dashed">
@@ -1101,8 +1087,57 @@ export function CustomerSalesOverview({
             </Card>
           </TabsContent>
 
-          {/* ── MMS TAB ── */}
-          <TabsContent value="mms" className="space-y-6 mt-6">
+          {/* ── PREPAID TAB (MMS + Zeus Prepaid) ── */}
+          <TabsContent value="prepaid" className="space-y-6 mt-6">
+            <div className="flex items-center justify-between gap-3 flex-wrap">
+              <div>
+                <p className="text-sm font-medium">Prepaid</p>
+                <p className="text-xs text-muted-foreground">
+                  Zeus prepaid accounts + MMS prepaid meters
+                </p>
+              </div>
+              <Link
+                href="/customer-sales/prepaid"
+                className="inline-flex items-center gap-1.5 rounded-md bg-emerald-600 hover:bg-emerald-700 px-3 py-1.5 text-xs font-medium text-white"
+              >
+                Open Prepaid hub
+                <ArrowRight className="h-3.5 w-3.5" />
+              </Link>
+            </div>
+            <div className="grid gap-4 md:grid-cols-2">
+              <Card className="border-dashed border-emerald-200">
+                <CardContent className="pt-4 pb-4">
+                  <div className="flex items-center justify-between">
+                    <span className="text-sm text-muted-foreground font-medium">
+                      Zeus Prepaid kWh
+                    </span>
+                    {zeusLoading ? (
+                      <Skeleton className="h-5 w-28" />
+                    ) : (
+                      <span className="text-base font-semibold text-emerald-700">
+                        {formatKwhRaw(zeusByServiceType.Prepaid.totalKwh)}
+                      </span>
+                    )}
+                  </div>
+                </CardContent>
+              </Card>
+              <Card className="border-dashed border-green-200">
+                <CardContent className="pt-4 pb-4">
+                  <div className="flex items-center justify-between">
+                    <span className="text-sm text-muted-foreground font-medium">
+                      MMS Prepaid kWh
+                    </span>
+                    {mmsLoading ? (
+                      <Skeleton className="h-5 w-28" />
+                    ) : (
+                      <span className="text-base font-semibold text-green-700">
+                        {formatKwhRaw(mmsStats.totalKwh)}
+                      </span>
+                    )}
+                  </div>
+                </CardContent>
+              </Card>
+            </div>
             <div className="grid gap-4 md:grid-cols-3">
               <Card className="border-dashed">
                 <CardContent className="pt-4 pb-4">
@@ -1384,8 +1419,25 @@ export function CustomerSalesOverview({
               </CardContent>
             </Card>
           </TabsContent>
-          {/* ── AMR TAB ── */}
-          <TabsContent value="amr" className="space-y-6 mt-6">
+          {/* ── AMR section under Postpaid tab ── */}
+          <TabsContent value="postpaid" className="space-y-6 mt-6">
+            <div className="flex items-center justify-between gap-3 flex-wrap border-t pt-6">
+              <div>
+                <p className="text-sm font-medium text-orange-800">
+                  Daily AMR (SLT / NSLT)
+                </p>
+                <p className="text-xs text-muted-foreground">
+                  Part of Postpaid — open by SLT type for meter detail
+                </p>
+              </div>
+              <Link
+                href="/customer-sales/postpaid/amr"
+                className="inline-flex items-center gap-1.5 rounded-md bg-orange-600 hover:bg-orange-700 px-3 py-1.5 text-xs font-medium text-white"
+              >
+                Open AMR by SLT type
+                <ArrowRight className="h-3.5 w-3.5" />
+              </Link>
+            </div>
             <div className="grid gap-4 md:grid-cols-3">
               <Card className="border-dashed">
                 <CardContent className="pt-4 pb-4">
