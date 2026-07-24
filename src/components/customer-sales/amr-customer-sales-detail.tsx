@@ -74,15 +74,17 @@ export function AmrCustomerSalesDetail({
   const [internalSltType, setInternalSltType] = useState<string | null>(null);
   const pageSize = 100;
 
-  const isSltControlled = onSelectedSltTypeChange !== undefined;
+  // Locked SLT pages pass selectedSltType without onChange — still treat as controlled.
+  const isSltControlled =
+    onSelectedSltTypeChange !== undefined || controlledSltType !== undefined;
   const selectedSltType = isSltControlled
     ? (controlledSltType ?? null)
     : internalSltType;
 
   const setSelectedSltType = (value: string | null) => {
-    if (isSltControlled) {
-      onSelectedSltTypeChange?.(value);
-    } else {
+    if (onSelectedSltTypeChange) {
+      onSelectedSltTypeChange(value);
+    } else if (controlledSltType === undefined) {
       setInternalSltType(value);
     }
   };
