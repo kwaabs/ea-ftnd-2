@@ -6,7 +6,6 @@ import { Button } from "@/components/ui/button"
 import { Textarea } from "@/components/ui/textarea"
 import { Avatar, AvatarFallback } from "@/components/ui/avatar"
 import { Badge } from "@/components/ui/badge"
-import { ScrollArea } from "@/components/ui/scroll-area"
 import { Separator } from "@/components/ui/separator"
 import { useUserStore } from "@/stores/user-store"
 import {
@@ -241,7 +240,7 @@ function CommentsSheetInner({ onClose }: { onClose: () => void }) {
             />
 
             {/* Sheet panel */}
-            <div className="fixed right-0 top-0 z-50 h-screen w-[480px] max-w-full bg-background border-l shadow-2xl flex flex-col">
+            <div className="fixed right-0 top-0 z-50 flex h-dvh w-[480px] max-w-full flex-col overflow-hidden border-l bg-background shadow-2xl">
                 {/* Header */}
                 <div className="flex items-center justify-between px-5 py-4 border-b shrink-0">
                     <div>
@@ -269,8 +268,8 @@ function CommentsSheetInner({ onClose }: { onClose: () => void }) {
                     ))}
                 </div>
 
-                {/* Comment list */}
-                <ScrollArea className="flex-1 px-5">
+                {/* Comment list — min-h-0 so flex child can shrink and scroll */}
+                <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-5">
                     {isLoading ? (
                         <div className="flex items-center justify-center py-16">
                             <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
@@ -296,7 +295,7 @@ function CommentsSheetInner({ onClose }: { onClose: () => void }) {
                             ))}
                         </div>
                     )}
-                </ScrollArea>
+                </div>
 
                 {/* Reply indicator */}
                 {replyingTo && (
