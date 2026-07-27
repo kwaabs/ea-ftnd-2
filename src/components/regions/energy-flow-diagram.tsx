@@ -263,30 +263,79 @@ export function EnergyFlowDiagram({
         return src;
     };
 
-    const customerRows: DrillRow[] = Array.from(customerBySrc.entries())
-        .sort((a, b) => b[1] - a[1])
-        .map(([src, kwh]) => {
-            const label = formatCustomerSource(src);
-            const isAmr = label === "AMR";
-            return {
-                label,
-                value: kwh,
-                sub: isAmr
-                    ? amrSltChildren.length > 0
-                        ? `${amrSltChildren.length} SLT type${amrSltChildren.length !== 1 ? "s" : ""}`
-                        : undefined
-                    : label === "Zeus (Postpaid)"
-                      ? "Postpaid billing"
-                      : label === "Zeus (Prepaid)"
-                        ? "Prepaid billing"
-                        : label === "Zeus (AMR)"
-                          ? "AMR billing"
-                          : label.startsWith("MMS")
-                            ? "Prepaid sales"
-                            : undefined,
-                children: isAmr && amrSltChildren.length > 0 ? amrSltChildren : undefined,
-            };
+    // Same IA as Customer Consumption overview:
+    // Postpaid = Zeus Postpaid + Zeus AMR + daily AMR
+    // Prepaid  = Zeus Prepaid + MMS
+    const postpaidChildren: DrillRow[] = [];
+    const prepaidChildren: DrillRow[] = [];
+
+    for (const [src, kwh] of customerBySrc.entries()) {
+        if (!kwh) continue;
+        const label = formatCustomerSource(src);
+        const isDailyAmr = label === "AMR";
+        const row: DrillRow = {
+            label,
+            value: kwh,
+            sub: isDailyAmr
+                ? amrSltChildren.length > 0
+                    ? `${amrSltChildren.length} SLT type${amrSltChildren.length !== 1 ? "s" : ""}`
+                    : "Daily AMR meters"
+                : label === "Zeus (Postpaid)"
+                  ? "Postpaid billing"
+                  : label === "Zeus (Prepaid)"
+                    ? "Prepaid billing"
+                    : label === "Zeus (AMR)"
+                      ? "AMR billing"
+                      : label.startsWith("MMS")
+                        ? "Prepaid sales"
+                        : undefined,
+            children:
+                isDailyAmr && amrSltChildren.length > 0
+                    ? amrSltChildren
+                    : undefined,
+        };
+
+        if (
+            label === "Zeus (Postpaid)" ||
+            label === "Zeus (AMR)" ||
+            label === "AMR"
+        ) {
+            postpaidChildren.push(row);
+        } else if (
+            label === "Zeus (Prepaid)" ||
+            label === "MMS (Prepaid)"
+        ) {
+            prepaidChildren.push(row);
+        } else {
+            // Unknown Zeus service types — keep visible under Postpaid
+            postpaidChildren.push(row);
+        }
+    }
+
+    postpaidChildren.sort((a, b) => b.value - a.value);
+    prepaidChildren.sort((a, b) => b.value - a.value);
+
+    const postpaidTotal = postpaidChildren.reduce((s, r) => s + r.value, 0);
+    const prepaidTotal = prepaidChildren.reduce((s, r) => s + r.value, 0);
+
+    const customerRows: DrillRow[] = [];
+    if (postpaidTotal > 0) {
+        customerRows.push({
+            label: "Postpaid",
+            value: postpaidTotal,
+            sub: "Zeus + daily AMR",
+            children: postpaidChildren,
         });
+    }
+    if (prepaidTotal > 0) {
+        customerRows.push({
+            label: "Prepaid",
+            value: prepaidTotal,
+            sub: "Zeus + MMS",
+            children: prepaidChildren,
+        });
+    }
+    customerRows.sort((a, b) => b.value - a.value);
 
     const customerSourceSummary = customerSalesLoading
         ? "loading…"
@@ -401,16 +450,34 @@ export function EnergyFlowDiagram({
 
     const renderRows = (node: NodeConfig) => {
         const total = node.rows.reduce((s, r) => s + r.value, 0) || node.value || 1;
-        return (
-            <div className="mt-2 pt-2 border-t border-dashed border-current/20 space-y-1 max-h-80 overflow-y-auto">
-                {node.rows.length === 0 && (
-                    <p className="text-[11px] text-muted-foreground px-1 py-1">No breakdown available</p>
+
+        const renderDrillRows = (
+            rows: DrillRow[],
+            parentKey: string,
+            parentTotal: number,
+            depth: number,
+        ) => (
+            <div
+                className={
+                    depth === 0
+                        ? "mt-2 pt-2 border-t border-dashed border-current/20 space-y-1 max-h-80 overflow-y-auto"
+                        : "ml-4 mt-0.5 mb-1 border-l border-dashed border-current/20 pl-2 space-y-1"
+                }
+            >
+                {rows.length === 0 && depth === 0 && (
+                    <p className="text-[11px] text-muted-foreground px-1 py-1">
+                        No breakdown available
+                    </p>
                 )}
-                {node.rows.map((row) => {
-                    const rowKey = `${node.id}-${row.label}`;
+                {rows.map((row) => {
+                    const rowKey = `${parentKey}-${row.label}`;
                     const hasChildren = (row.children?.length ?? 0) > 0;
                     const rowOpen = expandedRows.has(rowKey);
-                    const childTotal = row.children?.reduce((s, c) => s + c.value, 0) || row.value || 1;
+                    const childTotal =
+                        row.children?.reduce((s, c) => s + c.value, 0) ||
+                        row.value ||
+                        1;
+                    const textSize = depth === 0 ? "text-xs" : "text-[11px]";
 
                     const labelEl = row.href ? (
                         <Link
@@ -427,7 +494,7 @@ export function EnergyFlowDiagram({
                     return (
                         <div key={rowKey}>
                             <div
-                                className={`flex items-start justify-between gap-3 py-1.5 px-1.5 rounded hover:bg-background/60 text-xs ${hasChildren ? "cursor-pointer" : ""}`}
+                                className={`flex items-start justify-between gap-3 py-1.5 px-1.5 rounded hover:bg-background/60 ${textSize} ${hasChildren ? "cursor-pointer" : ""}`}
                                 onClick={(e) => {
                                     if (!hasChildren) return;
                                     e.stopPropagation();
@@ -452,48 +519,36 @@ export function EnergyFlowDiagram({
                                 <div className="shrink-0 text-right leading-tight">
                                     <div className="text-muted-foreground tabular-nums whitespace-nowrap">
                                         {row.precise
-                                            ? row.value.toLocaleString("en-US", { maximumFractionDigits: 4 })
+                                            ? row.value.toLocaleString("en-US", {
+                                                  maximumFractionDigits: 4,
+                                              })
                                             : formatNumber(row.value)}
                                         <span className="text-muted-foreground/70"> kWh</span>
                                     </div>
                                     <div className="font-semibold tabular-nums">
-                                        {formatNumber((row.value / total) * 100, 1)}%
+                                        {formatNumber(
+                                            (row.value / parentTotal) * 100,
+                                            1,
+                                        )}
+                                        %
                                     </div>
                                 </div>
                             </div>
-                            {hasChildren && rowOpen && (
-                                <div className="ml-4 mt-0.5 mb-1 border-l border-dashed border-current/20 pl-2 space-y-1">
-                                    {row.children!.map((child) => (
-                                        <div
-                                            key={`${rowKey}-${child.label}`}
-                                            className="flex items-start justify-between gap-3 py-1 px-1.5 rounded hover:bg-background/60 text-[11px]"
-                                        >
-                                            <div className="min-w-0 flex-1">
-                                                <span className="font-medium break-words">{child.label}</span>
-                                                {child.sub && (
-                                                    <div className="text-muted-foreground mt-0.5">
-                                                        {child.sub}
-                                                    </div>
-                                                )}
-                                            </div>
-                                            <div className="shrink-0 text-right leading-tight">
-                                                <div className="text-muted-foreground tabular-nums whitespace-nowrap">
-                                                    {formatNumber(child.value)}
-                                                    <span className="text-muted-foreground/70"> kWh</span>
-                                                </div>
-                                                <div className="font-semibold tabular-nums">
-                                                    {formatNumber((child.value / childTotal) * 100, 1)}%
-                                                </div>
-                                            </div>
-                                        </div>
-                                    ))}
-                                </div>
-                            )}
+                            {hasChildren &&
+                                rowOpen &&
+                                renderDrillRows(
+                                    row.children!,
+                                    rowKey,
+                                    childTotal,
+                                    depth + 1,
+                                )}
                         </div>
                     );
                 })}
             </div>
         );
+
+        return renderDrillRows(node.rows, node.id, total, 0);
     };
 
     const NodeCard = ({ node }: { node: NodeConfig }) => {
@@ -711,7 +766,12 @@ export function EnergyFlowDiagram({
                         <div>
                             <span className="font-medium text-foreground">Distribution — Customer Sales</span>
                             <p className="mt-0.5 leading-relaxed">
-                                Energy billed or metered to customers (Zeus, MMS, AMR), drawn from DTX distribution. Expand Customer Sales to see sources; when AMR is present, expand AMR further by SLT type. The gap between DTX Distribution and Customer Sales reflects unbilled energy and system losses.
+                                Energy billed or metered to customers, drawn from DTX distribution.
+                                Expand Customer Sales for Postpaid (Zeus Postpaid / Zeus AMR / daily
+                                AMR) and Prepaid (Zeus Prepaid / MMS), then drill into each source;
+                                daily AMR further splits by SLT type. The gap between DTX
+                                Distribution and Customer Sales reflects unbilled energy and system
+                                losses.
                             </p>
                         </div>
                         <div>
