@@ -1,7 +1,7 @@
 "use client"
 import Link from "next/link"
 import { Filter, Calendar, BarChart3 } from "lucide-react"
-import { useState, useEffect, Suspense } from "react"
+import { useState, useEffect, Suspense, useMemo } from "react"
 import { Button } from "@/components/ui/button"
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
 import { useAppStore } from "@/stores/app-store"
@@ -16,6 +16,14 @@ function getYesterday() {
     d.setHours(0, 0, 0, 0)
     d.setDate(d.getDate() - 1)
     return d
+}
+
+function formatMeterType(text: string) {
+    if (text === "BSP") return "BSP Incomer"
+    if (text === "DTX") return "Distribution Transformer"
+    if (text === "REGIONAL_BOUNDARY") return "Regional Boundary"
+    if (text === "DISTRICT_BOUNDARY") return "District Boundary"
+    return text.replace(/_/g, " ")
 }
 
 export function Header() {
@@ -60,6 +68,32 @@ export function Header() {
     endDateObj.setHours(0, 0, 0, 0)
     const displayEnd = formatDisplayDate(endDateObj > yesterday ? yesterday : endDateObj)
 
+    const activeFilterLabels = useMemo(() => {
+        const parts: string[] = []
+        if (filters.regions?.length) parts.push(...filters.regions)
+        if (filters.districts?.length) parts.push(...filters.districts)
+        if (filters.stations?.length) parts.push(...filters.stations)
+        if (filters.locations?.length) parts.push(...filters.locations)
+        if (filters.boundaryMeteringPoints?.length) {
+            parts.push(...filters.boundaryMeteringPoints)
+        }
+        if (filters.meterTypes?.length) {
+            parts.push(...filters.meterTypes.map(formatMeterType))
+        }
+        if (filters.voltages?.length) {
+            parts.push(...filters.voltages.map((v) => `${v} kV`))
+        }
+        return parts
+    }, [
+        filters.regions,
+        filters.districts,
+        filters.stations,
+        filters.locations,
+        filters.boundaryMeteringPoints,
+        filters.meterTypes,
+        filters.voltages,
+    ])
+
     return (
         <header className="sticky top-0 z-50 w-full border-b border-border bg-card shrink-0">
             <div className="flex h-16 items-center px-6 gap-4">
@@ -70,20 +104,30 @@ export function Header() {
                     </Suspense>
                 </div>
 
-                {/* Right section - Date and Filters */}
-                <div className="flex items-center gap-4 shrink-0">
-                    <div className="flex flex-col gap-1">
+                {/* Right section - Active filters, Date, Filters */}
+                <div className="flex items-center gap-3 shrink-0">
+                    {activeFilterLabels.length > 0 && (
                         <div
-                            className="flex items-center gap-2 px-3 py-1.5 rounded-md text-sm"
-                            style={{ backgroundColor: 'hsl(0, 100%, 97%)' }}
+                            className="flex items-center gap-2 px-3 py-1.5 rounded-md text-sm max-w-[min(420px,40vw)]"
+                            style={{ backgroundColor: "hsl(142, 76%, 94%)" }}
+                            title={`Filters: ${activeFilterLabels.join(", ")}`}
                         >
-                            <Calendar className="h-4 w-4 text-rose-600"/>
-                            <span className="font-semibold whitespace-nowrap text-rose-900">
-                                {fromDate} <span className="mx-1">to</span> {displayEnd}
+                            <Filter className="h-4 w-4 text-emerald-700 shrink-0" />
+                            <span className="font-bold whitespace-nowrap truncate text-emerald-900">
+                                Filters: {activeFilterLabels.join(", ")}
                             </span>
                         </div>
-                    </div>
+                    )}
 
+                    <div
+                        className="flex items-center gap-2 px-3 py-1.5 rounded-md text-sm"
+                        style={{ backgroundColor: "hsl(0, 100%, 97%)" }}
+                    >
+                        <Calendar className="h-4 w-4 text-rose-600"/>
+                        <span className="font-semibold whitespace-nowrap text-rose-900">
+                            {fromDate} <span className="mx-1">to</span> {displayEnd}
+                        </span>
+                    </div>
 
                     {canSeeNotifications && (
                         <Link href="/admin/logins">
