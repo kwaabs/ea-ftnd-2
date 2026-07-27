@@ -3954,11 +3954,13 @@ export function RegionDetail({ region }: RegionDetailProps) {
       dateTo: dateRange.end,
     });
 
-  // Fetch customer consumption aggregate for this region — grouped by data_src (Zeus postpaid)
+  // Fetch customer consumption for this region — split by Zeus servicetype
+  // (Postpaid / Prepaid / AMR) so prepaid is not hidden under "Postpaid".
   const customerConsAggResult = useCustomerConsumptionAggregate({
     dateFrom: dateRange.start,
     dateTo: dateRange.end,
     region: regionProperCase,
+    groupBy: "servicetype",
   });
   const customerConsumptionAggData = customerConsAggResult.data;
 
@@ -4000,30 +4002,43 @@ export function RegionDetail({ region }: RegionDetailProps) {
     );
   }, [amrData, regionProperCase]);
 
-  // Compute customer sales totals broken down by data_src — Zeus + MMS + AMR combined
+  // Compute customer sales totals broken down by source — Zeus (by service type) + MMS + daily AMR
   const customerSalesMetrics = useMemo(() => {
     const bySrc = new Map<string, number>();
     let total = 0;
 
-    // Zeus postpaid
+    const add = (label: string, kwh: number) => {
+      if (!kwh) return;
+      bySrc.set(label, (bySrc.get(label) ?? 0) + kwh);
+      total += kwh;
+    };
+
+    // Zeus billing — Postpaid / Prepaid / AMR (servicetype), not a single Postpaid bucket
     if (
       customerConsumptionAggData &&
       Array.isArray(customerConsumptionAggData)
     ) {
       customerConsumptionAggData.forEach((item: any) => {
         const kwh = item.sum_lastbillconsumption || 0;
-        bySrc.set("Zeus (Postpaid)", (bySrc.get("Zeus (Postpaid)") ?? 0) + kwh);
-        total += kwh;
+        const t = String(item.servicetype || "")
+          .trim()
+          .toLowerCase();
+        if (t === "postpaid") add("Zeus (Postpaid)", kwh);
+        else if (t === "prepaid") add("Zeus (Prepaid)", kwh);
+        else if (t === "amr") add("Zeus (AMR)", kwh);
+        else if (kwh > 0) {
+          const label = item.servicetype?.trim()
+            ? `Zeus (${item.servicetype.trim()})`
+            : "Zeus";
+          add(label, kwh);
+        }
       });
     }
 
     // MMS prepaid — single region-level row after client-side filter
     const mmsRow = mmsAggData && mmsAggData.length > 0 ? mmsAggData[0] : null;
     const mmsKwh = mmsRow ? mmsRow.sum_last_month_kwh_read || 0 : 0;
-    if (mmsKwh > 0) {
-      bySrc.set("MMS (Prepaid)", mmsKwh);
-      total += mmsKwh;
-    }
+    add("MMS (Prepaid)", mmsKwh);
 
     // AMR daily meters — aggregate import + export kWh
     const amrImportKwh = amrAggData
@@ -4032,11 +4047,7 @@ export function RegionDetail({ region }: RegionDetailProps) {
     const amrExportKwh = amrAggData
       .filter((i: any) => i.system_name === "export_kwh")
       .reduce((s: number, i: any) => s + (i.total_consumption || 0), 0);
-    const amrTotalKwh = amrImportKwh + amrExportKwh;
-    if (amrTotalKwh > 0) {
-      bySrc.set("AMR", amrTotalKwh);
-      total += amrTotalKwh;
-    }
+    add("AMR", amrImportKwh + amrExportKwh);
 
     // SLT breakdown under AMR (same import+export basis as total)
     const amrBySltType = new Map<string, number>();

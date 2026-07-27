@@ -247,8 +247,14 @@ export function EnergyFlowDiagram({
 
     const formatCustomerSource = (src: string) => {
         const key = src.trim().toLowerCase();
-        if (key === "amr" || key.startsWith("amr")) return "AMR";
-        if (key === "zeus" || key.includes("zeus")) return "Zeus (Postpaid)";
+        if (key === "amr" || (key.startsWith("amr") && !key.includes("zeus")))
+            return "AMR";
+        if (key.includes("zeus") && key.includes("prepaid"))
+            return "Zeus (Prepaid)";
+        if (key.includes("zeus") && key.includes("postpaid"))
+            return "Zeus (Postpaid)";
+        if (key.includes("zeus") && key.includes("amr")) return "Zeus (AMR)";
+        if (key.includes("zeus")) return src.trim() || "Zeus";
         if (key === "mms" || key.includes("mms")) return "MMS (Prepaid)";
         return src;
     };
@@ -265,11 +271,15 @@ export function EnergyFlowDiagram({
                     ? amrSltChildren.length > 0
                         ? `${amrSltChildren.length} SLT type${amrSltChildren.length !== 1 ? "s" : ""}`
                         : undefined
-                    : label.startsWith("Zeus")
+                    : label === "Zeus (Postpaid)"
                       ? "Postpaid billing"
-                      : label.startsWith("MMS")
-                        ? "Prepaid sales"
-                        : undefined,
+                      : label === "Zeus (Prepaid)"
+                        ? "Prepaid billing"
+                        : label === "Zeus (AMR)"
+                          ? "AMR billing"
+                          : label.startsWith("MMS")
+                            ? "Prepaid sales"
+                            : undefined,
                 children: isAmr && amrSltChildren.length > 0 ? amrSltChildren : undefined,
             };
         });
