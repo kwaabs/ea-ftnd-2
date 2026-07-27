@@ -52,7 +52,7 @@ export default function CustomerSalesPage() {
       <div className="space-y-6">
         <div>
           <h2 className="text-3xl font-semibold tracking-tight text-foreground">
-            Customer Consumption
+            Customer Consumption (Sales)
           </h2>
           <p className="text-muted-foreground mt-1">
             Overview across Postpaid (Zeus + AMR) and Prepaid (Zeus + MMS)

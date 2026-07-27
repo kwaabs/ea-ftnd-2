@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Megaphone, Plus, Trash2, Loader2 } from "lucide-react";
 import { Marquee, MarqueeItem } from "@/components/ui/marquee";
 import { Button } from "@/components/ui/button";
@@ -28,6 +28,11 @@ import {
 } from "@/hooks/api/use-announcements-api";
 import { useUserStore } from "@/stores/user-store";
 import { NOTIFY_EMAILS } from "@/lib/notify-config";
+
+/** Alternate sales figures vs announcements so the ticker stays readable. */
+const MARQUEE_PHASE_MS = 2 * 60 * 1000;
+
+type MarqueePhase = "figures" | "announcements";
 
 interface RegionalSummaryMarqueeProps {
   dateRange: { start: string; end: string };
@@ -78,7 +83,8 @@ function lossSeverityStyles(hasSalesData: boolean, lossPct: number | null) {
  *   Region:  availableSupply = BSP + boundaryNet + expressNet
  *            loss            = availableSupply − sales
  *
- * Also scrolls shared announcements. Posting/removing is limited to emails in
+ * Also scrolls shared announcements on a separate 2-minute phase so figures
+ * and announcements are not mixed. Posting/removing is limited to emails in
  * NOTIFY_EMAILS (enforced on the API as well).
  */
 export function RegionalSummaryMarquee({
@@ -97,10 +103,27 @@ export function RegionalSummaryMarquee({
   const [submitting, setSubmitting] = useState(false);
   const [composeError, setComposeError] = useState<string | null>(null);
   const [deletingId, setDeletingId] = useState<string | null>(null);
+  const [phase, setPhase] = useState<MarqueePhase>("figures");
 
   const { announcements, mutate: mutateAnnouncements } = useAnnouncements({
     refreshInterval: 30_000,
   });
+
+  const hasAnnouncements = announcements.length > 0;
+  // Stay on figures when there is nothing to announce.
+  const activePhase: MarqueePhase =
+    phase === "announcements" && hasAnnouncements ? "announcements" : "figures";
+
+  useEffect(() => {
+    if (!hasAnnouncements) {
+      setPhase("figures");
+      return;
+    }
+    const id = window.setInterval(() => {
+      setPhase((prev) => (prev === "figures" ? "announcements" : "figures"));
+    }, MARQUEE_PHASE_MS);
+    return () => window.clearInterval(id);
+  }, [hasAnnouncements]);
 
   const { data: geometryData } = useAllRegionsGeometry();
   const { data: bspData, isLoading: isLoadingBsp } = useBspAggregate({ dateFrom, dateTo });
@@ -388,12 +411,25 @@ export function RegionalSummaryMarquee({
         </Dialog>
       )}
 
-      <div className="min-w-0 flex-1">
-      {isLoadingGlobal && isLoadingRegional ? (
+      <div className="min-w-0 flex-1 flex items-center gap-2">
+        {hasAnnouncements && (
+          <span
+            className={
+              compact
+                ? "shrink-0 text-[10px] font-semibold uppercase tracking-wide text-muted-foreground"
+                : "shrink-0 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground"
+            }
+            aria-live="polite"
+          >
+            {activePhase === "announcements" ? "Announcements" : "Sales & losses"}
+          </span>
+        )}
+      {isLoadingGlobal && isLoadingRegional && activePhase === "figures" ? (
         <Marquee
+          key="loading"
           speed="slow"
           gap="medium"
-          className={compact ? "bg-transparent border-0" : undefined}
+          className={compact ? "bg-transparent border-0 flex-1" : "flex-1"}
         >
           <MarqueeItem
             className={
@@ -405,11 +441,12 @@ export function RegionalSummaryMarquee({
             Loading organization purchases, sales, and loss figures…
           </MarqueeItem>
         </Marquee>
-      ) : (
+      ) : activePhase === "announcements" ? (
         <Marquee
+          key="announcements"
           speed="slow"
           gap="medium"
-          className={compact ? "bg-transparent border-0" : undefined}
+          className={compact ? "bg-transparent border-0 flex-1" : "flex-1"}
         >
           {announcements.map((a) => (
             <MarqueeItem
@@ -421,7 +458,9 @@ export function RegionalSummaryMarquee({
               }
             >
               <Megaphone className="h-4 w-4 text-amber-600 shrink-0" />
-              <span className="font-semibold text-amber-700 dark:text-amber-300">Announcement:</span>
+              <span className="font-semibold text-amber-700 dark:text-amber-300">
+                Announcement:
+              </span>
               <span>{a.body}</span>
               {(a.author_name || a.author_email) && (
                 <span className="text-muted-foreground text-sm">
@@ -430,7 +469,14 @@ export function RegionalSummaryMarquee({
               )}
             </MarqueeItem>
           ))}
-
+        </Marquee>
+      ) : (
+        <Marquee
+          key="figures"
+          speed="slow"
+          gap="medium"
+          className={compact ? "bg-transparent border-0 flex-1" : "flex-1"}
+        >
           {/* Global organization — Purchases − Sales (same as dashboard KPI cards) */}
           {!isLoadingGlobal && (
             <MarqueeItem
@@ -451,7 +497,7 @@ export function RegionalSummaryMarquee({
                 Sales{" "}
                 {globalSummary.hasSalesData
                   ? `${formatKwh(globalSummary.sales)} kWh`
-                  : "—"}
+                  : "Not yet available"}
               </span>
               <span className="text-muted-foreground">·</span>
               <span className={globalStyles.lossTextColor}>
@@ -461,7 +507,7 @@ export function RegionalSummaryMarquee({
                         ? ` (${globalSummary.lossPct.toFixed(1)}%)`
                         : ""
                     }`
-                  : "Loss — (no sales data)"}
+                  : "Loss not yet available"}
               </span>
             </MarqueeItem>
           )}
@@ -499,7 +545,10 @@ export function RegionalSummaryMarquee({
                   </span>
                   <span className="text-muted-foreground">·</span>
                   <span className="text-blue-700 dark:text-blue-400">
-                    Sales {hasSalesData ? `${formatKwh(sales)} kWh` : "—"}
+                    Sales{" "}
+                    {hasSalesData
+                      ? `${formatKwh(sales)} kWh`
+                      : "Not yet available"}
                   </span>
                   <span className="text-muted-foreground">·</span>
                   <span className={lossTextColor}>
@@ -507,7 +556,7 @@ export function RegionalSummaryMarquee({
                       ? `Loss ${formatKwh(loss)} kWh${
                           lossPct !== null ? ` (${lossPct.toFixed(1)}%)` : ""
                         }`
-                      : "Loss — (no sales data)"}
+                      : "Loss not yet available"}
                   </span>
                 </MarqueeItem>
               );

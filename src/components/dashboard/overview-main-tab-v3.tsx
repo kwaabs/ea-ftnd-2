@@ -7980,9 +7980,17 @@ export function OverviewMainTabV3({
             <CardContent className="py-2.5 px-4">
               <p className="text-sm font-medium text-muted-foreground">Sales</p>
               <p className="text-2xl font-bold tabular-nums tracking-tight mt-0.5">
-                {energySales === null ? "—" : formatNumber(energySales)}
-                {energySales !== null && (
-                  <span className="text-sm font-normal text-muted-foreground ml-1.5">kWh</span>
+                {energySales === null ? (
+                  <span className="text-lg font-semibold text-muted-foreground">
+                    Not yet available
+                  </span>
+                ) : (
+                  <>
+                    {formatNumber(energySales)}
+                    <span className="text-sm font-normal text-muted-foreground ml-1.5">
+                      kWh
+                    </span>
+                  </>
                 )}
               </p>
               {energySalesBreakdown && (
@@ -8028,21 +8036,29 @@ export function OverviewMainTabV3({
                 <p
                   className={`text-2xl font-bold tabular-nums tracking-tight mt-0.5 ${systemLossColorClass}`}
                 >
-                  {systemLosses.kwh === null ? "—" : formatNumber(systemLosses.kwh)}
-                  {systemLosses.kwh !== null && (
-                    <span className={`text-sm font-normal ml-1.5 opacity-70 ${systemLossColorClass}`}>
-                      kWh
+                  {systemLosses.kwh === null ? (
+                    <span className="text-lg font-semibold text-muted-foreground">
+                      Not yet available
                     </span>
+                  ) : (
+                    <>
+                      {formatNumber(systemLosses.kwh)}
+                      <span
+                        className={`text-sm font-normal ml-1.5 opacity-70 ${systemLossColorClass}`}
+                      >
+                        kWh
+                      </span>
+                    </>
                   )}
                 </p>
               </div>
-              <p
-                className={`text-2xl font-semibold tabular-nums tracking-tight shrink-0 mt-5 ${systemLossColorClass}`}
-              >
-                {systemLosses.percentage === null
-                  ? "—"
-                  : `${systemLosses.percentage.toFixed(2)}%`}
-              </p>
+              {systemLosses.percentage !== null && (
+                <p
+                  className={`text-2xl font-semibold tabular-nums tracking-tight shrink-0 mt-5 ${systemLossColorClass}`}
+                >
+                  {`${systemLosses.percentage.toFixed(2)}%`}
+                </p>
+              )}
             </CardContent>
           </Card>
         </div>
