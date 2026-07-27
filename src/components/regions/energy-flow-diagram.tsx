@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
 import Link from "next/link";
-import { ChevronDown, ChevronRight } from "lucide-react";
+import { ChevronDown, ChevronRight, Loader2 } from "lucide-react";
 import { formatNumber } from "@/lib/utils";
 
 const useIsomorphicLayoutEffect =
@@ -82,6 +82,8 @@ interface EnergyFlowDiagramProps {
     customerBySrc: Map<string, number>;
     /** When AMR is present, further drill into SLT type under the AMR row */
     amrBySltType?: Map<string, number>;
+    /** True while Zeus / MMS / AMR sales aggregates are still fetching */
+    customerSalesLoading?: boolean;
 }
 
 interface NodeConfig {
@@ -93,6 +95,7 @@ interface NodeConfig {
     rows: DrillRow[];
     leaves?: boolean;
     big?: boolean;
+    loading?: boolean;
 }
 
 type Side = "l" | "r" | "t" | "b";
@@ -138,6 +141,7 @@ export function EnergyFlowDiagram({
     expressOutbound,
     customerBySrc,
     amrBySltType,
+    customerSalesLoading = false,
 }: EnergyFlowDiagramProps) {
     const containerRef = useRef<HTMLDivElement>(null);
     const headerRefs = useRef<Record<string, HTMLDivElement | null>>({});
@@ -284,10 +288,11 @@ export function EnergyFlowDiagram({
             };
         });
 
-    const customerSourceSummary =
-        customerRows.length === 0
-            ? "no sources"
-            : customerRows.map((r) => r.label).join(" + ");
+    const customerSourceSummary = customerSalesLoading
+        ? "loading…"
+        : customerRows.length === 0
+          ? "no sources"
+          : customerRows.map((r) => r.label).join(" + ");
 
     const nodeMap: Record<string, NodeConfig> = {
         bsp: { id: "bsp", title: "BSP Import", value: energyFlow.bspImport, color: "emerald", sub: `${bspByStation.size} stations`, rows: bspRows },
@@ -303,8 +308,9 @@ export function EnergyFlowDiagram({
             value: energyFlow.customerSales,
             color: "emerald",
             sub: customerSourceSummary,
-            rows: customerRows,
+            rows: customerSalesLoading ? [] : customerRows,
             big: true,
+            loading: customerSalesLoading,
         },
     };
 
@@ -493,7 +499,7 @@ export function EnergyFlowDiagram({
     const NodeCard = ({ node }: { node: NodeConfig }) => {
         const tint = TINTS[node.color];
         const isOpen = expanded.has(node.id);
-        const canDrill = node.rows.length > 0;
+        const canDrill = !node.loading && node.rows.length > 0;
         const valueLabel = formatNumber(node.value);
 
         if (node.big) {
@@ -510,13 +516,29 @@ export function EnergyFlowDiagram({
                                 <ChevronRight className={`h-3.5 w-3.5 transition-transform ${isOpen ? "rotate-90" : ""}`} />
                             )}
                         </div>
-                        <div
-                            className="mt-1 text-lg font-extrabold tabular-nums"
-                            title={`${valueLabel} kWh`}
-                        >
-                            {valueLabel}
-                        </div>
-                        <div className="text-[11px] text-muted-foreground mt-0.5">kWh · {node.sub}</div>
+                        {node.loading ? (
+                            <div className="mt-2 flex flex-col items-center gap-1.5">
+                                <span className="inline-flex items-center gap-2 rounded-full border border-emerald-300 bg-emerald-50 px-3 py-1.5 text-sm font-semibold text-emerald-800">
+                                    <Loader2 className="h-4 w-4 animate-spin" />
+                                    Loading sales…
+                                </span>
+                                <div className="text-[11px] text-muted-foreground">
+                                    Zeus · MMS · AMR
+                                </div>
+                            </div>
+                        ) : (
+                            <>
+                                <div
+                                    className="mt-1 text-lg font-extrabold tabular-nums"
+                                    title={`${valueLabel} kWh`}
+                                >
+                                    {valueLabel}
+                                </div>
+                                <div className="text-[11px] text-muted-foreground mt-0.5">
+                                    kWh · {node.sub}
+                                </div>
+                            </>
+                        )}
                     </div>
                     {isOpen && <div className="px-4 pb-4">{renderRows(node)}</div>}
                 </div>

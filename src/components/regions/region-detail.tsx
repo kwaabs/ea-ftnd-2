@@ -3966,11 +3966,12 @@ export function RegionDetail({ region }: RegionDetailProps) {
 
   // Fetch MMS aggregate — grouped by region, then filter client-side for this region
   // (the district endpoint does not support a region filter param)
-  const { data: mmsRegionData } = useMmsCustomerSalesAggregate({
-    groupBy: "region",
-    dateFrom: dateRange.start,
-    dateTo: dateRange.end,
-  });
+  const { data: mmsRegionData, isLoading: mmsSalesLoading } =
+    useMmsCustomerSalesAggregate({
+      groupBy: "region",
+      dateFrom: dateRange.start,
+      dateTo: dateRange.end,
+    });
 
   const mmsAggData = useMemo(() => {
     if (!mmsRegionData || !Array.isArray(mmsRegionData)) return [];
@@ -3981,18 +3982,26 @@ export function RegionDetail({ region }: RegionDetailProps) {
   }, [mmsRegionData, regionProperCase]);
 
   // Fetch AMR aggregate — all regions, filter client-side
-  const { data: amrData } = useAmrConsumptionAggregate({
-    dateFrom: dateRange.start,
-    dateTo: dateRange.end,
-  });
+  const { data: amrData, isLoading: amrSalesLoading } =
+    useAmrConsumptionAggregate({
+      dateFrom: dateRange.start,
+      dateTo: dateRange.end,
+    });
 
   // AMR by SLT type for energy-flow Customer Sales drill-down
-  const { data: amrSltData } = useAmrConsumptionAggregate({
-    dateFrom: dateRange.start,
-    dateTo: dateRange.end,
-    region: regionProperCase,
-    group: "slt_type",
-  });
+  const { data: amrSltData, isLoading: amrSltLoading } =
+    useAmrConsumptionAggregate({
+      dateFrom: dateRange.start,
+      dateTo: dateRange.end,
+      region: regionProperCase,
+      group: "slt_type",
+    });
+
+  const customerSalesLoading =
+    customerConsAggResult.isLoading ||
+    mmsSalesLoading ||
+    amrSalesLoading ||
+    amrSltLoading;
 
   const amrAggData = useMemo(() => {
     if (!amrData || !Array.isArray(amrData)) return [];
@@ -6192,6 +6201,7 @@ export function RegionDetail({ region }: RegionDetailProps) {
               expressOutbound={expressFeederMetrics.diagramOutbound}
               customerBySrc={customerSalesMetrics.bySrc}
               amrBySltType={customerSalesMetrics.amrBySltType}
+              customerSalesLoading={customerSalesLoading}
             />
           </div>
         </CardContent>
