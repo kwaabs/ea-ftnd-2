@@ -594,3 +594,112 @@ export interface AmrConsumptionDailyResponse {
   total?: number
   total_pages?: number
 }
+
+// ─────────────────────────────────────────────────
+// Zeus Billing Types (app.zeus_sales)
+//
+// Replaces the legacy customer-sales-zeus / app.customer_sales_zeus
+// source. Field names mirror internal/zeusbilling.Bill in ea-bknd-3
+// (camelCase JSON tags, matching the source CSV headers). This source
+// has no customerType (Individual/Organization) or a running
+// currentbalance — see ZeusBillingDetail/AggregateItem below for the
+// closest equivalents (meterModelType, debtAmount/amountDue/
+// outstandingAmount).
+// ─────────────────────────────────────────────────
+
+export interface ZeusBillingDetail {
+  id: number
+  _id: string
+  bill: string
+  billType: string
+  servicePoint: string
+  servicePointCode: string
+  servicePointStatus: string
+  tariffClass: string
+  tariffClassCode: string
+  tariffClassName: string
+  serviceClass: string
+  geoCode: string
+  accountCode: string
+  meterCode: string
+  meterModelType: string
+  region: string
+  regionCode: string
+  regionName: string
+  district: string
+  districtCode: string
+  districtName: string
+  soeName: string
+  mdaName: string
+  isSensitive: string
+  customerName: string
+  billConsumptionValue: number
+  billConsumptionApparentValue: number
+  billConsumptionMaxDemandValue: number
+  billConsumptionExportValue: number
+  billAvgConsumptionValue: number
+  billPeriod: number
+  billConsumptionType: string
+  outstandingAmount: number
+  lifeLineAmount: number
+  firstThresholdAmount: number
+  secondThresholdAmount: number
+  thirdThresholdAmount: number | null
+  energyCharge: number
+  serviceCharge: number
+  energyPlusServiceCharge: number
+  powerFactorSurcharge: number
+  vatCharge: number
+  nhilCharge: number
+  getfundCharge: number
+  streetLightCharge: number
+  nationalElectrificationCharge: number
+  billAmount: number
+  paymentsAmount: number
+  adjustmentConsumptionValue: number
+  adjustmentAmount: number
+  amountDue: number
+  debtAmount: number
+  lastPaymentAmount: number
+  lastPaymentDate: string | null
+  billingMonth: number
+  billingYear: number
+  billStatus: string
+  createdAt: string
+  updatedAt: string
+  __v: number
+  accountType: string
+}
+
+export interface ZeusBillingDetailResponse {
+  data: ZeusBillingDetail[]
+  total: number
+  page: number
+  limit: number
+  total_pages: number
+}
+
+export interface ZeusBillingAggregateItem {
+  data_src: string
+  regionname?: string
+  districtname?: string
+  tariffclasscode?: string
+  serviceclass?: string
+  accounttype?: string
+  billstatus?: string
+  metermodeltype?: string
+  billingyear?: number
+  billingmonth?: number
+  customer_count: number
+  sum_billamount: number
+  sum_amountdue: number
+  sum_debtamount: number
+  sum_outstandingamount: number
+  sum_billconsumptionvalue: number
+  sum_paymentsamount: number
+}
+
+export interface ZeusBillingAggregateResponse {
+  data: ZeusBillingAggregateItem[]
+  total: number
+}
