@@ -1,7 +1,8 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import { DollarSign, Scale, Users, Zap } from "lucide-react";
+import Link from "next/link";
+import { ArrowUpRight, DollarSign, Scale, Users, Zap } from "lucide-react";
 import {
   Bar,
   BarChart,
@@ -309,20 +310,28 @@ export function ZeusPageView({
             )}
           </CardContent>
         </Card>
-        <Card>
-          <CardContent className="pt-5">
-            <p className="text-xs text-muted-foreground mb-1 flex items-center gap-1">
-              <Scale className="h-3.5 w-3.5" /> Debt
-            </p>
-            {regionLoading ? (
-              <Skeleton className="h-8 w-28" />
-            ) : (
-              <p className="text-2xl font-bold text-sky-700 tabular-nums">
-                {formatMoney(stats.totalDebt)}
+        <Link
+          href={`/customer-sales/debt${effectiveRegion ? `?region=${encodeURIComponent(effectiveRegion)}` : ""}`}
+        >
+          <Card className="h-full transition-colors hover:border-sky-400 hover:bg-sky-50/40">
+            <CardContent className="pt-5">
+              <p className="text-xs text-muted-foreground mb-1 flex items-center justify-between gap-1">
+                <span className="flex items-center gap-1">
+                  <Scale className="h-3.5 w-3.5" /> Debt
+                </span>
+                <ArrowUpRight className="h-3.5 w-3.5 text-sky-600" />
               </p>
-            )}
-          </CardContent>
-        </Card>
+              {regionLoading ? (
+                <Skeleton className="h-8 w-28" />
+              ) : (
+                <p className="text-2xl font-bold text-sky-700 tabular-nums">
+                  {formatMoney(stats.totalDebt)}
+                </p>
+              )}
+              <p className="text-xs text-sky-700 mt-1">View debt insights →</p>
+            </CardContent>
+          </Card>
+        </Link>
         <Card>
           <CardContent className="pt-5">
             <p className="text-xs text-muted-foreground mb-1 flex items-center gap-1">
