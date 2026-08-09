@@ -11,7 +11,6 @@ import { useFeeders11kV, useFeeders33kV } from "@/hooks/api/use-feeders-api"
 import { Card, CardContent } from "@/components/ui/card"
 import { Checkbox } from "@/components/ui/checkbox"
 import type { Meter } from "@/lib/types/api"
-import { isWebGLAvailable } from "@/lib/webgl"
 
 const BASEMAP_OPTIONS = [
     { key: "google", label: "Google Maps" },
@@ -194,7 +193,6 @@ export function MeterInformationalMap() {
     // Initialize map
     useEffect(() => {
         if (!mapContainer.current || map.current) return
-        if (!isWebGLAvailable()) return
 
         map.current = new maplibregl.Map({
             container: mapContainer.current,
