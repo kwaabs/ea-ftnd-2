@@ -21,7 +21,7 @@ import {
 } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { useCustomerConsumptionAggregate } from "@/hooks/api/use-customer-consumption-aggregate-api";
+import { useZeusBillingAggregate } from "@/hooks/api/use-zeus-billing-aggregate-api";
 import { CustomerSalesDetail } from "@/components/customer-sales/customer-sales-detail";
 import { cn } from "@/lib/utils";
 
@@ -34,7 +34,7 @@ interface ZeusPageViewProps {
   dateRange: DateRange;
   region?: string;
   district?: string;
-  /** Lock aggregates + detail to this Zeus service type (hides type tabs). */
+  /** Lock aggregates + detail to this Zeus meter model type (hides type tabs). */
   serviceType?: "Postpaid" | "Prepaid";
   /** When true, omit the page-level Zeus heading (hub provides context). */
   embedded?: boolean;
@@ -118,49 +118,39 @@ export function ZeusPageView({
   const serviceMeta = ZEUS_SERVICE_META[serviceType];
 
   const { data: regionAgg = [], isLoading: regionLoading } =
-    useCustomerConsumptionAggregate({
+    useZeusBillingAggregate({
       dateFrom: dateRange.start,
       dateTo: dateRange.end,
       groupBy: "regionname",
       region,
       district,
-      serviceType,
+      meterModelType: serviceType,
     });
 
   const { data: districtAgg = [], isLoading: districtLoading } =
-    useCustomerConsumptionAggregate({
+    useZeusBillingAggregate({
       dateFrom: dateRange.start,
       dateTo: dateRange.end,
       groupBy: "districtname",
       region: effectiveRegion,
       district,
-      serviceType,
+      meterModelType: serviceType,
       enabled: Boolean(effectiveRegion),
     });
 
-  const { data: customerTypeAgg = [], isLoading: typeLoading } =
-    useCustomerConsumptionAggregate({
-      dateFrom: dateRange.start,
-      dateTo: dateRange.end,
-      groupBy: "customertype",
-      region: effectiveRegion,
-      district,
-      serviceType,
-    });
-
   const { data: accountTypeAgg = [], isLoading: accountLoading } =
-    useCustomerConsumptionAggregate({
+    useZeusBillingAggregate({
       dateFrom: dateRange.start,
       dateTo: dateRange.end,
       groupBy: "accounttype",
       region: effectiveRegion,
       district,
-      serviceType,
+      meterModelType: serviceType,
     });
 
   const stats = useMemo(() => {
     const totalKwh = regionAgg.reduce(
-      (s, r) => s + (r.sum_lastbillconsumption || 0),
+      (s, r) => s + (r.sum_billconsumptionvalue || 0),
       0,
     );
     const totalCustomers = regionAgg.reduce(
@@ -168,18 +158,28 @@ export function ZeusPageView({
       0,
     );
     const totalBilling = regionAgg.reduce(
-      (s, r) => s + (r.sum_lastbillamount || 0),
+      (s, r) => s + (r.sum_billamount || 0),
       0,
     );
-    const totalBalance = regionAgg.reduce(
-      (s, r) => s + (r.sum_currentbalance || 0),
+    const totalDebt = regionAgg.reduce(
+      (s, r) => s + (r.sum_debtamount || 0),
+      0,
+    );
+    const totalDue = regionAgg.reduce(
+      (s, r) => s + (r.sum_amountdue || 0),
+      0,
+    );
+    const totalOutstanding = regionAgg.reduce(
+      (s, r) => s + (r.sum_outstandingamount || 0),
       0,
     );
     return {
       totalKwh,
       totalCustomers,
       totalBilling,
-      totalBalance,
+      totalDebt,
+      totalDue,
+      totalOutstanding,
       avgKwh: totalCustomers > 0 ? totalKwh / totalCustomers : 0,
     };
   }, [regionAgg]);
@@ -189,35 +189,17 @@ export function ZeusPageView({
       [...regionAgg]
         .sort(
           (a, b) =>
-            (b.sum_lastbillconsumption || 0) -
-            (a.sum_lastbillconsumption || 0),
+            (b.sum_billconsumptionvalue || 0) -
+            (a.sum_billconsumptionvalue || 0),
         )
         .slice(0, 12)
         .map((r) => ({
           regionname: r.regionname || "Unknown",
-          sum_lastbillconsumption: r.sum_lastbillconsumption || 0,
+          sum_billconsumptionvalue: r.sum_billconsumptionvalue || 0,
           customer_count: r.customer_count || 0,
-          sum_lastbillamount: r.sum_lastbillamount || 0,
+          sum_billamount: r.sum_billamount || 0,
         })),
     [regionAgg],
-  );
-
-  const byCustomerType = useMemo(
-    () =>
-      [...customerTypeAgg]
-        .sort(
-          (a, b) =>
-            (b.sum_lastbillconsumption || 0) -
-            (a.sum_lastbillconsumption || 0),
-        )
-        .slice(0, 10)
-        .map((r) => ({
-          customertype: r.customertype || "Unknown",
-          sum_lastbillconsumption: r.sum_lastbillconsumption || 0,
-          customer_count: r.customer_count || 0,
-          sum_lastbillamount: r.sum_lastbillamount || 0,
-        })),
-    [customerTypeAgg],
   );
 
   const selectRegion = (value: string | null) => {
@@ -278,7 +260,7 @@ export function ZeusPageView({
       ) : null}
 
       {/* KPIs */}
-      <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
+      <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
         <Card>
           <CardContent className="pt-5">
             <p className="text-xs text-muted-foreground mb-1 flex items-center gap-1">
@@ -330,13 +312,41 @@ export function ZeusPageView({
         <Card>
           <CardContent className="pt-5">
             <p className="text-xs text-muted-foreground mb-1 flex items-center gap-1">
-              <Scale className="h-3.5 w-3.5" /> Current balance
+              <Scale className="h-3.5 w-3.5" /> Debt
             </p>
             {regionLoading ? (
               <Skeleton className="h-8 w-28" />
             ) : (
               <p className="text-2xl font-bold text-sky-700 tabular-nums">
-                {formatMoney(stats.totalBalance)}
+                {formatMoney(stats.totalDebt)}
+              </p>
+            )}
+          </CardContent>
+        </Card>
+        <Card>
+          <CardContent className="pt-5">
+            <p className="text-xs text-muted-foreground mb-1 flex items-center gap-1">
+              <Scale className="h-3.5 w-3.5" /> Amount due
+            </p>
+            {regionLoading ? (
+              <Skeleton className="h-8 w-28" />
+            ) : (
+              <p className="text-2xl font-bold text-amber-700 tabular-nums">
+                {formatMoney(stats.totalDue)}
+              </p>
+            )}
+          </CardContent>
+        </Card>
+        <Card>
+          <CardContent className="pt-5">
+            <p className="text-xs text-muted-foreground mb-1 flex items-center gap-1">
+              <Scale className="h-3.5 w-3.5" /> Outstanding
+            </p>
+            {regionLoading ? (
+              <Skeleton className="h-8 w-28" />
+            ) : (
+              <p className="text-2xl font-bold text-rose-700 tabular-nums">
+                {formatMoney(stats.totalOutstanding)}
               </p>
             )}
           </CardContent>
@@ -387,7 +397,7 @@ export function ZeusPageView({
                     formatter={(v: number) => [formatKwhRaw(v), "Consumption"]}
                   />
                   <Bar
-                    dataKey="sum_lastbillconsumption"
+                    dataKey="sum_billconsumptionvalue"
                     radius={[6, 6, 0, 0]}
                     cursor="pointer"
                     onClick={(data: { regionname?: string }) => {
@@ -414,7 +424,7 @@ export function ZeusPageView({
         <Card>
           <CardHeader>
             <CardTitle>Customers by region</CardTitle>
-            <CardDescription>Postpaid accounts per region</CardDescription>
+            <CardDescription>{serviceMeta.label} accounts per region</CardDescription>
           </CardHeader>
           <CardContent>
             {regionLoading ? (
@@ -459,7 +469,7 @@ export function ZeusPageView({
       </div>
 
       <Tabs defaultValue="regions">
-        <TabsList className="grid w-full max-w-xl grid-cols-4">
+        <TabsList className="grid w-full max-w-md grid-cols-3">
           <TabsTrigger
             value="regions"
             className="data-[state=active]:text-blue-700"
@@ -471,12 +481,6 @@ export function ZeusPageView({
             className="data-[state=active]:text-blue-700"
           >
             By district
-          </TabsTrigger>
-          <TabsTrigger
-            value="customer-type"
-            className="data-[state=active]:text-blue-700"
-          >
-            Customer type
           </TabsTrigger>
           <TabsTrigger
             value="account-type"
@@ -528,8 +532,14 @@ export function ZeusPageView({
                         <th className="text-right py-2 px-4 font-medium text-muted-foreground">
                           Billing
                         </th>
-                        <th className="text-right py-2 pl-4 font-medium text-muted-foreground">
-                          Balance
+                        <th className="text-right py-2 px-4 font-medium text-sky-700">
+                          Debt
+                        </th>
+                        <th className="text-right py-2 px-4 font-medium text-amber-700">
+                          Due
+                        </th>
+                        <th className="text-right py-2 pl-4 font-medium text-rose-700">
+                          Outstanding
                         </th>
                       </tr>
                     </thead>
@@ -537,20 +547,14 @@ export function ZeusPageView({
                       {[...regionAgg]
                         .sort(
                           (a, b) =>
-                            (b.sum_lastbillconsumption || 0) -
-                            (a.sum_lastbillconsumption || 0),
+                            (b.sum_billconsumptionvalue || 0) -
+                            (a.sum_billconsumptionvalue || 0),
                         )
                         .map((item) => {
                           const name = item.regionname || "Unknown";
-                          const pct =
-                            stats.totalKwh > 0
-                              ? ((item.sum_lastbillconsumption || 0) /
-                                  stats.totalKwh) *
-                                100
-                              : 0;
                           const avgKwh =
                             item.customer_count > 0
-                              ? (item.sum_lastbillconsumption || 0) /
+                              ? (item.sum_billconsumptionvalue || 0) /
                                 item.customer_count
                               : 0;
                           const selected = selectedRegion === name;
@@ -567,7 +571,7 @@ export function ZeusPageView({
                                 {name}
                               </td>
                               <td className="py-2.5 px-4 text-right font-semibold text-blue-700 tabular-nums">
-                                {formatKwhRaw(item.sum_lastbillconsumption)}
+                                {formatKwhRaw(item.sum_billconsumptionvalue)}
                               </td>
                               <td className="py-2.5 px-4 text-right text-cyan-700 tabular-nums">
                                 {formatKwhRaw(avgKwh)}
@@ -576,17 +580,16 @@ export function ZeusPageView({
                                 {formatNumber(item.customer_count)}
                               </td>
                               <td className="py-2.5 px-4 text-right text-blue-700 tabular-nums">
-                                {formatMoney(item.sum_lastbillamount)}
+                                {formatMoney(item.sum_billamount)}
                               </td>
-                              <td className="py-2.5 pl-4 text-right">
-                                <div className="flex items-center justify-end gap-2">
-                                  <span className="text-sky-700 font-medium tabular-nums">
-                                    {formatMoney(item.sum_currentbalance)}
-                                  </span>
-                                  <span className="text-xs text-muted-foreground">
-                                    ({pct.toFixed(1)}%)
-                                  </span>
-                                </div>
+                              <td className="py-2.5 px-4 text-right text-sky-700 tabular-nums">
+                                {formatMoney(item.sum_debtamount)}
+                              </td>
+                              <td className="py-2.5 px-4 text-right text-amber-700 tabular-nums">
+                                {formatMoney(item.sum_amountdue)}
+                              </td>
+                              <td className="py-2.5 pl-4 text-right text-rose-700 tabular-nums">
+                                {formatMoney(item.sum_outstandingamount)}
                               </td>
                             </tr>
                           );
@@ -607,8 +610,14 @@ export function ZeusPageView({
                         <td className="py-2.5 px-4 text-right font-semibold text-blue-700 tabular-nums">
                           {formatMoney(stats.totalBilling)}
                         </td>
-                        <td className="py-2.5 pl-4 text-right font-semibold text-sky-700 tabular-nums">
-                          {formatMoney(stats.totalBalance)}
+                        <td className="py-2.5 px-4 text-right font-semibold text-sky-700 tabular-nums">
+                          {formatMoney(stats.totalDebt)}
+                        </td>
+                        <td className="py-2.5 px-4 text-right font-semibold text-amber-700 tabular-nums">
+                          {formatMoney(stats.totalDue)}
+                        </td>
+                        <td className="py-2.5 pl-4 text-right font-semibold text-rose-700 tabular-nums">
+                          {formatMoney(stats.totalOutstanding)}
                         </td>
                       </tr>
                     </tfoot>
@@ -658,8 +667,14 @@ export function ZeusPageView({
                         <th className="text-right py-2 px-4 font-medium text-muted-foreground">
                           Billing
                         </th>
-                        <th className="text-right py-2 pl-4 font-medium text-muted-foreground">
-                          Balance
+                        <th className="text-right py-2 px-4 font-medium text-sky-700">
+                          Debt
+                        </th>
+                        <th className="text-right py-2 px-4 font-medium text-amber-700">
+                          Due
+                        </th>
+                        <th className="text-right py-2 pl-4 font-medium text-rose-700">
+                          Outstanding
                         </th>
                       </tr>
                     </thead>
@@ -667,8 +682,8 @@ export function ZeusPageView({
                       {[...districtAgg]
                         .sort(
                           (a, b) =>
-                            (b.sum_lastbillconsumption || 0) -
-                            (a.sum_lastbillconsumption || 0),
+                            (b.sum_billconsumptionvalue || 0) -
+                            (a.sum_billconsumptionvalue || 0),
                         )
                         .map((item) => (
                           <tr
@@ -679,16 +694,22 @@ export function ZeusPageView({
                               {item.districtname || "—"}
                             </td>
                             <td className="py-2.5 px-4 text-right font-semibold text-blue-700 tabular-nums">
-                              {formatKwhRaw(item.sum_lastbillconsumption)}
+                              {formatKwhRaw(item.sum_billconsumptionvalue)}
                             </td>
                             <td className="py-2.5 px-4 text-right tabular-nums">
                               {formatNumber(item.customer_count)}
                             </td>
                             <td className="py-2.5 px-4 text-right text-blue-700 tabular-nums">
-                              {formatMoney(item.sum_lastbillamount)}
+                              {formatMoney(item.sum_billamount)}
                             </td>
-                            <td className="py-2.5 pl-4 text-right text-sky-700 tabular-nums">
-                              {formatMoney(item.sum_currentbalance)}
+                            <td className="py-2.5 px-4 text-right text-sky-700 tabular-nums">
+                              {formatMoney(item.sum_debtamount)}
+                            </td>
+                            <td className="py-2.5 px-4 text-right text-amber-700 tabular-nums">
+                              {formatMoney(item.sum_amountdue)}
+                            </td>
+                            <td className="py-2.5 pl-4 text-right text-rose-700 tabular-nums">
+                              {formatMoney(item.sum_outstandingamount)}
                             </td>
                           </tr>
                         ))}
@@ -698,127 +719,6 @@ export function ZeusPageView({
               )}
             </CardContent>
           </Card>
-        </TabsContent>
-
-        <TabsContent value="customer-type" className="mt-4">
-          <div className="grid gap-4 md:grid-cols-2">
-            <Card>
-              <CardHeader>
-                <CardTitle>Consumption by customer type</CardTitle>
-                <CardDescription>
-                  Postpaid kWh by customer type
-                </CardDescription>
-              </CardHeader>
-              <CardContent>
-                {typeLoading ? (
-                  <Skeleton className="h-[260px] w-full" />
-                ) : byCustomerType.length === 0 ? (
-                  <p className="text-sm text-muted-foreground py-12 text-center">
-                    No customer type data.
-                  </p>
-                ) : (
-                  <ResponsiveContainer width="100%" height={260}>
-                    <BarChart
-                      data={byCustomerType}
-                      margin={{ top: 8, right: 8, left: 8, bottom: 60 }}
-                    >
-                      <CartesianGrid strokeDasharray="3 3" vertical={false} />
-                      <XAxis
-                        dataKey="customertype"
-                        angle={-30}
-                        textAnchor="end"
-                        tick={{ fontSize: 10 }}
-                        interval={0}
-                      />
-                      <YAxis
-                        tickFormatter={(v) =>
-                          Math.abs(v) >= 1_000_000
-                            ? `${(v / 1_000_000).toFixed(0)}M`
-                            : Math.abs(v) >= 1_000
-                              ? `${(v / 1_000).toFixed(0)}k`
-                              : String(v)
-                        }
-                        tick={{ fontSize: 11 }}
-                      />
-                      <Tooltip
-                        formatter={(v: number) => [
-                          formatKwhRaw(v),
-                          "Consumption",
-                        ]}
-                      />
-                      <Bar
-                        dataKey="sum_lastbillconsumption"
-                        fill="#2563eb"
-                        radius={[6, 6, 0, 0]}
-                      />
-                    </BarChart>
-                  </ResponsiveContainer>
-                )}
-              </CardContent>
-            </Card>
-
-            <Card>
-              <CardHeader>
-                <CardTitle>Customer type breakdown</CardTitle>
-                <CardDescription>
-                  Customers and billing by type
-                </CardDescription>
-              </CardHeader>
-              <CardContent>
-                {typeLoading ? (
-                  <Skeleton className="h-48 w-full" />
-                ) : (
-                  <div className="overflow-x-auto max-h-[280px] overflow-y-auto">
-                    <table className="w-full text-sm">
-                      <thead className="sticky top-0 bg-background">
-                        <tr className="border-b">
-                          <th className="text-left py-2 pr-4 font-medium text-muted-foreground">
-                            Type
-                          </th>
-                          <th className="text-right py-2 px-3 font-medium text-blue-700">
-                            kWh
-                          </th>
-                          <th className="text-right py-2 px-3 font-medium text-muted-foreground">
-                            Customers
-                          </th>
-                          <th className="text-right py-2 pl-3 font-medium text-muted-foreground">
-                            Billing
-                          </th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {[...customerTypeAgg]
-                          .sort(
-                            (a, b) =>
-                              (b.sum_lastbillconsumption || 0) -
-                              (a.sum_lastbillconsumption || 0),
-                          )
-                          .map((item) => (
-                            <tr
-                              key={item.customertype || "unknown"}
-                              className="border-b last:border-0"
-                            >
-                              <td className="py-2 pr-4 font-medium">
-                                {item.customertype || "—"}
-                              </td>
-                              <td className="py-2 px-3 text-right text-blue-700 tabular-nums">
-                                {formatKwhRaw(item.sum_lastbillconsumption)}
-                              </td>
-                              <td className="py-2 px-3 text-right tabular-nums">
-                                {formatNumber(item.customer_count)}
-                              </td>
-                              <td className="py-2 pl-3 text-right tabular-nums">
-                                {formatMoney(item.sum_lastbillamount)}
-                              </td>
-                            </tr>
-                          ))}
-                      </tbody>
-                    </table>
-                  </div>
-                )}
-              </CardContent>
-            </Card>
-          </div>
         </TabsContent>
 
         <TabsContent value="account-type" className="mt-4">
@@ -853,8 +753,14 @@ export function ZeusPageView({
                         <th className="text-right py-2 px-4 font-medium text-muted-foreground">
                           Billing
                         </th>
-                        <th className="text-right py-2 pl-4 font-medium text-muted-foreground">
-                          Balance
+                        <th className="text-right py-2 px-4 font-medium text-sky-700">
+                          Debt
+                        </th>
+                        <th className="text-right py-2 px-4 font-medium text-amber-700">
+                          Due
+                        </th>
+                        <th className="text-right py-2 pl-4 font-medium text-rose-700">
+                          Outstanding
                         </th>
                       </tr>
                     </thead>
@@ -862,8 +768,8 @@ export function ZeusPageView({
                       {[...accountTypeAgg]
                         .sort(
                           (a, b) =>
-                            (b.sum_lastbillconsumption || 0) -
-                            (a.sum_lastbillconsumption || 0),
+                            (b.sum_billconsumptionvalue || 0) -
+                            (a.sum_billconsumptionvalue || 0),
                         )
                         .map((item) => (
                           <tr
@@ -874,16 +780,22 @@ export function ZeusPageView({
                               {item.accounttype || "—"}
                             </td>
                             <td className="py-2.5 px-4 text-right font-semibold text-blue-700 tabular-nums">
-                              {formatKwhRaw(item.sum_lastbillconsumption)}
+                              {formatKwhRaw(item.sum_billconsumptionvalue)}
                             </td>
                             <td className="py-2.5 px-4 text-right tabular-nums">
                               {formatNumber(item.customer_count)}
                             </td>
                             <td className="py-2.5 px-4 text-right text-blue-700 tabular-nums">
-                              {formatMoney(item.sum_lastbillamount)}
+                              {formatMoney(item.sum_billamount)}
                             </td>
-                            <td className="py-2.5 pl-4 text-right text-sky-700 tabular-nums">
-                              {formatMoney(item.sum_currentbalance)}
+                            <td className="py-2.5 px-4 text-right text-sky-700 tabular-nums">
+                              {formatMoney(item.sum_debtamount)}
+                            </td>
+                            <td className="py-2.5 px-4 text-right text-amber-700 tabular-nums">
+                              {formatMoney(item.sum_amountdue)}
+                            </td>
+                            <td className="py-2.5 pl-4 text-right text-rose-700 tabular-nums">
+                              {formatMoney(item.sum_outstandingamount)}
                             </td>
                           </tr>
                         ))}
