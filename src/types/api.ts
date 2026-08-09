@@ -414,65 +414,6 @@ export interface RegionalMapResponse {
   }
 }
 
-export interface CustomerConsumptionAggregateItem {
-  regionname?: string
-  districtname?: string
-  contractstatus?: string
-  servicetype?: string
-  serviceclass?: string
-  tariffclasscode?: string
-  customertype?: string
-  accounttype?: string
-  mda?: string
-  customer_count: number
-  sum_lastbillamount: number
-  sum_lastbillconsumption: number | null
-  sum_currentbalance: number
-  data_src?: string | null
-}
-
-export interface CustomerConsumptionAggregateResponse {
-  data: CustomerConsumptionAggregateItem[]
-  total: number
-}
-
-export interface CustomerConsumptionDetail {
-  regionname: string
-  districtname: string
-  servicetype: string
-  serviceclass: string
-  tariffclasscode: string
-  tariffclassname: string
-  fullname: string
-  servicepointnumber: string
-  accountnumber: string
-  contractstatus: string
-  activity: string
-  subactivity: string
-  customertype: string
-  lastreadingvalue: number | null
-  geocode: string
-  plotcode: string
-  ministry: string | null
-  mda: string
-  lastreadingdate: string | null
-  lastbillamount: number
-  lastbillconsumption: number | null
-  lastpaymentdate: string | null
-  lastpaymentamount: number | null
-  currentbalance: number | null
-  accounttype: string
-  isamr: boolean
-  ministrycode: string | null
-  ministryname: string | null
-  mdacode: string | null
-  mdaname: string | null
-  lastbilldate: string | null
-  billmonth: string
-  createdat: string
-  data_src?: string
-}
-
 // ─────────────────────────────────────────────────
 // MMS Customer Sales Types
 // ─────────────────────────────────────────────────
@@ -526,14 +467,6 @@ export interface MmsCustomerSalesDetail {
 
 export interface MmsCustomerSalesDetailResponse {
   data: MmsCustomerSalesDetail[]
-  total: number
-  page: number
-  limit: number
-  total_pages: number
-}
-
-export interface CustomerConsumptionDetailResponse {
-  data: CustomerConsumptionDetail[]
   total: number
   page: number
   limit: number
