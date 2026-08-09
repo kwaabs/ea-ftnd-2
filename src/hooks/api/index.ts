@@ -15,5 +15,5 @@ export * from "./use-bsp-api";
 export * from "./use-overview-api";
 export * from "./use-service-areas-api";
 export * from "./use-regional-boundary-api";
-export * from "./use-customer-consumption-aggregate-api";
-export * from "./use-customer-consumption-detail-api";
+export * from "./use-zeus-billing-aggregate-api";
+export * from "./use-zeus-billing-detail-api";

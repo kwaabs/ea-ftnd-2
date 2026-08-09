@@ -18,7 +18,7 @@ import { useAllRegionsGeometry } from "@/hooks/api/use-regions-geometry-api";
 import { useBspAggregate } from "@/hooks/api/use-bsp-api";
 import { useRegionalBoundaryAggregate } from "@/hooks/api/use-regional-boundary-api";
 import { useExpressFeederAggregate } from "@/hooks/api/use-express-feeder-api";
-import { useCustomerConsumptionAggregate } from "@/hooks/api/use-customer-consumption-aggregate-api";
+import { useZeusBillingAggregate } from "@/hooks/api/use-zeus-billing-aggregate-api";
 import { useMmsCustomerSalesAggregate } from "@/hooks/api/use-mms-customer-sales-aggregate-api";
 import { useAmrConsumptionAggregate } from "@/hooks/api/use-amr-consumption-aggregate-api";
 import {
@@ -135,7 +135,7 @@ export function RegionalSummaryMarquee({
     dateFrom,
     dateTo,
   });
-  const { data: zeusData, isLoading: isLoadingZeus } = useCustomerConsumptionAggregate({
+  const { data: zeusData, isLoading: isLoadingZeus } = useZeusBillingAggregate({
     dateFrom,
     dateTo,
   });
@@ -158,7 +158,7 @@ export function RegionalSummaryMarquee({
   const globalSummary = useMemo(() => {
     const purchases = bspData?.totalSupplyKwh ?? 0;
     const zeusKwh = (zeusData ?? []).reduce(
-      (sum, z) => sum + (z.sum_lastbillconsumption ?? 0),
+      (sum, z) => sum + (z.sum_billconsumptionvalue ?? 0),
       0,
     );
     const mmsKwh = (mmsData ?? []).reduce(
@@ -248,7 +248,7 @@ export function RegionalSummaryMarquee({
       const match = zeusData?.find(
         (z) => (z.regionname || "").toLowerCase() === regionName.toLowerCase(),
       );
-      return match?.sum_lastbillconsumption ?? 0;
+      return match?.sum_billconsumptionvalue ?? 0;
     };
 
     const getMmsKwh = (regionName: string): number => {

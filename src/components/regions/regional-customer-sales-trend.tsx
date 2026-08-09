@@ -2,7 +2,7 @@
 
 import { useMemo, useRef } from "react"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
-import { useCustomerConsumptionDetail } from "@/hooks/api/use-customer-consumption-detail-api"
+import { useZeusBillingDetail } from "@/hooks/api/use-zeus-billing-detail-api"
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from "recharts"
 import { ExportButton } from "@/components/ui/export-button"
 
@@ -20,7 +20,7 @@ const COLORS = {
 
 export function RegionalCustomerSalesTrend({ region, dateRange }: RegionalCustomerSalesTrendProps) {
   const chartRef = useRef<HTMLDivElement>(null)
-  const { data: detailData } = useCustomerConsumptionDetail({
+  const { data: detailData } = useZeusBillingDetail({
     dateFrom: dateRange.start,
     dateTo: dateRange.end,
     region,
@@ -32,14 +32,15 @@ export function RegionalCustomerSalesTrend({ region, dateRange }: RegionalCustom
     const records = detailData?.data || []
     const dataByMonth = new Map<string, Map<string, number>>()
 
-    // Group by month and source
-    records.forEach((record: any) => {
-      const date = record.lastbilldate ? new Date(record.lastbilldate) : null
-      if (!date) return
+    // Group by month and source. zeus_sales has no day-precision bill date,
+    // so the trend groups by billing period (billingYear/billingMonth)
+    // instead of parsing a date. This source is always Zeus.
+    records.forEach((record) => {
+      if (!record.billingYear || !record.billingMonth) return
 
-      const monthKey = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}`
-      const src = record.data_src || "Unknown"
-      const kwh = record.lastbillconsumption || 0
+      const monthKey = `${record.billingYear}-${String(record.billingMonth).padStart(2, "0")}`
+      const src = "Zeus"
+      const kwh = record.billConsumptionValue || 0
 
       if (!dataByMonth.has(monthKey)) {
         dataByMonth.set(monthKey, new Map())

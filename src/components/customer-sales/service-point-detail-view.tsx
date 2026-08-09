@@ -8,7 +8,7 @@ import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Skeleton } from "@/components/ui/skeleton"
 import { Separator } from "@/components/ui/separator"
-import { useCustomerConsumptionDetail } from "@/hooks/api/use-customer-consumption-detail-api"
+import { useZeusBillingDetail } from "@/hooks/api/use-zeus-billing-detail-api"
 
 
 
@@ -27,6 +27,17 @@ function formatDate(value: string | null | undefined) {
   return new Date(value).toLocaleDateString("en-GB", { day: "2-digit", month: "short", year: "numeric" })
 }
 
+const MONTH_NAMES = [
+  "January", "February", "March", "April", "May", "June",
+  "July", "August", "September", "October", "November", "December",
+]
+
+function formatBillingPeriod(month: number | null | undefined, year: number | null | undefined) {
+  if (!month || !year) return "—"
+  const name = MONTH_NAMES[month - 1]
+  return name ? `${name} ${year}` : `${month}/${year}`
+}
+
 function DetailRow({ label, value }: { label: string; value: React.ReactNode }) {
   return (
     <div className="flex items-start justify-between gap-4 py-2.5 border-b last:border-0">
@@ -40,18 +51,18 @@ export function ServicePointDetailView() {
   const params = useParams()
   // Folder is [service-point-number] → param key uses hyphens, not underscores
   const rawParam = params["service-point-number"] ?? params.service_point_number
-  const servicePointNumber = rawParam ? decodeURIComponent(rawParam as string) : undefined
+  const servicePointCode = rawParam ? decodeURIComponent(rawParam as string) : undefined
   const searchParams = useSearchParams()
   const dateFrom = searchParams.get("dateFrom") ?? undefined
   const dateTo = searchParams.get("dateTo") ?? undefined
 
-  const { data, isLoading } = useCustomerConsumptionDetail({
-    servicePointNumber: servicePointNumber ?? "",
+  const { data, isLoading } = useZeusBillingDetail({
+    servicePointCode: servicePointCode ?? "",
     dateFrom,
     dateTo,
     limit: 50,
     page: 1,
-    enabled: !!servicePointNumber,
+    enabled: !!servicePointCode,
   })
 
   const record = data?.data?.[0]
@@ -67,7 +78,7 @@ export function ServicePointDetailView() {
           </Link>
         </Button>
         <div>
-          <h2 className="text-2xl font-semibold tracking-tight">Service Point: {servicePointNumber ?? "..."}</h2>
+          <h2 className="text-2xl font-semibold tracking-tight">Service Point: {servicePointCode ?? "..."}</h2>
           <p className="text-muted-foreground text-sm mt-0.5">
             {dateFrom && dateTo ? `Period: ${formatDate(dateFrom)} – ${formatDate(dateTo)}` : "Consumption and billing detail"}
           </p>
@@ -85,7 +96,7 @@ export function ServicePointDetailView() {
       ) : !record ? (
         <Card>
           <CardContent className="py-16 text-center text-muted-foreground">
-            No data found for service point <strong>{servicePointNumber}</strong>
+            No data found for service point <strong>{servicePointCode}</strong>
           </CardContent>
         </Card>
       ) : (
@@ -99,7 +110,7 @@ export function ServicePointDetailView() {
               <div>
                 <p className="text-xs text-muted-foreground font-medium uppercase tracking-wide">Total Consumption</p>
                 <p className="text-4xl font-bold text-blue-700 tabular-nums leading-none mt-0.5">
-                  {formatKwh(record.lastbillconsumption)}
+                  {formatKwh(record.billConsumptionValue)}
                 </p>
                 <p className="text-sm text-blue-500 mt-0.5">kWh</p>
               </div>
@@ -107,29 +118,27 @@ export function ServicePointDetailView() {
             <Separator orientation="vertical" className="hidden md:block h-16" />
             <div className="grid grid-cols-2 md:grid-cols-3 gap-x-8 gap-y-2 text-sm flex-1">
               <div>
-                <p className="text-xs text-muted-foreground">Last Reading Value</p>
-                <p className="font-semibold">{record.lastreadingvalue != null ? record.lastreadingvalue.toLocaleString() : "—"}</p>
+                <p className="text-xs text-muted-foreground">Meter Type</p>
+                <p className="font-semibold">{record.meterModelType || "—"}</p>
               </div>
               <div>
-                <p className="text-xs text-muted-foreground">Last Reading Date</p>
-                <p className="font-semibold">{formatDate(record.lastreadingdate)}</p>
+                <p className="text-xs text-muted-foreground">Billing Period</p>
+                <p className="font-semibold">{formatBillingPeriod(record.billingMonth, record.billingYear)}</p>
               </div>
               <div>
-                <p className="text-xs text-muted-foreground">Bill Month</p>
-                <p className="font-semibold">{record.billmonth || "—"}</p>
+                <p className="text-xs text-muted-foreground">Bill Consumption Type</p>
+                <p className="font-semibold">{record.billConsumptionType || "—"}</p>
               </div>
               <div>
-                <p className="text-xs text-muted-foreground">Is AMR</p>
-                <p className="font-semibold">{record.isamr ? "Yes" : "No"}</p>
-              </div>
-              <div>
-                <p className="text-xs text-muted-foreground">Data Source</p>
-                <Badge variant="outline" className="text-xs mt-0.5">{record.data_src || "—"}</Badge>
+                <p className="text-xs text-muted-foreground">Bill Status</p>
+                <Badge variant={record.billStatus === "Billed" ? "default" : "secondary"} className="text-xs mt-0.5">
+                  {record.billStatus || "Unknown"}
+                </Badge>
               </div>
               <div>
                 <p className="text-xs text-muted-foreground">Contract Status</p>
-                <Badge variant={record.contractstatus === "Active" ? "default" : "secondary"} className="text-xs mt-0.5">
-                  {record.contractstatus || "Unknown"}
+                <Badge variant={record.servicePointStatus === "Active" ? "default" : "secondary"} className="text-xs mt-0.5">
+                  {record.servicePointStatus || "Unknown"}
                 </Badge>
               </div>
             </div>
@@ -141,24 +150,42 @@ export function ServicePointDetailView() {
               <CardContent className="pt-5">
                 <div className="flex items-center gap-1.5 text-muted-foreground">
                   <Receipt className="h-3.5 w-3.5" />
-                  <p className="text-xs">Last Bill Amount</p>
+                  <p className="text-xs">Bill Amount</p>
                 </div>
-                <p className="text-2xl font-bold mt-1 tabular-nums">{formatMoney(record.lastbillamount)}</p>
-                <p className="text-xs text-muted-foreground mt-0.5">{formatDate(record.lastbilldate)}</p>
+                <p className="text-2xl font-bold mt-1 tabular-nums">{formatMoney(record.billAmount)}</p>
+                <p className="text-xs text-muted-foreground mt-0.5">{formatBillingPeriod(record.billingMonth, record.billingYear)}</p>
               </CardContent>
             </Card>
             <Card>
               <CardContent className="pt-5">
                 <div className="flex items-center gap-1.5 text-muted-foreground">
                   <Wallet className="h-3.5 w-3.5" />
-                  <p className="text-xs">Current Balance</p>
+                  <p className="text-xs">Debt</p>
                 </div>
-                <p className={`text-2xl font-bold mt-1 tabular-nums ${record.currentbalance != null && record.currentbalance > 0 ? "text-red-600" : "text-green-600"}`}>
-                  {formatMoney(record.currentbalance)}
+                <p className={`text-2xl font-bold mt-1 tabular-nums ${record.debtAmount != null && record.debtAmount > 0 ? "text-red-600" : "text-green-600"}`}>
+                  {formatMoney(record.debtAmount)}
                 </p>
                 <p className="text-xs text-muted-foreground mt-0.5">
-                  {record.currentbalance != null && record.currentbalance > 0 ? "Outstanding" : "No debt"}
+                  {record.debtAmount != null && record.debtAmount > 0 ? "Outstanding" : "No debt"}
                 </p>
+              </CardContent>
+            </Card>
+            <Card>
+              <CardContent className="pt-5">
+                <div className="flex items-center gap-1.5 text-muted-foreground">
+                  <Wallet className="h-3.5 w-3.5" />
+                  <p className="text-xs">Amount Due</p>
+                </div>
+                <p className="text-2xl font-bold mt-1 tabular-nums">{formatMoney(record.amountDue)}</p>
+              </CardContent>
+            </Card>
+            <Card>
+              <CardContent className="pt-5">
+                <div className="flex items-center gap-1.5 text-muted-foreground">
+                  <Wallet className="h-3.5 w-3.5" />
+                  <p className="text-xs">Outstanding</p>
+                </div>
+                <p className="text-2xl font-bold mt-1 tabular-nums">{formatMoney(record.outstandingAmount)}</p>
               </CardContent>
             </Card>
             <Card>
@@ -167,8 +194,8 @@ export function ServicePointDetailView() {
                   <Calendar className="h-3.5 w-3.5" />
                   <p className="text-xs">Last Payment</p>
                 </div>
-                <p className="text-2xl font-bold mt-1 tabular-nums">{formatMoney(record.lastpaymentamount)}</p>
-                <p className="text-xs text-muted-foreground mt-0.5">{formatDate(record.lastpaymentdate)}</p>
+                <p className="text-2xl font-bold mt-1 tabular-nums">{formatMoney(record.lastPaymentAmount)}</p>
+                <p className="text-xs text-muted-foreground mt-0.5">{formatDate(record.lastPaymentDate)}</p>
               </CardContent>
             </Card>
           </div>
@@ -184,24 +211,23 @@ export function ServicePointDetailView() {
                 </div>
               </CardHeader>
               <CardContent>
-                <DetailRow label="Full Name" value={record.fullname} />
+                <DetailRow label="Full Name" value={record.customerName} />
                 <DetailRow
-                  label="Account Number"
+                  label="Account Code"
                   value={
                     <Link
-                      href={`/customer-sales/account/${encodeURIComponent(record.accountnumber)}${dateFrom ? `?dateFrom=${dateFrom}&dateTo=${dateTo}` : ""}`}
+                      href={`/customer-sales/account/${encodeURIComponent(record.accountCode)}${dateFrom ? `?dateFrom=${dateFrom}&dateTo=${dateTo}` : ""}`}
                       className="text-primary hover:underline font-mono text-xs"
                     >
-                      {record.accountnumber}
+                      {record.accountCode}
                     </Link>
                   }
                 />
-                <DetailRow label="Account Type" value={record.accounttype} />
-                <DetailRow label="Customer Type" value={record.customertype} />
-                <DetailRow label="Service Type" value={record.servicetype} />
-                <DetailRow label="Service Class" value={record.serviceclass} />
-                <DetailRow label="Tariff Code" value={record.tariffclasscode} />
-                <DetailRow label="Tariff Name" value={record.tariffclassname} />
+                <DetailRow label="Account Type" value={record.accountType} />
+                <DetailRow label="Meter Type" value={record.meterModelType} />
+                <DetailRow label="Service Class" value={record.serviceClass} />
+                <DetailRow label="Tariff Code" value={record.tariffClassCode} />
+                <DetailRow label="Tariff Name" value={record.tariffClassName} />
               </CardContent>
             </Card>
 
@@ -214,10 +240,9 @@ export function ServicePointDetailView() {
                 </div>
               </CardHeader>
               <CardContent>
-                <DetailRow label="Region" value={record.regionname} />
-                <DetailRow label="District" value={record.districtname} />
-                <DetailRow label="Plot Code" value={record.plotcode} />
-                <DetailRow label="Geocode" value={record.geocode} />
+                <DetailRow label="Region" value={record.regionName} />
+                <DetailRow label="District" value={record.districtName} />
+                <DetailRow label="Geocode" value={record.geoCode} />
               </CardContent>
             </Card>
 
@@ -230,12 +255,9 @@ export function ServicePointDetailView() {
                 </div>
               </CardHeader>
               <CardContent>
-                <DetailRow label="Activity" value={record.activity} />
-                <DetailRow label="Sub-Activity" value={record.subactivity} />
-                <DetailRow label="Ministry" value={record.ministryname || record.ministry} />
-                <DetailRow label="Ministry Code" value={record.ministrycode} />
-                <DetailRow label="MDA" value={record.mdaname || record.mda} />
-                <DetailRow label="MDA Code" value={record.mdacode} />
+                <DetailRow label="MDA" value={record.mdaName} />
+                <DetailRow label="SOE" value={record.soeName} />
+                <DetailRow label="Sensitive" value={record.isSensitive} />
               </CardContent>
             </Card>
 
@@ -248,13 +270,10 @@ export function ServicePointDetailView() {
                 </div>
               </CardHeader>
               <CardContent>
-                <DetailRow label="Data Source" value={<Badge variant="outline" className="text-xs">{record.data_src || "—"}</Badge>} />
-                <DetailRow label="Is AMR" value={record.isamr ? "Yes" : "No"} />
-                <DetailRow label="Bill Month" value={record.billmonth} />
-                <DetailRow label="Created At" value={formatDate(record.createdat)} />
-                <DetailRow label="Last Bill Date" value={formatDate(record.lastbilldate)} />
-                <DetailRow label="Last Payment Date" value={formatDate(record.lastpaymentdate)} />
-                <DetailRow label="Last Reading Date" value={formatDate(record.lastreadingdate)} />
+                <DetailRow label="Billing Period" value={formatBillingPeriod(record.billingMonth, record.billingYear)} />
+                <DetailRow label="Created At" value={formatDate(record.createdAt)} />
+                <DetailRow label="Updated At" value={formatDate(record.updatedAt)} />
+                <DetailRow label="Last Payment Date" value={formatDate(record.lastPaymentDate)} />
               </CardContent>
             </Card>
           </div>

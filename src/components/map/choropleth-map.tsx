@@ -8,7 +8,7 @@ import { useBspAggregate } from "@/hooks/api/use-bsp-api"
 import { useDtxAggregate } from "@/hooks/api/use-dtx-api"
 import { useRegionalBoundaryAggregate } from "@/hooks/api/use-regional-boundary-api"
 import { useMeters } from "@/hooks/api/use-meter-api"
-import { useCustomerConsumptionAggregate } from "@/hooks/api/use-customer-consumption-aggregate-api"
+import { useZeusBillingAggregate } from "@/hooks/api/use-zeus-billing-aggregate-api"
 import { useMmsCustomerSalesAggregate } from "@/hooks/api/use-mms-customer-sales-aggregate-api"
 import { useAmrConsumptionAggregate } from "@/hooks/api/use-amr-consumption-aggregate-api"
 import { useAppStore } from "@/stores/app-store"
@@ -64,7 +64,7 @@ export function ChoroplethMap() {
     // Customer sales sources — billed/read kWh, not grid-side metering.
     // Fetched unfiltered (all regions) and grouped by region server-side, same
     // pattern as the BSP/DTX/boundary hooks above.
-    const { data: zeusData, isLoading: isLoadingZeus } = useCustomerConsumptionAggregate({ dateFrom, dateTo })
+    const { data: zeusData, isLoading: isLoadingZeus } = useZeusBillingAggregate({ dateFrom, dateTo })
     const { data: mmsData, isLoading: isLoadingMms } = useMmsCustomerSalesAggregate({
         dateFrom,
         dateTo,
@@ -104,7 +104,7 @@ export function ChoroplethMap() {
     // Zeus: billed consumption per region (postpaid)
     const getZeusKwh = (regionName: string): number => {
         const match = zeusData?.find((z) => (z.regionname || "").toLowerCase() === regionName.toLowerCase())
-        return match?.sum_lastbillconsumption ?? 0
+        return match?.sum_billconsumptionvalue ?? 0
     }
     // MMS: kWh read per region (prepaid, last month)
     const getMmsKwh = (regionName: string): number => {
