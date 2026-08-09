@@ -26,7 +26,7 @@
 
 // import { useConsumptionAggregate } from "@/hooks/api/use-consumption-aggregate-api";
 // import { useRegionalBoundaryDaily } from "@/hooks/api/use-regional-boundary-api";
-// import { useCustomerConsumptionAggregate } from "@/hooks/api/use-customer-consumption-aggregate-api";
+// import { useZeusBillingAggregate } from "@/hooks/api/use-zeus-billing-aggregate-api";
 // import { useMmsCustomerSalesAggregate } from "@/hooks/api/use-mms-customer-sales-aggregate-api";
 // import { useBspDaily } from "@/hooks/api/use-bsp-api";
 // import { useDtxDaily, useDtxAggregate } from "@/hooks/api/use-dtx-api";
@@ -3679,7 +3679,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 
 import { useConsumptionAggregate } from "@/hooks/api/use-consumption-aggregate-api";
 import { useRegionalBoundaryDaily } from "@/hooks/api/use-regional-boundary-api";
-import { useCustomerConsumptionAggregate } from "@/hooks/api/use-customer-consumption-aggregate-api";
+import { useZeusBillingAggregate } from "@/hooks/api/use-zeus-billing-aggregate-api";
 import { useMmsCustomerSalesAggregate } from "@/hooks/api/use-mms-customer-sales-aggregate-api";
 import { useAmrConsumptionAggregate } from "@/hooks/api/use-amr-consumption-aggregate-api";
 import { useBspDaily } from "@/hooks/api/use-bsp-api";
@@ -3954,13 +3954,13 @@ export function RegionDetail({ region }: RegionDetailProps) {
       dateTo: dateRange.end,
     });
 
-  // Fetch customer consumption for this region — split by Zeus servicetype
+  // Fetch customer consumption for this region — split by Zeus meterModelType
   // (Postpaid / Prepaid / AMR) so prepaid is not hidden under "Postpaid".
-  const customerConsAggResult = useCustomerConsumptionAggregate({
+  const customerConsAggResult = useZeusBillingAggregate({
     dateFrom: dateRange.start,
     dateTo: dateRange.end,
     region: regionProperCase,
-    groupBy: "servicetype",
+    groupBy: "metermodeltype",
   });
   const customerConsumptionAggData = customerConsAggResult.data;
 
@@ -4022,22 +4022,22 @@ export function RegionDetail({ region }: RegionDetailProps) {
       total += kwh;
     };
 
-    // Zeus billing — Postpaid / Prepaid / AMR (servicetype), not a single Postpaid bucket
+    // Zeus billing — Postpaid / Prepaid / AMR (meterModelType), not a single Postpaid bucket
     if (
       customerConsumptionAggData &&
       Array.isArray(customerConsumptionAggData)
     ) {
       customerConsumptionAggData.forEach((item: any) => {
-        const kwh = item.sum_lastbillconsumption || 0;
-        const t = String(item.servicetype || "")
+        const kwh = item.sum_billconsumptionvalue || 0;
+        const t = String(item.metermodeltype || "")
           .trim()
           .toLowerCase();
         if (t === "postpaid") add("Zeus (Postpaid)", kwh);
         else if (t === "prepaid") add("Zeus (Prepaid)", kwh);
         else if (t === "amr") add("Zeus (AMR)", kwh);
         else if (kwh > 0) {
-          const label = item.servicetype?.trim()
-            ? `Zeus (${item.servicetype.trim()})`
+          const label = item.metermodeltype?.trim()
+            ? `Zeus (${item.metermodeltype.trim()})`
             : "Zeus";
           add(label, kwh);
         }

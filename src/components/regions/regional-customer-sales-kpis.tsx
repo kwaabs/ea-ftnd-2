@@ -3,7 +3,7 @@
 import { useMemo } from "react"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
-import { useCustomerConsumptionAggregate } from "@/hooks/api/use-customer-consumption-aggregate-api"
+import { useZeusBillingAggregate } from "@/hooks/api/use-zeus-billing-aggregate-api"
 import { Zap, Users, TrendingUp, DollarSign } from "lucide-react"
 
 interface RegionalCustomerSalesKpisProps {
@@ -20,7 +20,7 @@ function formatNumber(value: number | null | undefined, decimals = 0): string {
 }
 
 export function RegionalCustomerSalesKpis({ region, dateRange }: RegionalCustomerSalesKpisProps) {
-  const { data: aggregateData } = useCustomerConsumptionAggregate({
+  const { data: aggregateData } = useZeusBillingAggregate({
     dateFrom: dateRange.start,
     dateTo: dateRange.end,
     region,
@@ -35,8 +35,8 @@ export function RegionalCustomerSalesKpis({ region, dateRange }: RegionalCustome
     if (aggregateData && Array.isArray(aggregateData)) {
       aggregateData.forEach((item: any) => {
         const src = item.data_src || "Unknown"
-        const kwh = item.sum_lastbillconsumption || 0
-        const billing = item.sum_lastbillamount || 0
+        const kwh = item.sum_billconsumptionvalue || 0
+        const billing = item.sum_billamount || 0
         const customers = item.customer_count || 0
 
         bySrc.set(src, {

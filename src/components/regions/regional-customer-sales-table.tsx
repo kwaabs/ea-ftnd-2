@@ -7,7 +7,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
-import { useCustomerConsumptionDetail } from "@/hooks/api/use-customer-consumption-detail-api"
+import { useZeusBillingDetail } from "@/hooks/api/use-zeus-billing-detail-api"
 import { ArrowUpDown, ChevronLeft, ChevronRight, Search } from "lucide-react"
 import { ExportButton } from "@/components/ui/export-button"
 
@@ -16,7 +16,9 @@ interface RegionalCustomerSalesTableProps {
   dateRange: { start: string; end: string }
 }
 
-type SortField = "fullname" | "accountnumber" | "servicepointnumber" | "lastbillconsumption" | "currentbalance" | "lastbilldate"
+// "billingPeriod" is a virtual sort key (billingYear*100 + billingMonth) —
+// zeus_sales has no single sortable bill-date field, only split year/month.
+type SortField = "customerName" | "accountCode" | "servicePointCode" | "billConsumptionValue" | "debtAmount" | "billingPeriod"
 type SortOrder = "asc" | "desc"
 
 function formatNumber(value: number | null | undefined): string {
@@ -29,19 +31,29 @@ function formatKwhRaw(value: number | null | undefined): string {
   return value.toLocaleString("en-US", { maximumFractionDigits: 0 })
 }
 
-function formatDate(value: string | null | undefined): string {
-  if (!value) return "—"
-  return new Date(value).toLocaleDateString("en-GB", { day: "2-digit", month: "short", year: "numeric" })
+const MONTH_NAMES = [
+  "Jan", "Feb", "Mar", "Apr", "May", "Jun",
+  "Jul", "Aug", "Sep", "Oct", "Nov", "Dec",
+]
+
+function formatBillingPeriod(month: number | null | undefined, year: number | null | undefined): string {
+  if (!month || !year) return "—"
+  const name = MONTH_NAMES[month - 1]
+  return name ? `${name} ${year}` : `${month}/${year}`
+}
+
+function billingPeriodValue(record: { billingYear?: number; billingMonth?: number }): number {
+  return (record.billingYear || 0) * 100 + (record.billingMonth || 0)
 }
 
 export function RegionalCustomerSalesTable({ region, dateRange }: RegionalCustomerSalesTableProps) {
   const [page, setPage] = useState(1)
   const pageSize = 20
   const [searchTerm, setSearchTerm] = useState("")
-  const [sortField, setSortField] = useState<SortField>("lastbillconsumption")
+  const [sortField, setSortField] = useState<SortField>("billConsumptionValue")
   const [sortOrder, setSortOrder] = useState<SortOrder>("desc")
 
-  const { data, isLoading } = useCustomerConsumptionDetail({
+  const { data, isLoading } = useZeusBillingDetail({
     dateFrom: dateRange.start,
     dateTo: dateRange.end,
     region,
@@ -51,26 +63,31 @@ export function RegionalCustomerSalesTable({ region, dateRange }: RegionalCustom
 
   const filteredData = useMemo(() => {
     const records = data?.data || []
-    return records.filter((r: any) => {
+    return records.filter((r) => {
       const searchLower = searchTerm.toLowerCase()
       return (
-        (r.fullname?.toLowerCase() || "").includes(searchLower) ||
-        (r.accountnumber?.toLowerCase() || "").includes(searchLower) ||
-        (r.servicepointnumber?.toLowerCase() || "").includes(searchLower)
+        (r.customerName?.toLowerCase() || "").includes(searchLower) ||
+        (r.accountCode?.toLowerCase() || "").includes(searchLower) ||
+        (r.servicePointCode?.toLowerCase() || "").includes(searchLower)
       )
     })
   }, [data, searchTerm])
 
   const sortedData = useMemo(() => {
-    const sorted = [...filteredData].sort((a: any, b: any) => {
-      let aVal = a[sortField]
-      let bVal = b[sortField]
+    const sorted = [...filteredData].sort((a, b) => {
+      if (sortField === "billingPeriod") {
+        const aVal = billingPeriodValue(a)
+        const bVal = billingPeriodValue(b)
+        return sortOrder === "asc" ? aVal - bVal : bVal - aVal
+      }
 
-      if (aVal === null || aVal === undefined) aVal = 0
-      if (bVal === null || bVal === undefined) bVal = 0
+      let aVal: string | number = a[sortField] ?? 0
+      let bVal: string | number = b[sortField] ?? 0
 
-      if (typeof aVal === "string") {
-        return sortOrder === "asc" ? aVal.localeCompare(bVal) : bVal.localeCompare(aVal)
+      if (typeof aVal === "string" || typeof bVal === "string") {
+        return sortOrder === "asc"
+          ? String(aVal).localeCompare(String(bVal))
+          : String(bVal).localeCompare(String(aVal))
       }
 
       return sortOrder === "asc" ? aVal - bVal : bVal - aVal
@@ -126,14 +143,13 @@ export function RegionalCustomerSalesTable({ region, dateRange }: RegionalCustom
           </div>
           <div className="flex items-center gap-2">
             <ExportButton
-              data={sortedData.map((r: any) => ({
-                customer_name: r.fullname,
-                account_number: r.accountnumber,
-                service_point: r.servicepointnumber,
-                last_bill_consumption_kwh: r.lastbillconsumption,
-                current_balance: r.currentbalance,
-                last_bill_date: r.lastbilldate,
-                data_src: r.data_src,
+              data={sortedData.map((r) => ({
+                customer_name: r.customerName,
+                account_code: r.accountCode,
+                service_point: r.servicePointCode,
+                bill_consumption_kwh: r.billConsumptionValue,
+                debt_amount: r.debtAmount,
+                billing_period: formatBillingPeriod(r.billingMonth, r.billingYear),
               }))}
               filename={`${region.replace(/\s+/g, "-").toLowerCase()}-zeus-customer-sales`}
             />
@@ -159,72 +175,72 @@ export function RegionalCustomerSalesTable({ region, dateRange }: RegionalCustom
             <TableHeader>
               <TableRow>
                 <TableHead className="py-2">
-                  <SortButton field="fullname">Customer Name</SortButton>
+                  <SortButton field="customerName">Customer Name</SortButton>
                 </TableHead>
                 <TableHead className="text-right py-2">
-                  <SortButton field="accountnumber">Account</SortButton>
+                  <SortButton field="accountCode">Account</SortButton>
                 </TableHead>
                 <TableHead className="text-right py-2">
-                  <SortButton field="servicepointnumber">SP</SortButton>
+                  <SortButton field="servicePointCode">SP</SortButton>
                 </TableHead>
                 <TableHead className="py-2">Type</TableHead>
                 <TableHead className="text-right bg-blue-50 py-2">
-                  <SortButton field="lastbillconsumption">kWh</SortButton>
+                  <SortButton field="billConsumptionValue">kWh</SortButton>
                 </TableHead>
                 <TableHead className="text-right py-2">
-                  <SortButton field="currentbalance">Balance</SortButton>
+                  <SortButton field="debtAmount">Debt</SortButton>
                 </TableHead>
                 <TableHead className="py-2">
-                  <SortButton field="lastbilldate">Date</SortButton>
+                  <SortButton field="billingPeriod">Period</SortButton>
                 </TableHead>
                 <TableHead className="py-2">Status</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
               {paginatedData.length > 0 ? (
-                paginatedData.map((record: any, idx: number) => (
+                paginatedData.map((record, idx) => (
                   <TableRow key={idx} className="hover:bg-muted/50">
-                    <TableCell className="py-2 font-medium truncate">{record.fullname || "—"}</TableCell>
+                    <TableCell className="py-2 font-medium truncate">{record.customerName || "—"}</TableCell>
                     <TableCell className="text-right py-2">
                       <Link
-                        href={`/customer-sales/account/${encodeURIComponent(record.accountnumber)}?dateFrom=${dateRange.start}&dateTo=${dateRange.end}`}
+                        href={`/customer-sales/account/${encodeURIComponent(record.accountCode)}?dateFrom=${dateRange.start}&dateTo=${dateRange.end}`}
                         className="text-primary hover:underline text-[11px] font-mono"
                       >
-                        {record.accountnumber || "—"}
+                        {record.accountCode || "—"}
                       </Link>
                     </TableCell>
                     <TableCell className="text-right py-2">
                       <Link
-                        href={`/customer-sales/service-point/${encodeURIComponent(record.servicepointnumber)}?dateFrom=${dateRange.start}&dateTo=${dateRange.end}`}
+                        href={`/customer-sales/service-point/${encodeURIComponent(record.servicePointCode)}?dateFrom=${dateRange.start}&dateTo=${dateRange.end}`}
                         className="text-primary hover:underline text-[11px] font-mono"
                       >
-                        {record.servicepointnumber || "—"}
+                        {record.servicePointCode || "—"}
                       </Link>
                     </TableCell>
-                    <TableCell className="py-2">{record.servicetype || "—"}</TableCell>
+                    <TableCell className="py-2">{record.meterModelType || "—"}</TableCell>
                     <TableCell className="text-right bg-blue-50/50 py-2 font-semibold text-blue-700 tabular-nums">
-                      {formatKwhRaw(record.lastbillconsumption)}
+                      {formatKwhRaw(record.billConsumptionValue)}
                     </TableCell>
                     <TableCell className="text-right py-2 tabular-nums">
                       <span
                         className={
-                          record.currentbalance != null && record.currentbalance > 0
+                          record.debtAmount != null && record.debtAmount > 0
                             ? "text-red-600 font-medium"
                             : "text-green-600 font-medium"
                         }
                       >
-                        ₵{formatNumber(record.currentbalance)}
+                        ₵{formatNumber(record.debtAmount)}
                       </span>
                     </TableCell>
                     <TableCell className="py-2 text-muted-foreground whitespace-nowrap">
-                      {formatDate(record.lastbilldate)}
+                      {formatBillingPeriod(record.billingMonth, record.billingYear)}
                     </TableCell>
                     <TableCell className="py-2">
                       <Badge
-                        variant={record.contractstatus === "Active" ? "default" : "secondary"}
+                        variant={record.billStatus === "Billed" ? "default" : "secondary"}
                         className="text-[10px]"
                       >
-                        {record.contractstatus || "—"}
+                        {record.billStatus || "—"}
                       </Badge>
                     </TableCell>
                   </TableRow>
