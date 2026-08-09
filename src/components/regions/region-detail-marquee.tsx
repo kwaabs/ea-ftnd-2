@@ -6,15 +6,14 @@ import { useZeusBillingAggregate } from "@/hooks/api/use-zeus-billing-aggregate-
 import { useMmsCustomerSalesAggregate } from "@/hooks/api/use-mms-customer-sales-aggregate-api"
 import { useAmrConsumptionAggregate } from "@/hooks/api/use-amr-consumption-aggregate-api"
 
-/** Rotate region sales -> district sales -> district debt, one minute each. */
-const PHASE_MS = 60 * 1000
+/** Rotate sales (region + its districts) -> debt (region + its districts), two minutes each. */
+const PHASE_MS = 2 * 60 * 1000
 
-type Phase = "region" | "districtSales" | "districtDebt"
-const PHASES: Phase[] = ["region", "districtSales", "districtDebt"]
+type Phase = "sales" | "debt"
+const PHASES: Phase[] = ["sales", "debt"]
 const PHASE_LABELS: Record<Phase, string> = {
-  region: "Region sales",
-  districtSales: "District sales",
-  districtDebt: "District debt",
+  sales: "Customer sales",
+  debt: "Debt",
 }
 
 interface RegionDetailMarqueeProps {
@@ -40,9 +39,12 @@ function normalizeType(raw?: string | null): "Postpaid" | "Prepaid" | "Other" {
 }
 
 /**
- * Region-detail page ticker: cycles through region-level customer sales,
- * per-district customer sales, and per-district debt — one minute each.
- * Debt is Zeus-only (the only source that carries debt/due/outstanding).
+ * Region-detail page ticker: cycles between customer sales (region total,
+ * then each district) and debt (region total, then each district) — two
+ * minutes each, within one continuous scroll per phase rather than as
+ * separate region/district phases. Debt is Zeus-only (the only source that
+ * carries debt/due/outstanding); sales combine Zeus + MMS (+ AMR for the
+ * region total — AMR has no per-district breakdown available).
  */
 export function RegionDetailMarquee({ region, dateRange }: RegionDetailMarqueeProps) {
   const [phaseIndex, setPhaseIndex] = useState(0)
@@ -69,28 +71,7 @@ export function RegionDetailMarquee({ region, dateRange }: RegionDetailMarqueePr
 
   const isLoading = zeusLoading || mmsLoading || amrLoading
 
-  // Phase A — region totals: postpaid = Zeus postpaid + AMR, prepaid = Zeus prepaid + MMS.
-  const regionSummary = useMemo(() => {
-    let postpaidKwh = 0
-    let prepaidKwh = 0
-
-    ;(zeusDistrictData || []).forEach((item) => {
-      const type = normalizeType(item.metermodeltype)
-      if (type === "Postpaid") postpaidKwh += item.sum_billconsumptionvalue || 0
-      else if (type === "Prepaid") prepaidKwh += item.sum_billconsumptionvalue || 0
-    })
-    ;(amrData || []).forEach((item) => {
-      postpaidKwh += item.total_consumption || 0
-    })
-    ;(mmsDistrictData || []).forEach((item) => {
-      prepaidKwh += item.sum_last_month_kwh_read || 0
-    })
-
-    return { postpaidKwh, prepaidKwh, totalKwh: postpaidKwh + prepaidKwh }
-  }, [zeusDistrictData, amrData, mmsDistrictData])
-
-  // Phase B/C — per-district sales (Zeus + MMS; AMR has no district breakdown
-  // available) and per-district debt (Zeus only).
+  // Per-district sales (Zeus + MMS) and debt (Zeus only).
   const districtRows = useMemo(() => {
     const map = new Map<
       string,
@@ -117,6 +98,18 @@ export function RegionDetailMarquee({ region, dateRange }: RegionDetailMarqueePr
     return [...map.values()]
   }, [zeusDistrictData, mmsDistrictData])
 
+  // Region totals — derived from the district rows (sum) plus AMR, which has
+  // no district breakdown and only contributes at the region level.
+  const regionSummary = useMemo(() => {
+    let postpaidKwh = districtRows.reduce((s, r) => s + r.postpaidKwh, 0)
+    const prepaidKwh = districtRows.reduce((s, r) => s + r.prepaidKwh, 0)
+    const debt = districtRows.reduce((s, r) => s + r.debt, 0)
+    ;(amrData || []).forEach((item) => {
+      postpaidKwh += item.total_consumption || 0
+    })
+    return { postpaidKwh, prepaidKwh, totalKwh: postpaidKwh + prepaidKwh, debt }
+  }, [districtRows, amrData])
+
   const districtSalesRows = useMemo(
     () =>
       [...districtRows].sort(
@@ -141,10 +134,10 @@ export function RegionDetailMarquee({ region, dateRange }: RegionDetailMarqueePr
             Loading {PHASE_LABELS[phase].toLowerCase()}…
           </MarqueeItem>
         </Marquee>
-      ) : phase === "region" ? (
-        <Marquee key="region" speed="slow" gap="medium" className="bg-transparent border-0 flex-1">
+      ) : phase === "sales" ? (
+        <Marquee key="sales" speed="slow" gap="medium" className="bg-transparent border-0 flex-1">
           <MarqueeItem className="text-sm font-medium text-foreground flex items-center gap-2">
-            <span className="font-semibold text-foreground">{region}:</span>
+            <span className="font-semibold text-foreground">{region} (Region):</span>
             <span className="text-blue-700 dark:text-blue-400">
               Postpaid {formatKwh(regionSummary.postpaidKwh)}
             </span>
@@ -157,9 +150,6 @@ export function RegionDetailMarquee({ region, dateRange }: RegionDetailMarqueePr
               Total {formatKwh(regionSummary.totalKwh)}
             </span>
           </MarqueeItem>
-        </Marquee>
-      ) : phase === "districtSales" ? (
-        <Marquee key="districtSales" speed="slow" gap="medium" className="bg-transparent border-0 flex-1">
           {districtSalesRows.length === 0 ? (
             <MarqueeItem className="text-sm font-medium text-muted-foreground">
               No district sales data for this period.
@@ -183,7 +173,13 @@ export function RegionDetailMarquee({ region, dateRange }: RegionDetailMarqueePr
           )}
         </Marquee>
       ) : (
-        <Marquee key="districtDebt" speed="slow" gap="medium" className="bg-transparent border-0 flex-1">
+        <Marquee key="debt" speed="slow" gap="medium" className="bg-transparent border-0 flex-1">
+          <MarqueeItem className="text-sm font-medium text-foreground flex items-center gap-2">
+            <span className="font-semibold text-foreground">{region} (Region):</span>
+            <span className="text-sky-700 dark:text-sky-400">
+              Debt {formatMoney(regionSummary.debt)}
+            </span>
+          </MarqueeItem>
           {districtDebtRows.length === 0 ? (
             <MarqueeItem className="text-sm font-medium text-muted-foreground">
               No district debt data for this period.

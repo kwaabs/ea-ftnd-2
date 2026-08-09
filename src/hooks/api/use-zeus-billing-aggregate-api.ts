@@ -53,10 +53,12 @@ export function useZeusBillingAggregate(params: ZeusBillingAggregateParams) {
   if (params.billingYear) queryString.append("billingYear", params.billingYear)
   if (params.billingMonth) queryString.append("billingMonth", params.billingMonth)
   if (params.groupBy) {
+    // Backend parses groupBy as a single comma-joined value (httpx.CSV),
+    // same convention as region/district/etc — NOT repeated groupBy= params,
+    // which only the first of would ever reach the backend.
     const groups = Array.isArray(params.groupBy) ? params.groupBy : [params.groupBy]
-    for (const g of groups) {
-      if (g) queryString.append("groupBy", g)
-    }
+    const joined = groups.filter(Boolean).join(",")
+    if (joined) queryString.append("groupBy", joined)
   }
 
   return useQuery<ZeusBillingAggregateItem[]>({
