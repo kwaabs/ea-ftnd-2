@@ -59,8 +59,6 @@ export function RegionMiniMap({
   useEffect(() => {
     if (!mapContainer.current || districtGeometries.length === 0) return
     if (map.current) return
-    if (!maplibregl.supported({ failIfMajorPerformanceCaveat: false })) return
-
     // Calculate initial bounds from all district geometries (handles Polygon + MultiPolygon)
     const bounds = new maplibregl.LngLatBounds()
     districtGeometries.forEach((district) => {

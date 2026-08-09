@@ -296,8 +296,6 @@ export function ChoroplethMap() {
             }
 
             try {
-                if (!maplibregl.supported({ failIfMajorPerformanceCaveat: false })) return
-
                 map.current = new maplibregl.Map({
                     container: mapContainer.current,
                     style: {

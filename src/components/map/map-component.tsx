@@ -18,8 +18,6 @@ export function MapComponent() {
   // Initialize map
   useEffect(() => {
     if (!mapContainer.current || map.current) return
-    if (!maplibregl.supported({ failIfMajorPerformanceCaveat: false })) return
-
     map.current = new maplibregl.Map({
       container: mapContainer.current,
       style: {
