@@ -227,6 +227,7 @@ export function DistrictMiniMap({ districtName, geometry, meterCoordinates = [] 
     useEffect(() => {
         if (!mapContainer.current || !geometry) return
         if (map.current) return // Already initialized
+        if (!maplibregl.supported({ failIfMajorPerformanceCaveat: false })) return
 
         // Flatten all coordinate rings into [lng, lat] pairs for both
         // Polygon (coordinates[ring][point]) and
