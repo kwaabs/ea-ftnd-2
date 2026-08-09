@@ -73,7 +73,7 @@ import {
   useTopBottomConsumers,
 } from "@/hooks/api/use-consumption-api";
 import { useRegionalBoundaryDaily } from "@/hooks/api/use-regional-boundary-api";
-import { useCustomerConsumptionAggregate } from "@/hooks/api/use-customer-consumption-aggregate-api";
+import { useZeusBillingAggregate } from "@/hooks/api/use-zeus-billing-aggregate-api";
 import { useMmsCustomerSalesAggregate } from "@/hooks/api/use-mms-customer-sales-aggregate-api";
 import { useAmrConsumptionAggregate } from "@/hooks/api/use-amr-consumption-aggregate-api";
 import { formatNumber } from "@/lib/utils";
@@ -338,9 +338,9 @@ export function OverviewMainTabV3({
   const {
     data: customerConsumptionDataArray,
     isLoading: customerConsumptionLoading,
-  } = useCustomerConsumptionAggregate({
+  } = useZeusBillingAggregate({
     ...customerSalesParams,
-    groupBy: ["servicetype"],
+    groupBy: ["metermodeltype"],
   });
 
   const { data: mmsAggregateData, isLoading: mmsAggregateLoading } =
@@ -377,10 +377,10 @@ export function OverviewMainTabV3({
     const zeusByType = { Postpaid: 0, Prepaid: 0, AMR: 0 };
     if (customerConsumptionDataArray && customerConsumptionDataArray.length > 0) {
       customerConsumptionDataArray.forEach((item: any) => {
-        const t = String(item.servicetype || "")
+        const t = String(item.metermodeltype || "")
           .trim()
           .toLowerCase();
-        const kwh = item.sum_lastbillconsumption || 0;
+        const kwh = item.sum_billconsumptionvalue || 0;
         if (t === "postpaid") zeusByType.Postpaid += kwh;
         else if (t === "prepaid") zeusByType.Prepaid += kwh;
         else if (t === "amr") zeusByType.AMR += kwh;

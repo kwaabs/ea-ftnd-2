@@ -12,7 +12,7 @@ import {
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Badge } from "@/components/ui/badge";
-import { useCustomerConsumptionAggregate } from "@/hooks/api/use-customer-consumption-aggregate-api";
+import { useZeusBillingAggregate } from "@/hooks/api/use-zeus-billing-aggregate-api";
 import { useMmsCustomerSalesAggregate } from "@/hooks/api/use-mms-customer-sales-aggregate-api";
 import { useAmrConsumptionAggregate } from "@/hooks/api/use-amr-consumption-aggregate-api";
 import {
@@ -120,15 +120,15 @@ export function CustomerSalesOverview({
 
   // Regional Zeus (for charts / region tables)
   const { data: zeusData, isLoading: zeusLoading } =
-    useCustomerConsumptionAggregate({
+    useZeusBillingAggregate({
       ...params,
-      groupBy: ["servicetype", "regionname"],
+      groupBy: ["metermodeltype", "regionname"],
     });
-  // National Zeus by service type — distinct customers (no region sum inflation)
+  // National Zeus by meter model type — distinct customers (no region sum inflation)
   const { data: zeusNationalData, isLoading: zeusNationalLoading } =
-    useCustomerConsumptionAggregate({
+    useZeusBillingAggregate({
       ...params,
-      groupBy: ["servicetype"],
+      groupBy: ["metermodeltype"],
     });
   const { data: mmsData, isLoading: mmsLoading } = useMmsCustomerSalesAggregate(
     {
@@ -162,12 +162,12 @@ export function CustomerSalesOverview({
 
   // Zeus Postpaid / Prepaid partitions
   const zeusItems = useMemo(
-    () => zeusRaw.filter((i) => normalizeZeusType(i.servicetype) === "Postpaid"),
+    () => zeusRaw.filter((i) => normalizeZeusType(i.metermodeltype) === "Postpaid"),
     [zeusRaw],
   );
 
   const zeusPrepaidItems = useMemo(
-    () => zeusRaw.filter((i) => normalizeZeusType(i.servicetype) === "Prepaid"),
+    () => zeusRaw.filter((i) => normalizeZeusType(i.metermodeltype) === "Prepaid"),
     [zeusRaw],
   );
 
@@ -179,15 +179,15 @@ export function CustomerSalesOverview({
     };
     // kWh / billing / balance: sum regional rows (additive)
     zeusRaw.forEach((i) => {
-      const key = normalizeZeusType(i.servicetype);
+      const key = normalizeZeusType(i.metermodeltype);
       if (key === "Other") return;
-      totals[key].totalKwh += i.sum_lastbillconsumption || 0;
-      totals[key].totalBilling += i.sum_lastbillamount || 0;
-      totals[key].totalBalance += i.sum_currentbalance || 0;
+      totals[key].totalKwh += i.sum_billconsumptionvalue || 0;
+      totals[key].totalBilling += i.sum_billamount || 0;
+      totals[key].totalBalance += i.sum_debtamount || 0;
     });
     // customers: national distinct (account, service point) — do not sum regions
     zeusNationalRaw.forEach((i) => {
-      const key = normalizeZeusType(i.servicetype);
+      const key = normalizeZeusType(i.metermodeltype);
       if (key === "Other") return;
       totals[key].totalCustomers += i.customer_count || 0;
     });
@@ -243,7 +243,7 @@ export function CustomerSalesOverview({
 
   // ── Category buckets (Customer Consumption IA) ──
   // Postpaid = Zeus Postpaid + daily AMR; Prepaid = Zeus Prepaid + MMS
-  // Zeus servicetype=AMR is shown as a badge only (not in category totals).
+  // Zeus meterModelType=AMR is shown as a badge only (not in category totals).
   const postpaidKwh =
     zeusByServiceType.Postpaid.totalKwh + amrStats.totalKwh;
   const prepaidKwh =
@@ -273,7 +273,7 @@ export function CustomerSalesOverview({
       [...zeusItems]
         .sort(
           (a, b) =>
-            (b.sum_lastbillconsumption || 0) - (a.sum_lastbillconsumption || 0),
+            (b.sum_billconsumptionvalue || 0) - (a.sum_billconsumptionvalue || 0),
         )
         .slice(0, 12),
     [zeusItems],
@@ -353,14 +353,14 @@ export function CustomerSalesOverview({
     };
     zeusItems.forEach((i) => {
       ensure(i.regionname || "Unknown").postpaid +=
-        i.sum_lastbillconsumption || 0;
+        i.sum_billconsumptionvalue || 0;
     });
     amrItems.forEach((i) => {
       ensure(i.region || "Unknown").postpaid += i.total_consumption || 0;
     });
     zeusPrepaidItems.forEach((i) => {
       ensure(i.regionname || "Unknown").prepaid +=
-        i.sum_lastbillconsumption || 0;
+        i.sum_billconsumptionvalue || 0;
     });
     mmsItems.forEach((i) => {
       ensure(i.region || "Unknown").prepaid += i.sum_last_month_kwh_read || 0;
@@ -689,9 +689,9 @@ export function CustomerSalesOverview({
                             const zeusData = zeusItems.find(
                               (z) => z.regionname === region,
                             ) || {
-                              sum_lastbillconsumption: 0,
+                              sum_billconsumptionvalue: 0,
                               customer_count: 0,
-                              sum_lastbillamount: 0,
+                              sum_billamount: 0,
                             };
                             const mmsData = mmsItems.find(
                               (m) => m.region === region,
@@ -710,14 +710,14 @@ export function CustomerSalesOverview({
                             const amrKwh =
                               amrData.importKwh + amrData.exportKwh;
                             const totalKwh =
-                              (zeusData.sum_lastbillconsumption || 0) +
+                              (zeusData.sum_billconsumptionvalue || 0) +
                               (mmsData.sum_last_month_kwh_read || 0) +
                               amrKwh;
                             const totalCustomers =
                               (zeusData.customer_count || 0) +
                               (mmsData.customer_count || 0);
                             const totalValue =
-                              (zeusData.sum_lastbillamount || 0) +
+                              (zeusData.sum_billamount || 0) +
                               (mmsData.sum_last_month_credit_read || 0);
                             return (
                               <tr
@@ -729,14 +729,14 @@ export function CustomerSalesOverview({
                                 </td>
                                 <td className="py-2.5 px-4 text-right font-semibold text-blue-700 tabular-nums text-xs">
                                   {formatKwhRaw(
-                                    zeusData.sum_lastbillconsumption,
+                                    zeusData.sum_billconsumptionvalue,
                                   )}
                                 </td>
                                 <td className="py-2.5 px-4 text-right text-blue-600 tabular-nums text-xs">
                                   {formatNumber(zeusData.customer_count)}
                                 </td>
                                 <td className="py-2.5 px-4 text-right text-blue-700 tabular-nums text-xs">
-                                  {formatMoney(zeusData.sum_lastbillamount)}
+                                  {formatMoney(zeusData.sum_billamount)}
                                 </td>
                                 <td className="py-2.5 px-4 text-right font-semibold text-green-700 tabular-nums text-xs">
                                   {formatKwhRaw(
@@ -923,7 +923,7 @@ export function CustomerSalesOverview({
                           ]}
                         />
                         <Bar
-                          dataKey="sum_lastbillconsumption"
+                          dataKey="sum_billconsumptionvalue"
                           radius={[6, 6, 0, 0]}
                         >
                           {zeusByConsumption.map((_, i) => (
@@ -1030,19 +1030,19 @@ export function CustomerSalesOverview({
                         {[...zeusItems]
                           .sort(
                             (a, b) =>
-                              (b.sum_lastbillconsumption || 0) -
-                              (a.sum_lastbillconsumption || 0),
+                              (b.sum_billconsumptionvalue || 0) -
+                              (a.sum_billconsumptionvalue || 0),
                           )
                           .map((item, idx) => {
                             const pct =
                               zeusStats.totalKwh > 0
-                                ? ((item.sum_lastbillconsumption || 0) /
+                                ? ((item.sum_billconsumptionvalue || 0) /
                                     zeusStats.totalKwh) *
                                   100
                                 : 0;
                             const avgKwh =
                               item.customer_count > 0
-                                ? (item.sum_lastbillconsumption || 0) /
+                                ? (item.sum_billconsumptionvalue || 0) /
                                   item.customer_count
                                 : 0;
                             return (
@@ -1054,7 +1054,7 @@ export function CustomerSalesOverview({
                                   {item.regionname}
                                 </td>
                                 <td className="py-2.5 px-4 text-right font-semibold text-blue-700 tabular-nums">
-                                  {formatKwhRaw(item.sum_lastbillconsumption)}
+                                  {formatKwhRaw(item.sum_billconsumptionvalue)}
                                 </td>
                                 <td className="py-2.5 px-4 text-right text-cyan-700 tabular-nums">
                                   {formatKwhRaw(avgKwh)}
@@ -1063,7 +1063,7 @@ export function CustomerSalesOverview({
                                   {formatNumber(item.customer_count)}
                                 </td>
                                 <td className="py-2.5 px-4 text-right text-green-700 tabular-nums">
-                                  {formatMoney(item.sum_lastbillamount)}
+                                  {formatMoney(item.sum_billamount)}
                                 </td>
                                 <td className="py-2.5 pl-4 text-right">
                                   <div className="flex items-center justify-end gap-2">
