@@ -9,8 +9,8 @@ import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Skeleton } from "@/components/ui/skeleton"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
-import { useCustomerConsumptionDetail } from "@/hooks/api/use-customer-consumption-detail-api"
-import { useCustomerConsumptionAggregate } from "@/hooks/api/use-customer-consumption-aggregate-api"
+import { useZeusBillingDetail } from "@/hooks/api/use-zeus-billing-detail-api"
+import { useZeusBillingAggregate } from "@/hooks/api/use-zeus-billing-aggregate-api"
 import { ArrowUpDown, ChevronLeft, ChevronRight, ExternalLink, Search, Zap } from "lucide-react"
 
 interface CustomerSalesDetailProps {
@@ -20,7 +20,10 @@ interface CustomerSalesDetailProps {
     serviceType?: string
 }
 
-type SortField = "lastbilldate" | "lastbillconsumption" | "lastbillamount" | "currentbalance" | "lastpaymentdate" | "fullname"
+// Backend sort keys (internal/zeusbilling detailSortCols) — "outstandingamount"
+// and payment/period fields are not whitelisted there, so those columns are
+// rendered but not sortable.
+type SortField = "createdAt" | "billConsumptionValue" | "billAmount" | "debtAmount" | "amountDue" | "customerName"
 type SortOrder = "asc" | "desc"
 
 const PAGE_SIZE = 50
@@ -43,6 +46,17 @@ function formatDate(value: string | null | undefined) {
     return d.toLocaleDateString("en-GB", { day: "2-digit", month: "short", year: "numeric" })
 }
 
+const MONTH_NAMES = [
+    "Jan", "Feb", "Mar", "Apr", "May", "Jun",
+    "Jul", "Aug", "Sep", "Oct", "Nov", "Dec",
+]
+
+function formatBillingPeriod(month: number | null | undefined, year: number | null | undefined) {
+    if (!month || !year) return "—"
+    const name = MONTH_NAMES[month - 1]
+    return name ? `${name} ${year}` : `${month}/${year}`
+}
+
 function uniqueSorted(values: Array<string | null | undefined>) {
     return Array.from(
         new Set(
@@ -60,8 +74,7 @@ export function CustomerSalesDetail({ dateRange, region, district, serviceType }
     const [filterRegion, setFilterRegion] = useState(region?.trim() || ALL)
     const [filterDistrict, setFilterDistrict] = useState(district?.trim() || ALL)
     const [filterAccountType, setFilterAccountType] = useState(ALL)
-    const [filterCustomerType, setFilterCustomerType] = useState(ALL)
-    const [sortField, setSortField] = useState<SortField>("lastbillconsumption")
+    const [sortField, setSortField] = useState<SortField>("billConsumptionValue")
     const [sortOrder, setSortOrder] = useState<SortOrder>("desc")
 
     // Keep table filters in sync when parent chart / global filters change.
@@ -79,8 +92,6 @@ export function CustomerSalesDetail({ dateRange, region, district, serviceType }
     const effectiveDistrict = filterDistrict === ALL ? undefined : filterDistrict
     const effectiveAccountType =
         filterAccountType === ALL ? undefined : filterAccountType
-    const effectiveCustomerType =
-        filterCustomerType === ALL ? undefined : filterCustomerType
 
     useEffect(() => {
         setPage(1)
@@ -89,7 +100,6 @@ export function CustomerSalesDetail({ dateRange, region, district, serviceType }
         filterRegion,
         filterDistrict,
         filterAccountType,
-        filterCustomerType,
         dateRange.start,
         dateRange.end,
         serviceType,
@@ -98,30 +108,23 @@ export function CustomerSalesDetail({ dateRange, region, district, serviceType }
     const aggBase = {
         dateFrom: dateRange.start,
         dateTo: dateRange.end,
-        serviceType,
+        meterModelType: serviceType,
     }
 
-    const { data: regionAgg } = useCustomerConsumptionAggregate({
+    const { data: regionAgg } = useZeusBillingAggregate({
         ...aggBase,
         groupBy: "regionname",
     })
-    const { data: districtAgg } = useCustomerConsumptionAggregate({
+    const { data: districtAgg } = useZeusBillingAggregate({
         ...aggBase,
         region: effectiveRegion,
         groupBy: "districtname",
     })
-    const { data: accountTypeAgg } = useCustomerConsumptionAggregate({
+    const { data: accountTypeAgg } = useZeusBillingAggregate({
         ...aggBase,
         region: effectiveRegion,
         district: effectiveDistrict,
         groupBy: "accounttype",
-    })
-    const { data: customerTypeAgg } = useCustomerConsumptionAggregate({
-        ...aggBase,
-        region: effectiveRegion,
-        district: effectiveDistrict,
-        accountType: effectiveAccountType,
-        groupBy: "customertype",
     })
 
     const regionOptions = useMemo(
@@ -136,14 +139,6 @@ export function CustomerSalesDetail({ dateRange, region, district, serviceType }
         () => uniqueSorted((accountTypeAgg || []).map((r) => r.accounttype)),
         [accountTypeAgg],
     )
-    const customerTypeOptions = useMemo(() => {
-        const fromAgg = uniqueSorted(
-            (customerTypeAgg || []).map((r) => r.customertype),
-        )
-        // Always offer the common pair even if aggregates are still loading.
-        const fallback = ["Individual", "Organization"]
-        return uniqueSorted([...fallback, ...fromAgg])
-    }, [customerTypeAgg])
 
     // Drop district if it is no longer valid for the selected region.
     useEffect(() => {
@@ -156,18 +151,17 @@ export function CustomerSalesDetail({ dateRange, region, district, serviceType }
         }
     }, [filterDistrict, districtOptions])
 
-    const { data: detailData, isLoading, isFetching } = useCustomerConsumptionDetail({
+    const { data: detailData, isLoading, isFetching } = useZeusBillingDetail({
         dateFrom: dateRange.start,
         dateTo: dateRange.end,
         region: effectiveRegion,
         district: effectiveDistrict,
-        serviceType,
+        meterModelType: serviceType,
         accountType: effectiveAccountType,
-        customerType: effectiveCustomerType,
         search: debouncedSearch || undefined,
         page,
         limit: PAGE_SIZE,
-        sortBy: sortField,
+        sortBy: sortField.toLowerCase(),
         sortDir: sortOrder,
     })
 
@@ -204,7 +198,6 @@ export function CustomerSalesDetail({ dateRange, region, district, serviceType }
         filterRegion !== ALL ? filterRegion : null,
         filterDistrict !== ALL ? filterDistrict : null,
         filterAccountType !== ALL ? filterAccountType : null,
-        filterCustomerType !== ALL ? filterCustomerType : null,
     ]
         .filter(Boolean)
         .join(" · ")
@@ -216,7 +209,7 @@ export function CustomerSalesDetail({ dateRange, region, district, serviceType }
                     <div>
                         <CardTitle>Customer Records</CardTitle>
                         <CardDescription>
-                            {filterSummary || "All customer types"} — consumption and billing, sorted by highest kWh by default
+                            {filterSummary || "All accounts"} — consumption and billing, sorted by highest kWh by default
                         </CardDescription>
                     </div>
                     <Badge variant="outline" className="text-sm font-medium px-3 py-1">
@@ -230,13 +223,13 @@ export function CustomerSalesDetail({ dateRange, region, district, serviceType }
                     <div className="relative flex-1">
                         <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
                         <Input
-                            placeholder="Search by name, account, service point, or district..."
+                            placeholder="Search by name, account, or service point..."
                             value={searchTerm}
                             onChange={(e) => setSearchTerm(e.target.value)}
                             className="pl-8"
                         />
                     </div>
-                    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
+                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
                         <Select
                             value={filterRegion}
                             onValueChange={(v) => {
@@ -291,25 +284,6 @@ export function CustomerSalesDetail({ dateRange, region, district, serviceType }
                                 ))}
                             </SelectContent>
                         </Select>
-
-                        <Select
-                            value={filterCustomerType}
-                            onValueChange={setFilterCustomerType}
-                        >
-                            <SelectTrigger className="w-full">
-                                <SelectValue placeholder="Customer type" />
-                            </SelectTrigger>
-                            <SelectContent>
-                                <SelectItem value={ALL}>
-                                    All (Individuals & Organizations)
-                                </SelectItem>
-                                {customerTypeOptions.map((name) => (
-                                    <SelectItem key={name} value={name}>
-                                        {name}
-                                    </SelectItem>
-                                ))}
-                            </SelectContent>
-                        </Select>
                     </div>
                 </div>
 
@@ -319,142 +293,121 @@ export function CustomerSalesDetail({ dateRange, region, district, serviceType }
                             <TableHeader>
                                 <TableRow className="bg-muted/40">
                                     <TableHead className="w-[190px]">
-                                        <SortButton field="fullname">Customer</SortButton>
+                                        <SortButton field="customerName">Customer</SortButton>
                                     </TableHead>
-                                    <TableHead>Account No.</TableHead>
-                                    <TableHead>Service Point No.</TableHead>
+                                    <TableHead>Account Code</TableHead>
+                                    <TableHead>Service Point Code</TableHead>
                                     <TableHead>Region</TableHead>
                                     <TableHead>District</TableHead>
-                                    <TableHead>Service Type</TableHead>
-                                    <TableHead>Customer Type</TableHead>
+                                    <TableHead>Meter Type</TableHead>
                                     <TableHead>Account Type</TableHead>
-                                    <TableHead>Data Source</TableHead>
                                     <TableHead className="text-right bg-blue-50">
                                         <div className="flex items-center justify-end gap-1.5">
                                             <Zap className="h-3.5 w-3.5 text-blue-600" />
-                                            <SortButton field="lastbillconsumption">
+                                            <SortButton field="billConsumptionValue">
                                                 <span className="text-blue-700">Consumption (kWh)</span>
                                             </SortButton>
                                         </div>
                                     </TableHead>
                                     <TableHead className="text-right">
-                                        <SortButton field="lastbillamount">Last Bill (₵)</SortButton>
+                                        <SortButton field="billAmount">Bill (₵)</SortButton>
                                     </TableHead>
                                     <TableHead className="text-right">
-                                        <SortButton field="currentbalance">Balance (₵)</SortButton>
+                                        <SortButton field="debtAmount">Debt (₵)</SortButton>
                                     </TableHead>
-                                    <TableHead className="bg-amber-50 min-w-[140px]">
-                                        <SortButton field="lastbilldate">
-                                            <span className="text-amber-700">Bill Date</span>
-                                        </SortButton>
+                                    <TableHead className="text-right">
+                                        <SortButton field="amountDue">Due (₵)</SortButton>
                                     </TableHead>
-                                    <TableHead>Bill Month</TableHead>
-                                    <TableHead>
-                                        <SortButton field="lastpaymentdate">Payment Date</SortButton>
+                                    <TableHead className="text-right">Outstanding (₵)</TableHead>
+                                    <TableHead className="bg-amber-50 min-w-[120px]">
+                                        <span className="text-amber-700">Billing Period</span>
                                     </TableHead>
-                                    <TableHead>Reading Date</TableHead>
-                                    <TableHead>Status</TableHead>
+                                    <TableHead>Payment Date</TableHead>
+                                    <TableHead>Bill Status</TableHead>
                                 </TableRow>
                             </TableHeader>
                             <TableBody>
                                 {isLoading ? (
                                     [...Array(12)].map((_, i) => (
                                         <TableRow key={i}>
-                                            {[...Array(17)].map((_, j) => (
+                                            {[...Array(15)].map((_, j) => (
                                                 <TableCell key={j}><Skeleton className="h-4 w-full" /></TableCell>
                                             ))}
                                         </TableRow>
                                     ))
                                 ) : records.length === 0 ? (
                                     <TableRow>
-                                        <TableCell colSpan={17} className="text-center py-12 text-muted-foreground">
+                                        <TableCell colSpan={15} className="text-center py-12 text-muted-foreground">
                                             No records found for the selected filters
                                         </TableCell>
                                     </TableRow>
                                 ) : (
                                     records.map((c, idx) => (
-                                        <TableRow key={`${c.accountnumber}-${c.servicepointnumber}-${c.billmonth}-${idx}`} className="hover:bg-muted/40">
-                                            <TableCell className="font-medium text-sm max-w-[190px] truncate" title={c.fullname}>
-                                                {c.fullname || "—"}
+                                        <TableRow key={`${c.accountCode}-${c.servicePointCode}-${c.billingYear}-${c.billingMonth}-${idx}`} className="hover:bg-muted/40">
+                                            <TableCell className="font-medium text-sm max-w-[190px] truncate" title={c.customerName}>
+                                                {c.customerName || "—"}
                                             </TableCell>
                                             <TableCell className="text-sm font-mono">
-                                                {c.accountnumber ? (
+                                                {c.accountCode ? (
                                                     <Link
-                                                        href={`/customer-sales/account/${encodeURIComponent(c.accountnumber)}?dateFrom=${dateRange.start}&dateTo=${dateRange.end}`}
+                                                        href={`/customer-sales/account/${encodeURIComponent(c.accountCode)}?dateFrom=${dateRange.start}&dateTo=${dateRange.end}`}
                                                         className="inline-flex items-center gap-1 text-primary hover:underline"
                                                     >
-                                                        {c.accountnumber}
+                                                        {c.accountCode}
                                                         <ExternalLink className="h-3 w-3 shrink-0 opacity-60" />
                                                     </Link>
                                                 ) : "—"}
                                             </TableCell>
                                             <TableCell className="text-sm font-mono">
-                                                {c.servicepointnumber ? (
+                                                {c.servicePointCode ? (
                                                     <Link
-                                                        href={`/customer-sales/service-point/${encodeURIComponent(c.servicepointnumber)}?dateFrom=${dateRange.start}&dateTo=${dateRange.end}`}
+                                                        href={`/customer-sales/service-point/${encodeURIComponent(c.servicePointCode)}?dateFrom=${dateRange.start}&dateTo=${dateRange.end}`}
                                                         className="inline-flex items-center gap-1 text-primary hover:underline"
                                                     >
-                                                        {c.servicepointnumber}
+                                                        {c.servicePointCode}
                                                         <ExternalLink className="h-3 w-3 shrink-0 opacity-60" />
                                                     </Link>
                                                 ) : "—"}
                                             </TableCell>
-                                            <TableCell className="text-xs text-muted-foreground">{c.regionname || "—"}</TableCell>
-                                            <TableCell className="text-xs text-muted-foreground">{c.districtname || "—"}</TableCell>
+                                            <TableCell className="text-xs text-muted-foreground">{c.regionName || "—"}</TableCell>
+                                            <TableCell className="text-xs text-muted-foreground">{c.districtName || "—"}</TableCell>
                                             <TableCell>
-                                                <Badge variant="outline" className="text-xs font-normal">{c.servicetype || "—"}</Badge>
-                                            </TableCell>
-                                            <TableCell>
-                                                <Badge
-                                                    variant="secondary"
-                                                    className={`text-xs font-normal ${
-                                                        c.customertype === "Organization"
-                                                            ? "bg-violet-100 text-violet-800"
-                                                            : "bg-sky-100 text-sky-800"
-                                                    }`}
-                                                >
-                                                    {c.customertype || "—"}
-                                                </Badge>
+                                                <Badge variant="outline" className="text-xs font-normal">{c.meterModelType || "—"}</Badge>
                                             </TableCell>
                                             <TableCell className="text-xs text-muted-foreground">
-                                                {c.accounttype || "—"}
-                                            </TableCell>
-                                            <TableCell>
-                                                <Badge variant="outline" className="text-xs font-normal border-blue-300 text-blue-700">
-                                                    {c.data_src || "Zeus"}
-                                                </Badge>
+                                                {c.accountType || "—"}
                                             </TableCell>
                                             <TableCell className="text-right font-semibold text-blue-700 tabular-nums bg-blue-50/50">
-                                                {formatKwh(c.lastbillconsumption)}
+                                                {formatKwh(c.billConsumptionValue)}
                                             </TableCell>
                                             <TableCell className="text-right tabular-nums text-sm">
-                                                {formatMoney(c.lastbillamount)}
+                                                {formatMoney(c.billAmount)}
                                             </TableCell>
                                             <TableCell className="text-right tabular-nums text-sm">
-                                                {formatMoney(c.currentbalance)}
+                                                {formatMoney(c.debtAmount)}
+                                            </TableCell>
+                                            <TableCell className="text-right tabular-nums text-sm">
+                                                {formatMoney(c.amountDue)}
+                                            </TableCell>
+                                            <TableCell className="text-right tabular-nums text-sm">
+                                                {formatMoney(c.outstandingAmount)}
                                             </TableCell>
                                             <TableCell className="text-sm tabular-nums bg-amber-50/50 text-amber-900">
-                                                {formatDate(c.lastbilldate)}
-                                            </TableCell>
-                                            <TableCell className="text-xs text-muted-foreground whitespace-nowrap">
-                                                {c.billmonth || "—"}
+                                                {formatBillingPeriod(c.billingMonth, c.billingYear)}
                                             </TableCell>
                                             <TableCell className="text-sm tabular-nums">
-                                                {formatDate(c.lastpaymentdate)}
-                                            </TableCell>
-                                            <TableCell className="text-sm tabular-nums">
-                                                {formatDate(c.lastreadingdate)}
+                                                {formatDate(c.lastPaymentDate)}
                                             </TableCell>
                                             <TableCell>
                                                 <Badge
                                                     variant="outline"
                                                     className={`text-xs font-normal ${
-                                                        c.contractstatus === "Active"
+                                                        c.billStatus === "Billed"
                                                             ? "border-green-300 text-green-700"
                                                             : "border-slate-300 text-slate-600"
                                                     }`}
                                                 >
-                                                    {c.contractstatus || "—"}
+                                                    {c.billStatus || "—"}
                                                 </Badge>
                                             </TableCell>
                                         </TableRow>
