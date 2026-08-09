@@ -5,7 +5,6 @@ import { MapPin } from "lucide-react"
 import { useEffect, useRef, useState } from "react"
 import maplibregl from "maplibre-gl"
 import "maplibre-gl/dist/maplibre-gl.css"
-import { isWebGLAvailable } from "@/lib/webgl"
 
 interface RegionMiniMapProps {
   regionName: string
@@ -60,7 +59,6 @@ export function RegionMiniMap({
   useEffect(() => {
     if (!mapContainer.current || districtGeometries.length === 0) return
     if (map.current) return
-    if (!isWebGLAvailable()) return
 
     // Calculate initial bounds from all district geometries (handles Polygon + MultiPolygon)
     const bounds = new maplibregl.LngLatBounds()

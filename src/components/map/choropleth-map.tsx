@@ -18,7 +18,6 @@ import { Checkbox } from "@/components/ui/checkbox"
 import { Button } from "@/components/ui/button"
 import { X, ExternalLink } from "lucide-react"
 import Link from "next/link"
-import { isWebGLAvailable } from "@/lib/webgl"
 
 interface SelectedRegion {
     region: string
@@ -288,7 +287,6 @@ export function ChoroplethMap() {
         const maxAttempts = 5
 
         const tryInitializeMap = () => {
-            if (!isWebGLAvailable()) return
             if (!mapContainer.current) {
                 attempt++
                 if (attempt < maxAttempts) {
