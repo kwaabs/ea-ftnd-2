@@ -33,6 +33,7 @@ export function RegionMiniMap({ regionName, districtGeometries = [], meterCoordi
     useEffect(() => {
         if (!mapContainer.current || districtGeometries.length === 0) return
         if (map.current) return // Already initialized
+        if (!maplibregl.supported({ failIfMajorPerformanceCaveat: false })) return
 
         console.log("=== RegionMiniMap Initialization ===")
         console.log("Total meter coordinates:", meterCoordinates.length)

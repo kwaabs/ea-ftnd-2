@@ -306,6 +306,7 @@ export function OverviewMapTab({
 
   useEffect(() => {
     if (!mapContainer.current || map.current || !mapLibLoaded || !window.maplibregl) return
+    if (!window.maplibregl.supported({ failIfMajorPerformanceCaveat: false })) return
 
     const maplibregl = window.maplibregl
 
