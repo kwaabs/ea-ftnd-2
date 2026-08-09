@@ -310,9 +310,7 @@ export function ZeusPageView({
             )}
           </CardContent>
         </Card>
-        <Link
-          href={`/customer-sales/debt${effectiveRegion ? `?region=${encodeURIComponent(effectiveRegion)}` : ""}`}
-        >
+        <Link href="/customer-sales/debt">
           <Card className="h-full transition-colors hover:border-sky-400 hover:bg-sky-50/40">
             <CardContent className="pt-5">
               <p className="text-xs text-muted-foreground mb-1 flex items-center justify-between gap-1">
