@@ -69,7 +69,6 @@ import {
 } from "@/hooks/api/use-meter-status-api";
 import {
   useConsumptionMetersRanking,
-  useConsumptionTimeseriesIndividual,
   useTopBottomConsumers,
 } from "@/hooks/api/use-consumption-api";
 import { useRegionalBoundaryDaily } from "@/hooks/api/use-regional-boundary-api";
@@ -290,13 +289,6 @@ export function OverviewMainTabV3({
     limit: 10000,
     page: 1,
   });
-  const allMetersForBreakdown = useConsumptionTimeseriesIndividual({
-    start_date: params.dateFrom || "",
-    end_date: params.dateTo || "",
-    view: "individual",
-    limit: 100,
-  });
-
   const { data: topBottomConsumersData, isLoading: topBottomLoading } =
     useTopBottomConsumers({
       dateFrom: dateRange.start,
@@ -822,45 +814,6 @@ export function OverviewMainTabV3({
       value: item.total_import_kwh || 0,
     }));
   }, [meterTypeBreakdownData]);
-
-  const meterTypeCountBreakdown = useMemo(() => {
-    if (
-      !allMetersForBreakdown?.data ||
-      !allMetersForBreakdown.data.individual
-    ) {
-      return [];
-    }
-
-    const breakdown: Record<
-      string,
-      { online: number; total: number; meterNumbers: Set<string> }
-    > = {};
-
-    allMetersForBreakdown.data.individual.forEach((meter) => {
-      const meterType = meter.meter_type || "Unknown";
-
-      if (!breakdown[meterType]) {
-        breakdown[meterType] = { online: 0, total: 0, meterNumbers: new Set() };
-      }
-
-      if (!breakdown[meterType].meterNumbers.has(meter.meter_number)) {
-        breakdown[meterType].meterNumbers.add(meter.meter_number);
-        breakdown[meterType].total += 1;
-
-        if (meter.status === "online") {
-          breakdown[meterType].online += 1;
-        }
-      }
-    });
-
-    return Object.entries(breakdown)
-      .map(([meterType, data]) => ({
-        meterType,
-        online: data.online,
-        total: data.total,
-      }))
-      .sort((a, b) => b.total - a.total);
-  }, [allMetersForBreakdown?.data]);
 
   const regionalData = regionalBreakdownData;
 
