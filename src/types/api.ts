@@ -617,10 +617,12 @@ export interface ZeusBillingAggregateItem {
   regionname?: string
   districtname?: string
   tariffclasscode?: string
+  tariffclassname?: string
   serviceclass?: string
   accounttype?: string
   billstatus?: string
   metermodeltype?: string
+  servicepointstatus?: string
   billingyear?: number
   billingmonth?: number
   customer_count: number

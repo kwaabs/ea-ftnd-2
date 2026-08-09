@@ -10,10 +10,12 @@ export type ZeusBillingGroupBy =
   | "regionname"
   | "districtname"
   | "tariffclasscode"
+  | "tariffclassname"
   | "serviceclass"
   | "accounttype"
   | "billstatus"
   | "metermodeltype"
+  | "servicepointstatus"
   | "billingyear"
   | "billingmonth"
 
