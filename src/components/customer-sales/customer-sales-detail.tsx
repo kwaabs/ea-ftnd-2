@@ -13,18 +13,20 @@ import { useZeusBillingDetail } from "@/hooks/api/use-zeus-billing-detail-api"
 import { useZeusBillingAggregate } from "@/hooks/api/use-zeus-billing-aggregate-api"
 import { ArrowUpDown, ChevronLeft, ChevronRight, ExternalLink, Search, Zap } from "lucide-react"
 
-interface CustomerSalesDetailProps {
-    dateRange: { start: string; end: string }
-    region?: string
-    district?: string
-    serviceType?: string
-}
-
 // Backend sort keys (internal/zeusbilling detailSortCols) — "outstandingamount"
 // and payment/period fields are not whitelisted there, so those columns are
 // rendered but not sortable.
 type SortField = "createdAt" | "billConsumptionValue" | "billAmount" | "debtAmount" | "amountDue" | "customerName"
 type SortOrder = "asc" | "desc"
+
+interface CustomerSalesDetailProps {
+    dateRange: { start: string; end: string }
+    region?: string
+    district?: string
+    serviceType?: string
+    initialSortField?: SortField
+    initialSortOrder?: SortOrder
+}
 
 const PAGE_SIZE = 50
 const ALL = "all"
@@ -67,15 +69,22 @@ function uniqueSorted(values: Array<string | null | undefined>) {
     ).sort((a, b) => a.localeCompare(b))
 }
 
-export function CustomerSalesDetail({ dateRange, region, district, serviceType }: CustomerSalesDetailProps) {
+export function CustomerSalesDetail({
+    dateRange,
+    region,
+    district,
+    serviceType,
+    initialSortField = "billConsumptionValue",
+    initialSortOrder = "desc",
+}: CustomerSalesDetailProps) {
     const [page, setPage] = useState(1)
     const [searchTerm, setSearchTerm] = useState("")
     const [debouncedSearch, setDebouncedSearch] = useState("")
     const [filterRegion, setFilterRegion] = useState(region?.trim() || ALL)
     const [filterDistrict, setFilterDistrict] = useState(district?.trim() || ALL)
     const [filterAccountType, setFilterAccountType] = useState(ALL)
-    const [sortField, setSortField] = useState<SortField>("billConsumptionValue")
-    const [sortOrder, setSortOrder] = useState<SortOrder>("desc")
+    const [sortField, setSortField] = useState<SortField>(initialSortField)
+    const [sortOrder, setSortOrder] = useState<SortOrder>(initialSortOrder)
 
     // Keep table filters in sync when parent chart / global filters change.
     useEffect(() => {
@@ -202,6 +211,15 @@ export function CustomerSalesDetail({ dateRange, region, district, serviceType }
         .filter(Boolean)
         .join(" · ")
 
+    const SORT_FIELD_LABELS: Record<SortField, string> = {
+        createdAt: "created date",
+        billConsumptionValue: "kWh",
+        billAmount: "bill amount",
+        debtAmount: "debt",
+        amountDue: "amount due",
+        customerName: "customer name",
+    }
+
     return (
         <Card>
             <CardHeader>
@@ -209,7 +227,8 @@ export function CustomerSalesDetail({ dateRange, region, district, serviceType }
                     <div>
                         <CardTitle>Customer Records</CardTitle>
                         <CardDescription>
-                            {filterSummary || "All accounts"} — consumption and billing, sorted by highest kWh by default
+                            {filterSummary || "All accounts"} — consumption and billing, sorted by highest{" "}
+                            {SORT_FIELD_LABELS[sortField]}
                         </CardDescription>
                     </div>
                     <Badge variant="outline" className="text-sm font-medium px-3 py-1">

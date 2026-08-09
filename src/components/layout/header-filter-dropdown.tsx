@@ -520,8 +520,10 @@ export function HeaderFilterDropdown() {
     const isPrepaidHub =
       pathname === "/customer-sales/prepaid" ||
       Boolean(pathname?.startsWith("/customer-sales/prepaid/"))
+    // Debt insights: same filter set as the Postpaid/Prepaid hubs — date + region + district.
+    const isDebtPage = pathname === "/customer-sales/debt"
     const isCustomerConsumptionSourcePage =
-        isZeusPage || isMmsPage || isAmrPage || isPostpaidHub || isPrepaidHub
+        isZeusPage || isMmsPage || isAmrPage || isPostpaidHub || isPrepaidHub || isDebtPage
     const isAmrMeterDetailPage = Boolean(pathname?.startsWith("/amr/") && pathname.split("/").length === 3)
     const isDateOnlyPage = isMeterDetailsPage || isStationDetailsPage || isBoundaryDetailsPage || isRegionDetailsPage || isDistrictDetailsPage || isExpressFeederDetailPage || isMapPage || isCustomerSalesPage || isAmrMeterDetailPage || isAdminLoginsPage || isCustomerSalesAccountPage || isCustomerSalesServicePointPage
 
