@@ -7291,7 +7291,7 @@ export function RegionDetail({ region }: RegionDetailProps) {
                         {regionProfile.regionalDistricts.map(
                           (district: any) => (
                             <Link
-                              key={district.id}
+                              key={district.district}
                               href={`/districts/${encodeURIComponent(district.district.replace(/ district/i, "").trim())}`}
                               className="flex items-center gap-2 px-3 py-2 text-sm font-medium bg-blue-50 dark:bg-blue-950/20 text-blue-700 dark:text-blue-300 border border-blue-200 dark:border-blue-800 rounded-lg hover:bg-blue-100 dark:hover:bg-blue-950/40 transition-colors w-full"
                             >
@@ -7320,7 +7320,7 @@ export function RegionDetail({ region }: RegionDetailProps) {
                     <div className="grid grid-cols-2 gap-2">
                       {regionProfile.regionalDistricts.map((district: any) => (
                         <Link
-                          key={district.id}
+                          key={district.district}
                           href={`/districts/${encodeURIComponent(district.district.replace(/ district/i, "").trim())}`}
                           className="flex items-center gap-2 px-3 py-2 text-sm font-medium bg-blue-50 dark:bg-blue-950/20 text-blue-700 dark:text-blue-300 border border-blue-200 dark:border-blue-800 rounded-lg hover:bg-blue-100 dark:hover:bg-blue-950/40 transition-colors"
                         >
@@ -7676,9 +7676,8 @@ export function RegionDetail({ region }: RegionDetailProps) {
                     const netKwh = data.import - data.export;
 
                     return (
-                      <>
+                      <React.Fragment key={station}>
                         <TableRow
-                          key={station}
                           className="cursor-pointer hover:bg-muted/50"
                           onClick={() => toggleStation(station)}
                         >
@@ -7872,7 +7871,7 @@ export function RegionDetail({ region }: RegionDetailProps) {
                             </TableCell>
                           </TableRow>
                         )}
-                      </>
+                      </React.Fragment>
                     );
                   })}
               </TableBody>

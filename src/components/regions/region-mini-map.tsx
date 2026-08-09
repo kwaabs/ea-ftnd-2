@@ -55,6 +55,7 @@ export function RegionMiniMap({
   const markersRef = useRef<maplibregl.Marker[]>([])
   const popupRef = useRef<maplibregl.Popup | null>(null)
   const [hoveredDistrict, setHoveredDistrict] = useState<{ name: string; consumption?: number } | null>(null)
+  const [mapError, setMapError] = useState(false)
 
   useEffect(() => {
     if (!mapContainer.current || districtGeometries.length === 0) return
@@ -69,14 +70,25 @@ export function RegionMiniMap({
     })
     const center = bounds.getCenter()
 
-    // Initialise with blank style — Google Maps raster tiles added on load
-    map.current = new maplibregl.Map({
-      container: mapContainer.current,
-      style: { version: 8, sources: {}, layers: [] },
-      center: [center.lng, center.lat],
-      zoom: 10,
-      attributionControl: false,
-    })
+    // WebGL context creation can fail (unsupported browser, disabled GPU,
+    // sandboxed/headless environments) — maplibre throws synchronously in
+    // that case, which would otherwise crash this component.
+    try {
+      // Initialise with blank style — Google Maps raster tiles added on load
+      map.current = new maplibregl.Map({
+        container: mapContainer.current,
+        style: { version: 8, sources: {}, layers: [] },
+        center: [center.lng, center.lat],
+        zoom: 10,
+        attributionControl: false,
+      })
+    } catch (error) {
+      console.error("[RegionMiniMap] Failed to initialize map:", error)
+      // Deferred out of the effect's synchronous execution — setting state
+      // directly inline here would trigger a same-tick cascading render.
+      queueMicrotask(() => setMapError(true))
+      return
+    }
 
     map.current.addControl(new maplibregl.NavigationControl(), "top-right")
 
@@ -312,6 +324,10 @@ export function RegionMiniMap({
           {districtGeometries.length === 0 ? (
               <div className="flex-1 flex items-center justify-center text-muted-foreground text-sm">
                 No district boundaries available
+              </div>
+          ) : mapError ? (
+              <div className="flex-1 flex items-center justify-center text-muted-foreground text-sm text-center px-4">
+                Map view unavailable in this browser
               </div>
           ) : (
               <>
