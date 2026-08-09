@@ -12,6 +12,7 @@ import {
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Badge } from "@/components/ui/badge";
+import { Marquee, MarqueeItem } from "@/components/ui/marquee";
 import { useZeusBillingAggregate } from "@/hooks/api/use-zeus-billing-aggregate-api";
 import { useMmsCustomerSalesAggregate } from "@/hooks/api/use-mms-customer-sales-aggregate-api";
 import { useAmrConsumptionAggregate } from "@/hooks/api/use-amr-consumption-aggregate-api";
@@ -379,6 +380,39 @@ export function CustomerSalesOverview({
 
   return (
     <div className="space-y-6">
+      {/* ── PER-REGION SALES MARQUEE ── */}
+      <Marquee speed="slow" gap="medium">
+        {isLoading ? (
+          <MarqueeItem className="text-sm font-medium text-muted-foreground">
+            Loading customer sales figures…
+          </MarqueeItem>
+        ) : combinedChartData.length === 0 ? (
+          <MarqueeItem className="text-sm font-medium text-muted-foreground">
+            No customer sales data for this period.
+          </MarqueeItem>
+        ) : (
+          combinedChartData.map(({ region, postpaid, prepaid }) => (
+            <MarqueeItem
+              key={region}
+              className="text-sm font-medium text-foreground flex items-center gap-2"
+            >
+              <span className="font-semibold text-foreground">{region}:</span>
+              <span className="text-blue-700 dark:text-blue-400">
+                Postpaid {formatKwh(postpaid)}
+              </span>
+              <span className="text-muted-foreground">·</span>
+              <span className="text-emerald-700 dark:text-emerald-400">
+                Prepaid {formatKwh(prepaid)}
+              </span>
+              <span className="text-muted-foreground">·</span>
+              <span className="font-semibold text-purple-700 dark:text-purple-400">
+                Total {formatKwh(postpaid + prepaid)}
+              </span>
+            </MarqueeItem>
+          ))
+        )}
+      </Marquee>
+
       {/* ── COMBINED SUMMARY HEADER ── */}
       <div className="grid gap-4 md:grid-cols-4">
         {/* Combined kWh */}

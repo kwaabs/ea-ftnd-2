@@ -5,6 +5,7 @@ import Link from "next/link"
 import { ArrowLeft, AlertTriangle, Scale, TrendingDown, Users } from "lucide-react"
 import { Card, CardContent } from "@/components/ui/card"
 import { Skeleton } from "@/components/ui/skeleton"
+import { Marquee, MarqueeItem } from "@/components/ui/marquee"
 import { useZeusBillingAggregate } from "@/hooks/api/use-zeus-billing-aggregate-api"
 import { CustomerSalesDetail } from "@/components/customer-sales/customer-sales-detail"
 import { DebtChart } from "@/components/customer-sales/debt-chart"
@@ -66,6 +67,22 @@ export function DebtInsightsView() {
       district,
     })
 
+  const { data: regionAgg = [], isLoading: regionAggLoading } =
+    useZeusBillingAggregate({
+      dateFrom: dateRange.start,
+      dateTo: dateRange.end,
+      region,
+      district,
+      groupBy: "regionname",
+    })
+
+  const regionDebtRows = useMemo(
+    () =>
+      [...regionAgg]
+        .sort((a, b) => (b.sum_debtamount || 0) - (a.sum_debtamount || 0)),
+    [regionAgg],
+  )
+
   const stats = useMemo(() => {
     const totalDebt = totalsAgg.reduce((s, r) => s + (r.sum_debtamount || 0), 0)
     const totalDue = totalsAgg.reduce((s, r) => s + (r.sum_amountdue || 0), 0)
@@ -103,6 +120,39 @@ export function DebtInsightsView() {
           ) : null}
         </p>
       </div>
+
+      {/* ── PER-REGION DEBT MARQUEE ── */}
+      <Marquee speed="slow" gap="medium">
+        {regionAggLoading ? (
+          <MarqueeItem className="text-sm font-medium text-muted-foreground">
+            Loading regional debt figures…
+          </MarqueeItem>
+        ) : regionDebtRows.length === 0 ? (
+          <MarqueeItem className="text-sm font-medium text-muted-foreground">
+            No debt data for this period.
+          </MarqueeItem>
+        ) : (
+          regionDebtRows.map((row) => (
+            <MarqueeItem
+              key={row.regionname}
+              className="text-sm font-medium text-foreground flex items-center gap-2"
+            >
+              <span className="font-semibold text-foreground">{row.regionname}:</span>
+              <span className="text-sky-700 dark:text-sky-400">
+                Debt {formatMoney(row.sum_debtamount)}
+              </span>
+              <span className="text-muted-foreground">·</span>
+              <span className="text-amber-700 dark:text-amber-400">
+                Due {formatMoney(row.sum_amountdue)}
+              </span>
+              <span className="text-muted-foreground">·</span>
+              <span className="text-rose-700 dark:text-rose-400">
+                Outstanding {formatMoney(row.sum_outstandingamount)}
+              </span>
+            </MarqueeItem>
+          ))
+        )}
+      </Marquee>
 
       {/* KPIs */}
       <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">

@@ -3689,6 +3689,7 @@ import { useMeters } from "@/hooks/api/use-meter-api";
 import { useMeterStatusSummary } from "@/hooks/api/use-meter-status-api";
 import { useExpressFeederAggregate } from "@/hooks/api/use-express-feeder-api";
 import { useAppStore } from "@/stores/app-store";
+import { RegionDetailMarquee } from "@/components/regions/region-detail-marquee";
 import { RegionalCustomerSalesKpis } from "@/components/regions/regional-customer-sales-kpis";
 import { RegionalMmsCustomerSalesKpis } from "@/components/regions/regional-mms-customer-sales-kpis";
 import { RegionalAmrConsumptionKpis } from "@/components/regions/regional-amr-consumption-kpis";
@@ -5380,6 +5381,8 @@ export function RegionDetail({ region }: RegionDetailProps) {
           {analytics.netPosition}
         </Badge>
       </div>
+
+      <RegionDetailMarquee region={regionProperCase} dateRange={dateRange} />
 
       {/* Metrics Tabs - Replace Carousel */}
       <Card>

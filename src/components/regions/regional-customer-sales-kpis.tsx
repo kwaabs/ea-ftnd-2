@@ -2,9 +2,8 @@
 
 import { useMemo } from "react"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
-import { Badge } from "@/components/ui/badge"
 import { useZeusBillingAggregate } from "@/hooks/api/use-zeus-billing-aggregate-api"
-import { Zap, Users, TrendingUp, DollarSign } from "lucide-react"
+import { Zap, Users, TrendingUp, DollarSign, Scale } from "lucide-react"
 
 interface RegionalCustomerSalesKpisProps {
   region: string
@@ -27,37 +26,27 @@ export function RegionalCustomerSalesKpis({ region, dateRange }: RegionalCustome
   })
 
   const metrics = useMemo(() => {
-    const bySrc = new Map<string, { kwh: number; billing: number; customerCount: number }>()
     let totalKwh = 0
     let totalBilling = 0
+    let totalDebt = 0
     let totalCustomers = 0
 
     if (aggregateData && Array.isArray(aggregateData)) {
       aggregateData.forEach((item: any) => {
-        const src = item.data_src || "Unknown"
-        const kwh = item.sum_billconsumptionvalue || 0
-        const billing = item.sum_billamount || 0
-        const customers = item.customer_count || 0
-
-        bySrc.set(src, {
-          kwh: (bySrc.get(src)?.kwh || 0) + kwh,
-          billing: (bySrc.get(src)?.billing || 0) + billing,
-          customerCount: (bySrc.get(src)?.customerCount || 0) + customers,
-        })
-
-        totalKwh += kwh
-        totalBilling += billing
-        totalCustomers += customers
+        totalKwh += item.sum_billconsumptionvalue || 0
+        totalBilling += item.sum_billamount || 0
+        totalDebt += item.sum_debtamount || 0
+        totalCustomers += item.customer_count || 0
       })
     }
 
-    return { totalKwh, totalBilling, totalCustomers, bySrc }
+    return { totalKwh, totalBilling, totalDebt, totalCustomers }
   }, [aggregateData])
 
   const avgKwhPerCustomer = metrics.totalCustomers > 0 ? metrics.totalKwh / metrics.totalCustomers : 0
 
   return (
-    <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
+    <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-5">
       {/* Total Consumption */}
       <Card>
         <CardHeader className="pb-2">
@@ -118,28 +107,20 @@ export function RegionalCustomerSalesKpis({ region, dateRange }: RegionalCustome
         </CardContent>
       </Card>
 
-      {/* Per-Source Breakdown Cards */}
-      {metrics.bySrc.size > 0 && Array.from(metrics.bySrc.entries()).map(([src, data]) => (
-        <Card key={src} className="border-l-4 border-l-blue-500">
-          <CardHeader className="pb-2">
-            <CardTitle className="text-sm font-medium text-muted-foreground flex items-center justify-between">
-              <span>{src}</span>
-              <Badge variant="secondary" className="text-xs">{formatNumber(data.customerCount)} customers</Badge>
-            </CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-2">
-            <div>
-              <div className="text-lg font-bold text-blue-600">{formatNumber(data.kwh)}</div>
-              <p className="text-xs text-muted-foreground">kWh</p>
-            </div>
-            <div className="h-px bg-border"></div>
-            <div>
-              <div className="text-sm font-semibold text-green-600">₵{formatNumber(data.billing, 2)}</div>
-              <p className="text-xs text-muted-foreground">Billed</p>
-            </div>
-          </CardContent>
-        </Card>
-      ))}
+      {/* Debt */}
+      <Card>
+        <CardHeader className="pb-2">
+          <CardTitle className="text-sm font-medium text-muted-foreground flex items-center gap-2">
+            <Scale className="h-4 w-4 text-sky-600" />
+            Debt
+          </CardTitle>
+        </CardHeader>
+        <CardContent>
+          <div className="text-2xl font-bold text-sky-600">₵{formatNumber(metrics.totalDebt, 2)}</div>
+          <div className="h-px bg-border my-2"></div>
+          <p className="text-xs text-muted-foreground">Outstanding debt</p>
+        </CardContent>
+      </Card>
     </div>
   )
 }
