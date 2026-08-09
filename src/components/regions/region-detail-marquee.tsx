@@ -59,17 +59,45 @@ export function RegionDetailMarquee({ region, dateRange }: RegionDetailMarqueePr
   const phase = PHASES[phaseIndex]
   const params = { dateFrom: dateRange.start, dateTo: dateRange.end, region }
 
-  const { data: zeusDistrictData, isLoading: zeusLoading } = useZeusBillingAggregate({
+  const {
+    data: zeusDistrictData,
+    isLoading: zeusLoading,
+    isError: zeusIsError,
+    error: zeusError,
+  } = useZeusBillingAggregate({
     ...params,
     groupBy: ["districtname", "metermodeltype"],
   })
-  const { data: mmsDistrictData, isLoading: mmsLoading } = useMmsCustomerSalesAggregate({
+  const {
+    data: mmsDistrictData,
+    isLoading: mmsLoading,
+    isError: mmsIsError,
+    error: mmsError,
+  } = useMmsCustomerSalesAggregate({
     ...params,
     groupBy: "district",
   })
   const { data: amrData, isLoading: amrLoading } = useAmrConsumptionAggregate(params)
 
   const isLoading = zeusLoading || mmsLoading || amrLoading
+
+  // Surface fetch failures distinctly from "genuinely empty" — a silent
+  // `data || []` fallback would otherwise make an errored request look
+  // identical to a successful-but-empty one.
+  useEffect(() => {
+    if (zeusIsError) {
+      console.error(
+        `[RegionDetailMarquee] Zeus district aggregate failed for region="${region}":`,
+        zeusError,
+      )
+    }
+    if (mmsIsError) {
+      console.error(
+        `[RegionDetailMarquee] MMS district aggregate failed for region="${region}":`,
+        mmsError,
+      )
+    }
+  }, [zeusIsError, zeusError, mmsIsError, mmsError, region])
 
   // Per-district sales (Zeus + MMS) and debt (Zeus only).
   const districtRows = useMemo(() => {
@@ -152,7 +180,9 @@ export function RegionDetailMarquee({ region, dateRange }: RegionDetailMarqueePr
           </MarqueeItem>
           {districtSalesRows.length === 0 ? (
             <MarqueeItem className="text-sm font-medium text-muted-foreground">
-              No district sales data for this period.
+              {zeusIsError || mmsIsError
+                ? "District sales failed to load — see console for details."
+                : "No district sales data for this period."}
             </MarqueeItem>
           ) : (
             districtSalesRows.map((row) => (
@@ -182,7 +212,9 @@ export function RegionDetailMarquee({ region, dateRange }: RegionDetailMarqueePr
           </MarqueeItem>
           {districtDebtRows.length === 0 ? (
             <MarqueeItem className="text-sm font-medium text-muted-foreground">
-              No district debt data for this period.
+              {zeusIsError
+                ? "District debt failed to load — see console for details."
+                : "No district debt data for this period."}
             </MarqueeItem>
           ) : (
             districtDebtRows.map((row) => (
