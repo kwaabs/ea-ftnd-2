@@ -194,6 +194,16 @@ export function ZeusPageView({
       meterModelType: serviceType,
     });
 
+  const { data: meterTypeAgg = [], isLoading: meterTypeLoading } =
+    useZeusBillingAggregate({
+      dateFrom: dateRange.start,
+      dateTo: dateRange.end,
+      groupBy: "metermodeltype",
+      region: effectiveRegion,
+      district,
+      meterModelType: serviceType,
+    });
+
   const stats = useMemo(() => {
     const totalKwh = regionAgg.reduce(
       (s, r) => s + (r.sum_billconsumptionvalue || 0),
@@ -548,7 +558,7 @@ export function ZeusPageView({
       </Card>
 
       <Tabs defaultValue="regions">
-        <TabsList className="grid w-full max-w-md grid-cols-3">
+        <TabsList className="grid w-full max-w-xl grid-cols-4">
           <TabsTrigger
             value="regions"
             className="data-[state=active]:text-blue-700"
@@ -566,6 +576,12 @@ export function ZeusPageView({
             className="data-[state=active]:text-blue-700"
           >
             Account type
+          </TabsTrigger>
+          <TabsTrigger
+            value="meter-type"
+            className="data-[state=active]:text-blue-700"
+          >
+            Meter type
           </TabsTrigger>
         </TabsList>
 
@@ -857,6 +873,92 @@ export function ZeusPageView({
                           >
                             <td className="py-2.5 pr-4 font-medium">
                               {item.accounttype || "—"}
+                            </td>
+                            <td className="py-2.5 px-4 text-right font-semibold text-blue-700 tabular-nums">
+                              {formatKwhRaw(item.sum_billconsumptionvalue)}
+                            </td>
+                            <td className="py-2.5 px-4 text-right tabular-nums">
+                              {formatNumber(item.customer_count)}
+                            </td>
+                            <td className="py-2.5 px-4 text-right text-blue-700 tabular-nums">
+                              {formatMoney(item.sum_billamount)}
+                            </td>
+                            <td className="py-2.5 px-4 text-right text-sky-700 tabular-nums">
+                              {formatMoney(item.sum_debtamount)}
+                            </td>
+                            <td className="py-2.5 px-4 text-right text-amber-700 tabular-nums">
+                              {formatMoney(item.sum_amountdue)}
+                            </td>
+                            <td className="py-2.5 pl-4 text-right text-rose-700 tabular-nums">
+                              {formatMoney(item.sum_outstandingamount)}
+                            </td>
+                          </tr>
+                        ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+            </CardContent>
+          </Card>
+        </TabsContent>
+
+        <TabsContent value="meter-type" className="mt-4">
+          <Card>
+            <CardHeader>
+              <CardTitle>Meter type breakdown</CardTitle>
+              <CardDescription>
+                Consumption and billing by meter type
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              {meterTypeLoading ? (
+                <Skeleton className="h-48 w-full" />
+              ) : meterTypeAgg.length === 0 ? (
+                <p className="text-sm text-muted-foreground py-8 text-center">
+                  No meter type data.
+                </p>
+              ) : (
+                <div className="overflow-x-auto">
+                  <table className="w-full text-sm">
+                    <thead>
+                      <tr className="border-b">
+                        <th className="text-left py-2 pr-4 font-medium text-muted-foreground">
+                          Meter type
+                        </th>
+                        <th className="text-right py-2 px-4 font-medium text-blue-700">
+                          Consumption
+                        </th>
+                        <th className="text-right py-2 px-4 font-medium text-muted-foreground">
+                          Customers
+                        </th>
+                        <th className="text-right py-2 px-4 font-medium text-muted-foreground">
+                          Billing
+                        </th>
+                        <th className="text-right py-2 px-4 font-medium text-sky-700">
+                          Debt
+                        </th>
+                        <th className="text-right py-2 px-4 font-medium text-amber-700">
+                          Due
+                        </th>
+                        <th className="text-right py-2 pl-4 font-medium text-rose-700">
+                          Outstanding
+                        </th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {[...meterTypeAgg]
+                        .sort(
+                          (a, b) =>
+                            (b.sum_billconsumptionvalue || 0) -
+                            (a.sum_billconsumptionvalue || 0),
+                        )
+                        .map((item) => (
+                          <tr
+                            key={item.metermodeltype || "unknown"}
+                            className="border-b last:border-0 hover:bg-muted/40"
+                          >
+                            <td className="py-2.5 pr-4 font-medium">
+                              {item.metermodeltype || "—"}
                             </td>
                             <td className="py-2.5 px-4 text-right font-semibold text-blue-700 tabular-nums">
                               {formatKwhRaw(item.sum_billconsumptionvalue)}
