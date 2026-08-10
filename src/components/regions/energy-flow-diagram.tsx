@@ -254,7 +254,6 @@ export function EnergyFlowDiagram({
     const prepaidChildren: DrillRow[] = [];
 
     for (const [src, kwh] of customerBySrc.entries()) {
-        if (!kwh) continue;
         const label = formatCustomerSource(src);
         const row: DrillRow = {
             label,
@@ -288,30 +287,27 @@ export function EnergyFlowDiagram({
     const postpaidTotal = postpaidChildren.reduce((s, r) => s + r.value, 0);
     const prepaidTotal = prepaidChildren.reduce((s, r) => s + r.value, 0);
 
-    const customerRows: DrillRow[] = [];
-    if (postpaidTotal > 0) {
-        customerRows.push({
+    // Always show both Postpaid and Prepaid, even when a source has no data
+    // for the selected period — an absent row reads as "not tracked" rather
+    // than "zero", which is misleading.
+    const customerRows: DrillRow[] = [
+        {
             label: "Postpaid",
             value: postpaidTotal,
             sub: "Zeus billing",
             children: postpaidChildren,
-        });
-    }
-    if (prepaidTotal > 0) {
-        customerRows.push({
+        },
+        {
             label: "Prepaid",
             value: prepaidTotal,
-            sub: "Zeus + MMS",
             children: prepaidChildren,
-        });
-    }
+        },
+    ];
     customerRows.sort((a, b) => b.value - a.value);
 
     const customerSourceSummary = customerSalesLoading
         ? "loading…"
-        : customerRows.length === 0
-          ? "no sources"
-          : customerRows.map((r) => r.label).join(" + ");
+        : customerRows.map((r) => r.label).join(" + ");
 
     const nodeMap: Record<string, NodeConfig> = {
         bsp: { id: "bsp", title: "BSP Import", value: energyFlow.bspImport, color: "emerald", sub: `${bspByStation.size} stations`, rows: bspRows },

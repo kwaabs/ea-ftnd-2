@@ -4015,10 +4015,16 @@ export function RegionDetail({ region }: RegionDetailProps) {
     let total = 0;
 
     const add = (label: string, kwh: number) => {
-      if (!kwh) return;
       bySrc.set(label, (bySrc.get(label) ?? 0) + kwh);
       total += kwh;
     };
+
+    // Always track these three sources, even when one has zero data for the
+    // period, so downstream drill-downs (Energy Flow diagram) can show them
+    // as tracked-but-zero rather than silently absent.
+    add("Zeus (Postpaid)", 0);
+    add("Zeus (Prepaid)", 0);
+    add("MMS (Prepaid)", 0);
 
     // Zeus billing — Postpaid / Prepaid only (meterModelType=AMR rows are dropped)
     if (
