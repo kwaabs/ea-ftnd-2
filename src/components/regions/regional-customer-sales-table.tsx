@@ -14,6 +14,8 @@ import { ExportButton } from "@/components/ui/export-button"
 interface RegionalCustomerSalesTableProps {
   region: string
   dateRange: { start: string; end: string }
+  /** Locks the table to this Zeus meter model type (e.g. "Postpaid" / "Prepaid"). */
+  meterModelType?: string
 }
 
 // "billingPeriod" is a virtual sort key (billingYear*100 + billingMonth) —
@@ -46,7 +48,7 @@ function billingPeriodValue(record: { billingYear?: number; billingMonth?: numbe
   return (record.billingYear || 0) * 100 + (record.billingMonth || 0)
 }
 
-export function RegionalCustomerSalesTable({ region, dateRange }: RegionalCustomerSalesTableProps) {
+export function RegionalCustomerSalesTable({ region, dateRange, meterModelType }: RegionalCustomerSalesTableProps) {
   const [page, setPage] = useState(1)
   const pageSize = 20
   const [searchTerm, setSearchTerm] = useState("")
@@ -57,6 +59,7 @@ export function RegionalCustomerSalesTable({ region, dateRange }: RegionalCustom
     dateFrom: dateRange.start,
     dateTo: dateRange.end,
     region,
+    meterModelType,
     page: 1,
     limit: 1000,
   })
