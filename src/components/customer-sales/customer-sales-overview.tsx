@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo } from "react";
+import { useMemo, useState } from "react";
 import Link from "next/link";
 import {
   Card,
@@ -13,11 +13,15 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Badge } from "@/components/ui/badge";
 import { Marquee, MarqueeItem } from "@/components/ui/marquee";
+import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
 import { useZeusBillingAggregate } from "@/hooks/api/use-zeus-billing-aggregate-api";
 import { useMmsCustomerSalesAggregate } from "@/hooks/api/use-mms-customer-sales-aggregate-api";
 import { useAmrConsumptionAggregate } from "@/hooks/api/use-amr-consumption-aggregate-api";
 import { AmrCustomerSalesDetail } from "@/components/customer-sales/amr-customer-sales-detail";
+import { cn } from "@/lib/utils";
 import {
+  Area,
+  AreaChart,
   BarChart,
   Bar,
   XAxis,
@@ -27,8 +31,11 @@ import {
   ResponsiveContainer,
   Cell,
   Legend,
+  LabelList,
 } from "recharts";
 import {
+  AreaChartIcon,
+  BarChart3,
   Zap,
   Users,
   TrendingUp,
@@ -115,10 +122,45 @@ const AMR_COLORS = [
   "#fff7ed",
 ];
 
+type ChartKind = "bar" | "area";
+
+interface RegionChartRow {
+  regionname?: string;
+  sum_billconsumptionvalue?: number;
+  customer_count?: number;
+  sum_billamount?: number;
+}
+
+/** Renders both the consumption and customer-count figures above a single bar/area point. */
+function DualValueLabel(
+  props: { data: RegionChartRow[] } & Record<string, unknown>,
+) {
+  const x = Number(props.x) || 0;
+  const y = Number(props.y) || 0;
+  const width = Number(props.width) || 0;
+  const index = Number(props.index) || 0;
+  const row = props.data[index];
+  if (!row) return null;
+  const cx = x + width / 2;
+  return (
+    <g>
+      <text x={cx} y={y - 20} textAnchor="middle" className="fill-blue-700 text-[11px] font-semibold">
+        {formatKwh(row.sum_billconsumptionvalue)}
+      </text>
+      <text x={cx} y={y - 7} textAnchor="middle" className="fill-purple-700 text-[10px] font-medium">
+        {formatNumber(row.customer_count)} cust.
+      </text>
+    </g>
+  );
+}
+
 export function CustomerSalesOverview({
   dateRange,
 }: CustomerSalesOverviewProps) {
   const params = { dateFrom: dateRange.start, dateTo: dateRange.end };
+
+  const [postpaidChartKind, setPostpaidChartKind] = useState<ChartKind>("bar");
+  const [selectedPostpaidRegion, setSelectedPostpaidRegion] = useState<string | null>(null);
 
   // Regional Zeus (for charts / region tables)
   const { data: zeusData, isLoading: zeusLoading } =
@@ -147,6 +189,17 @@ export function CustomerSalesOverview({
     dateFrom: dateRange.start,
     dateTo: dateRange.end,
   });
+
+  // District drill-down for the Postpaid/Zeus combined chart — only fetched
+  // once a region is clicked.
+  const { data: postpaidDistrictData, isLoading: postpaidDistrictLoading } =
+    useZeusBillingAggregate({
+      ...params,
+      groupBy: "districtname",
+      region: selectedPostpaidRegion || undefined,
+      meterModelType: "Postpaid",
+      enabled: Boolean(selectedPostpaidRegion),
+    });
 
   const zeusRaw = zeusData || [];
   const zeusNationalRaw = zeusNationalData || [];
@@ -955,23 +1008,45 @@ export function CustomerSalesOverview({
               </Card>
             </div>
 
-            {/* Zeus charts */}
-            <div className="grid gap-4 md:grid-cols-2">
-              <Card>
-                <CardHeader>
-                  <CardTitle>Consumption by Region (Zeus)</CardTitle>
+            {/* Zeus chart — consumption & customers together, click a
+                region to drill down into its districts below. */}
+            <Card>
+              <CardHeader className="flex flex-row items-start justify-between gap-3 flex-wrap">
+                <div>
+                  <CardTitle>Consumption &amp; customers by region (Zeus)</CardTitle>
                   <CardDescription>
-                    Total billed kWh per region — postpaid
+                    Billed kWh and postpaid accounts per region — click a region (bar chart or table row below) to drill into districts
                   </CardDescription>
-                </CardHeader>
-                <CardContent>
-                  {zeusLoading ? (
-                    <Skeleton className="h-64 w-full" />
-                  ) : (
-                    <ResponsiveContainer width="100%" height={280}>
+                </div>
+                <ToggleGroup
+                  type="single"
+                  value={postpaidChartKind}
+                  onValueChange={(v) => {
+                    if (v) setPostpaidChartKind(v as ChartKind);
+                  }}
+                  variant="outline"
+                >
+                  <ToggleGroupItem value="bar" aria-label="Bar chart">
+                    <BarChart3 className="h-4 w-4" />
+                  </ToggleGroupItem>
+                  <ToggleGroupItem value="area" aria-label="Area chart">
+                    <AreaChartIcon className="h-4 w-4" />
+                  </ToggleGroupItem>
+                </ToggleGroup>
+              </CardHeader>
+              <CardContent>
+                {zeusLoading ? (
+                  <Skeleton className="h-[320px] w-full" />
+                ) : zeusByConsumption.length === 0 ? (
+                  <p className="text-sm text-muted-foreground py-12 text-center">
+                    No Zeus aggregate data for this period.
+                  </p>
+                ) : (
+                  <ResponsiveContainer width="100%" height={320}>
+                    {postpaidChartKind === "bar" ? (
                       <BarChart
                         data={zeusByConsumption}
-                        margin={{ top: 8, right: 8, left: 8, bottom: 80 }}
+                        margin={{ top: 40, right: 8, left: 8, bottom: 80 }}
                       >
                         <CartesianGrid strokeDasharray="3 3" vertical={false} />
                         <XAxis
@@ -982,54 +1057,49 @@ export function CustomerSalesOverview({
                           interval={0}
                         />
                         <YAxis
-                          tickFormatter={(v) =>
-                            `${(v / 1_000_000).toFixed(0)}M`
-                          }
+                          tickFormatter={(v) => `${(v / 1_000_000).toFixed(0)}M`}
                           tick={{ fontSize: 11 }}
                         />
                         <Tooltip
-                          formatter={(v: number) => [
-                            formatKwhRaw(v),
-                            "Consumption",
-                          ]}
+                          formatter={(v: number, name: string) =>
+                            name === "customer_count"
+                              ? [formatNumber(v), "Customers"]
+                              : [formatKwhRaw(v), "Consumption"]
+                          }
                         />
                         <Bar
                           dataKey="sum_billconsumptionvalue"
                           radius={[6, 6, 0, 0]}
+                          cursor="pointer"
+                          isAnimationActive={false}
+                          onClick={(data: { regionname?: string }) => {
+                            if (data?.regionname) {
+                              setSelectedPostpaidRegion((prev) =>
+                                prev === data.regionname ? null : data.regionname!,
+                              );
+                            }
+                          }}
                         >
-                          {zeusByConsumption.map((_, i) => (
+                          <LabelList
+                            dataKey="sum_billconsumptionvalue"
+                            content={(props) => <DualValueLabel {...props} data={zeusByConsumption} />}
+                          />
+                          {zeusByConsumption.map((row, i) => (
                             <Cell
-                              key={i}
-                              fill={ZEUS_COLORS[i % ZEUS_COLORS.length]}
+                              key={row.regionname}
+                              fill={
+                                selectedPostpaidRegion === row.regionname
+                                  ? "#1e3a8a"
+                                  : ZEUS_COLORS[i % ZEUS_COLORS.length]
+                              }
                             />
                           ))}
                         </Bar>
                       </BarChart>
-                    </ResponsiveContainer>
-                  )}
-                </CardContent>
-              </Card>
-
-              <Card>
-                <CardHeader>
-                  <CardTitle>Customers by Region (Zeus)</CardTitle>
-                  <CardDescription>
-                    Number of postpaid accounts per region
-                  </CardDescription>
-                </CardHeader>
-                <CardContent>
-                  {zeusLoading ? (
-                    <Skeleton className="h-64 w-full" />
-                  ) : (
-                    <ResponsiveContainer width="100%" height={280}>
-                      <BarChart
-                        data={[...zeusItems]
-                          .sort(
-                            (a, b) =>
-                              (b.customer_count || 0) - (a.customer_count || 0),
-                          )
-                          .slice(0, 12)}
-                        margin={{ top: 8, right: 8, left: 8, bottom: 80 }}
+                    ) : (
+                      <AreaChart
+                        data={zeusByConsumption}
+                        margin={{ top: 40, right: 8, left: 8, bottom: 80 }}
                       >
                         <CartesianGrid strokeDasharray="3 3" vertical={false} />
                         <XAxis
@@ -1040,26 +1110,114 @@ export function CustomerSalesOverview({
                           interval={0}
                         />
                         <YAxis
-                          tickFormatter={(v) => v.toLocaleString()}
+                          tickFormatter={(v) => `${(v / 1_000_000).toFixed(0)}M`}
                           tick={{ fontSize: 11 }}
                         />
                         <Tooltip
-                          formatter={(v: number) => [
-                            formatNumber(v),
-                            "Customers",
-                          ]}
+                          formatter={(v: number, name: string) =>
+                            name === "customer_count"
+                              ? [formatNumber(v), "Customers"]
+                              : [formatKwhRaw(v), "Consumption"]
+                          }
                         />
-                        <Bar
-                          dataKey="customer_count"
-                          fill="#8b5cf6"
-                          radius={[6, 6, 0, 0]}
-                        />
-                      </BarChart>
-                    </ResponsiveContainer>
+                        <Area
+                          type="monotone"
+                          dataKey="sum_billconsumptionvalue"
+                          stroke="#1d4ed8"
+                          fill="#1d4ed8"
+                          fillOpacity={0.25}
+                          strokeWidth={2}
+                          isAnimationActive={false}
+                          dot={{ r: 4, fill: "#1d4ed8" }}
+                        >
+                          <LabelList
+                            dataKey="sum_billconsumptionvalue"
+                            content={(props) => <DualValueLabel {...props} data={zeusByConsumption} />}
+                          />
+                        </Area>
+                      </AreaChart>
+                    )}
+                  </ResponsiveContainer>
+                )}
+              </CardContent>
+            </Card>
+
+            {selectedPostpaidRegion && (
+              <Card>
+                <CardHeader className="flex flex-row items-center justify-between gap-2">
+                  <div>
+                    <CardTitle>District breakdown — {selectedPostpaidRegion}</CardTitle>
+                    <CardDescription>
+                      Postpaid consumption and billing by district
+                    </CardDescription>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => setSelectedPostpaidRegion(null)}
+                    className="text-xs text-blue-700 hover:underline"
+                  >
+                    Clear
+                  </button>
+                </CardHeader>
+                <CardContent>
+                  {postpaidDistrictLoading ? (
+                    <Skeleton className="h-48 w-full" />
+                  ) : !postpaidDistrictData || postpaidDistrictData.length === 0 ? (
+                    <p className="text-sm text-muted-foreground py-8 text-center">
+                      No district data for {selectedPostpaidRegion}.
+                    </p>
+                  ) : (
+                    <div className="overflow-x-auto">
+                      <table className="w-full text-sm">
+                        <thead>
+                          <tr className="border-b">
+                            <th className="text-left py-2 pr-4 font-medium text-muted-foreground">
+                              District
+                            </th>
+                            <th className="text-right py-2 px-4 font-medium text-blue-700">
+                              Consumption (kWh)
+                            </th>
+                            <th className="text-right py-2 px-4 font-medium text-muted-foreground">
+                              Customers
+                            </th>
+                            <th className="text-right py-2 pl-4 font-medium text-muted-foreground">
+                              Billing
+                            </th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {[...postpaidDistrictData]
+                            .sort(
+                              (a, b) =>
+                                (b.sum_billconsumptionvalue || 0) -
+                                (a.sum_billconsumptionvalue || 0),
+                            )
+                            .map((item) => (
+                              <tr
+                                key={item.districtname || "unknown"}
+                                className="border-b last:border-0 hover:bg-muted/40"
+                              >
+                                <td className="py-2.5 pr-4 font-medium">
+                                  {item.districtname || "—"}
+                                </td>
+                                <td className="py-2.5 px-4 text-right font-semibold text-blue-700 tabular-nums">
+                                  {formatKwhRaw(item.sum_billconsumptionvalue)}
+                                </td>
+                                <td className="py-2.5 px-4 text-right tabular-nums">
+                                  {formatNumber(item.customer_count)}
+                                </td>
+                                <td className="py-2.5 pl-4 text-right text-green-700 tabular-nums">
+                                  {formatMoney(item.sum_billamount)}
+                                </td>
+                              </tr>
+                            ))}
+                        </tbody>
+                      </table>
+                    </div>
                   )}
                 </CardContent>
               </Card>
-            </div>
+            )}
 
             {/* Zeus region breakdown table */}
             <Card>
@@ -1116,10 +1274,21 @@ export function CustomerSalesOverview({
                                 ? (item.sum_billconsumptionvalue || 0) /
                                   item.customer_count
                                 : 0;
+                            const isSelected = selectedPostpaidRegion === item.regionname;
                             return (
                               <tr
                                 key={idx}
-                                className="border-b last:border-0 hover:bg-muted/40"
+                                onClick={() => {
+                                  if (item.regionname) {
+                                    setSelectedPostpaidRegion((prev) =>
+                                      prev === item.regionname ? null : item.regionname!,
+                                    );
+                                  }
+                                }}
+                                className={cn(
+                                  "border-b last:border-0 hover:bg-muted/40 cursor-pointer",
+                                  isSelected && "bg-blue-50",
+                                )}
                               >
                                 <td className="py-2.5 pr-4 font-medium">
                                   {item.regionname}
