@@ -3690,6 +3690,7 @@ import { useMeterStatusSummary } from "@/hooks/api/use-meter-status-api";
 import { useExpressFeederAggregate } from "@/hooks/api/use-express-feeder-api";
 import { useAppStore } from "@/stores/app-store";
 import { RegionDetailMarquee } from "@/components/regions/region-detail-marquee";
+import { useResolvedRegionName } from "@/hooks/use-resolved-region-name";
 import { RegionalCustomerSalesKpis } from "@/components/regions/regional-customer-sales-kpis";
 import { RegionalMmsCustomerSalesKpis } from "@/components/regions/regional-mms-customer-sales-kpis";
 import { RegionalAmrConsumptionKpis } from "@/components/regions/regional-amr-consumption-kpis";
@@ -3829,6 +3830,29 @@ export function RegionDetail({ region }: RegionDetailProps) {
       end: formatDateToString(filters.dateRange?.end, defaultEnd),
     };
   }, [filters.dateRange]);
+
+  // Zeus/MMS each maintain their own regionname column, independent of the
+  // meter-infrastructure region naming this page's `region` comes from —
+  // resolve to whichever real value each source actually has so Zeus/MMS
+  // widgets below don't silently return nothing on a naming mismatch.
+  const { data: zeusRegionNamesData } = useZeusBillingAggregate({
+    dateFrom: dateRange.start,
+    dateTo: dateRange.end,
+    groupBy: "regionname",
+  });
+  const { data: mmsRegionNamesData } = useMmsCustomerSalesAggregate({
+    dateFrom: dateRange.start,
+    dateTo: dateRange.end,
+    groupBy: "region",
+  });
+  const zeusRegion = useResolvedRegionName(
+    regionProperCase,
+    (zeusRegionNamesData || []).map((r) => r.regionname),
+  );
+  const mmsRegion = useResolvedRegionName(
+    regionProperCase,
+    (mmsRegionNamesData || []).map((r) => r.region),
+  );
 
   // Params for consumption aggregate
   const params = {
@@ -5382,7 +5406,12 @@ export function RegionDetail({ region }: RegionDetailProps) {
         </Badge>
       </div>
 
-      <RegionDetailMarquee region={regionProperCase} dateRange={dateRange} />
+      <RegionDetailMarquee
+        region={regionProperCase}
+        zeusRegion={zeusRegion}
+        mmsRegion={mmsRegion}
+        dateRange={dateRange}
+      />
 
       {/* Metrics Tabs - Replace Carousel */}
       <Card>
@@ -6131,7 +6160,7 @@ export function RegionDetail({ region }: RegionDetailProps) {
                   Zeus — Postpaid Meters
                 </span>
                 <RegionalCustomerSalesKpis
-                  region={regionProperCase}
+                  region={zeusRegion}
                   dateRange={dateRange}
                 />
               </div>
@@ -6142,7 +6171,7 @@ export function RegionDetail({ region }: RegionDetailProps) {
                   MMS — Prepaid Meters
                 </span>
                 <RegionalMmsCustomerSalesKpis
-                  region={regionProperCase}
+                  region={mmsRegion}
                   dateRange={dateRange}
                 />
               </div>
@@ -6160,7 +6189,7 @@ export function RegionDetail({ region }: RegionDetailProps) {
 
               {/* Consumption Trend Chart (Zeus) */}
               <RegionalCustomerSalesTrend
-                region={regionProperCase}
+                region={zeusRegion}
                 dateRange={dateRange}
               />
             </TabsContent>
@@ -7993,29 +8022,33 @@ export function RegionDetail({ region }: RegionDetailProps) {
         </Card>
       )}
 
-      {/* Customer Sales Tables — Zeus (postpaid) + MMS (prepaid) + AMR (daily) */}
-      <Tabs defaultValue="zeus">
-        <TabsList className="grid w-full grid-cols-3 max-w-md mb-4">
-          <TabsTrigger value="zeus">Zeus — Postpaid</TabsTrigger>
-          <TabsTrigger value="mms">MMS — Prepaid</TabsTrigger>
-          <TabsTrigger value="amr">AMR — Daily</TabsTrigger>
+      {/* Customer Sales Tables — Postpaid (Zeus + AMR) / Prepaid (Zeus + MMS),
+          same grouping convention as the /customer-sales Postpaid/Prepaid hubs. */}
+      <Tabs defaultValue="postpaid">
+        <TabsList className="grid w-full grid-cols-2 max-w-md mb-4">
+          <TabsTrigger value="postpaid">Postpaid</TabsTrigger>
+          <TabsTrigger value="prepaid">Prepaid</TabsTrigger>
         </TabsList>
-        <TabsContent value="zeus">
+        <TabsContent value="postpaid" className="space-y-6">
           <RegionalCustomerSalesTable
-            region={regionProperCase}
+            region={zeusRegion}
             dateRange={dateRange}
+            meterModelType="Postpaid"
           />
-        </TabsContent>
-        <TabsContent value="mms">
-          <MmsCustomerSalesDetail
-            dateRange={dateRange}
-            region={regionProperCase}
-          />
-        </TabsContent>
-        <TabsContent value="amr">
           <AmrCustomerSalesDetail
             dateRange={dateRange}
             region={regionProperCase}
+          />
+        </TabsContent>
+        <TabsContent value="prepaid" className="space-y-6">
+          <RegionalCustomerSalesTable
+            region={zeusRegion}
+            dateRange={dateRange}
+            meterModelType="Prepaid"
+          />
+          <MmsCustomerSalesDetail
+            dateRange={dateRange}
+            region={mmsRegion}
           />
         </TabsContent>
       </Tabs>

@@ -17,7 +17,13 @@ const PHASE_LABELS: Record<Phase, string> = {
 }
 
 interface RegionDetailMarqueeProps {
+  /** Display label only — the region name as this page knows it. */
   region: string
+  /** Zeus's own regionname value that actually matches this region (may
+   * differ from `region` — see useResolvedRegionName). Defaults to `region`. */
+  zeusRegion?: string
+  /** MMS's own region value that actually matches this region. Defaults to `region`. */
+  mmsRegion?: string
   dateRange: { start: string; end: string }
 }
 
@@ -46,7 +52,12 @@ function normalizeType(raw?: string | null): "Postpaid" | "Prepaid" | "Other" {
  * carries debt/due/outstanding); sales combine Zeus + MMS (+ AMR for the
  * region total — AMR has no per-district breakdown available).
  */
-export function RegionDetailMarquee({ region, dateRange }: RegionDetailMarqueeProps) {
+export function RegionDetailMarquee({
+  region,
+  zeusRegion,
+  mmsRegion,
+  dateRange,
+}: RegionDetailMarqueeProps) {
   const [phaseIndex, setPhaseIndex] = useState(0)
 
   useEffect(() => {
@@ -57,7 +68,7 @@ export function RegionDetailMarquee({ region, dateRange }: RegionDetailMarqueePr
   }, [])
 
   const phase = PHASES[phaseIndex]
-  const params = { dateFrom: dateRange.start, dateTo: dateRange.end, region }
+  const dateParams = { dateFrom: dateRange.start, dateTo: dateRange.end }
 
   const {
     data: zeusDistrictData,
@@ -65,7 +76,8 @@ export function RegionDetailMarquee({ region, dateRange }: RegionDetailMarqueePr
     isError: zeusIsError,
     error: zeusError,
   } = useZeusBillingAggregate({
-    ...params,
+    ...dateParams,
+    region: zeusRegion ?? region,
     groupBy: ["districtname", "metermodeltype"],
   })
   const {
@@ -74,10 +86,14 @@ export function RegionDetailMarquee({ region, dateRange }: RegionDetailMarqueePr
     isError: mmsIsError,
     error: mmsError,
   } = useMmsCustomerSalesAggregate({
-    ...params,
+    ...dateParams,
+    region: mmsRegion ?? region,
     groupBy: "district",
   })
-  const { data: amrData, isLoading: amrLoading } = useAmrConsumptionAggregate(params)
+  const { data: amrData, isLoading: amrLoading } = useAmrConsumptionAggregate({
+    ...dateParams,
+    region,
+  })
 
   const isLoading = zeusLoading || mmsLoading || amrLoading
 
