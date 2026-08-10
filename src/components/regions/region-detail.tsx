@@ -3681,7 +3681,6 @@ import { useConsumptionAggregate } from "@/hooks/api/use-consumption-aggregate-a
 import { useRegionalBoundaryDaily } from "@/hooks/api/use-regional-boundary-api";
 import { useZeusBillingAggregate } from "@/hooks/api/use-zeus-billing-aggregate-api";
 import { useMmsCustomerSalesAggregate } from "@/hooks/api/use-mms-customer-sales-aggregate-api";
-import { useAmrConsumptionAggregate } from "@/hooks/api/use-amr-consumption-aggregate-api";
 import { useBspDaily } from "@/hooks/api/use-bsp-api";
 import { useDtxDaily, useDtxAggregate } from "@/hooks/api/use-dtx-api";
 import { useDistrictsByRegion } from "@/hooks/api/use-districts-geometry-api";
@@ -3693,11 +3692,9 @@ import { RegionDetailMarquee } from "@/components/regions/region-detail-marquee"
 import { useResolvedRegionName } from "@/hooks/use-resolved-region-name";
 import { RegionalCustomerSalesKpis } from "@/components/regions/regional-customer-sales-kpis";
 import { RegionalMmsCustomerSalesKpis } from "@/components/regions/regional-mms-customer-sales-kpis";
-import { RegionalAmrConsumptionKpis } from "@/components/regions/regional-amr-consumption-kpis";
 import { RegionalCustomerSalesTrend } from "@/components/regions/regional-customer-sales-trend";
 import { RegionalCustomerSalesTable } from "@/components/regions/regional-customer-sales-table";
 import { MmsCustomerSalesDetail } from "@/components/customer-sales/mms-customer-sales-detail";
-import { AmrCustomerSalesDetail } from "@/components/customer-sales/amr-customer-sales-detail";
 import { EnergyFlowDiagram } from "@/components/regions/energy-flow-diagram";
 import { formatNumber, toProperCase } from "@/lib/utils";
 import { ExportButton } from "@/components/ui/export-button";
@@ -3980,12 +3977,13 @@ export function RegionDetail({ region }: RegionDetailProps) {
     });
 
   // Fetch customer consumption for this region — split by Zeus meterModelType
-  // (Postpaid / Prepaid / AMR) so prepaid is not hidden under "Postpaid".
+  // (Postpaid / Prepaid only; AMR billing rows are excluded from this page).
   const customerConsAggResult = useZeusBillingAggregate({
     dateFrom: dateRange.start,
     dateTo: dateRange.end,
     region: regionProperCase,
     groupBy: "metermodeltype",
+    meterModelType: "Postpaid,Prepaid",
   });
   const customerConsumptionAggData = customerConsAggResult.data;
 
@@ -4006,37 +4004,12 @@ export function RegionDetail({ region }: RegionDetailProps) {
     );
   }, [mmsRegionData, regionProperCase]);
 
-  // Fetch AMR aggregate — all regions, filter client-side
-  const { data: amrData, isLoading: amrSalesLoading } =
-    useAmrConsumptionAggregate({
-      dateFrom: dateRange.start,
-      dateTo: dateRange.end,
-    });
-
-  // AMR by SLT type for energy-flow Customer Sales drill-down
-  const { data: amrSltData, isLoading: amrSltLoading } =
-    useAmrConsumptionAggregate({
-      dateFrom: dateRange.start,
-      dateTo: dateRange.end,
-      region: regionProperCase,
-      group: "slt_type",
-    });
-
   const customerSalesLoading =
-    customerConsAggResult.isLoading ||
-    mmsSalesLoading ||
-    amrSalesLoading ||
-    amrSltLoading;
+    customerConsAggResult.isLoading || mmsSalesLoading;
 
-  const amrAggData = useMemo(() => {
-    if (!amrData || !Array.isArray(amrData)) return [];
-    return amrData.filter(
-      (item: any) =>
-        (item.region || "").toLowerCase() === regionProperCase.toLowerCase(),
-    );
-  }, [amrData, regionProperCase]);
-
-  // Compute customer sales totals broken down by source — Zeus (by service type) + MMS + daily AMR
+  // Compute customer sales totals broken down by source — Zeus (Postpaid /
+  // Prepaid billing) + MMS daily. AMR (daily meters and Zeus's own
+  // metermodeltype=AMR billing rows) is excluded from this page entirely.
   const customerSalesMetrics = useMemo(() => {
     const bySrc = new Map<string, number>();
     let total = 0;
@@ -4047,7 +4020,7 @@ export function RegionDetail({ region }: RegionDetailProps) {
       total += kwh;
     };
 
-    // Zeus billing — Postpaid / Prepaid / AMR (meterModelType), not a single Postpaid bucket
+    // Zeus billing — Postpaid / Prepaid only (meterModelType=AMR rows are dropped)
     if (
       customerConsumptionAggData &&
       Array.isArray(customerConsumptionAggData)
@@ -4059,13 +4032,6 @@ export function RegionDetail({ region }: RegionDetailProps) {
           .toLowerCase();
         if (t === "postpaid") add("Zeus (Postpaid)", kwh);
         else if (t === "prepaid") add("Zeus (Prepaid)", kwh);
-        else if (t === "amr") add("Zeus (AMR)", kwh);
-        else if (kwh > 0) {
-          const label = item.metermodeltype?.trim()
-            ? `Zeus (${item.metermodeltype.trim()})`
-            : "Zeus";
-          add(label, kwh);
-        }
       });
     }
 
@@ -4074,38 +4040,8 @@ export function RegionDetail({ region }: RegionDetailProps) {
     const mmsKwh = mmsRow ? mmsRow.sum_last_month_kwh_read || 0 : 0;
     add("MMS (Prepaid)", mmsKwh);
 
-    // AMR daily meters — aggregate import + export kWh
-    const amrImportKwh = amrAggData
-      .filter((i: any) => i.system_name === "import_kwh")
-      .reduce((s: number, i: any) => s + (i.total_consumption || 0), 0);
-    const amrExportKwh = amrAggData
-      .filter((i: any) => i.system_name === "export_kwh")
-      .reduce((s: number, i: any) => s + (i.total_consumption || 0), 0);
-    add("AMR", amrImportKwh + amrExportKwh);
-
-    // SLT breakdown under AMR (same import+export basis as total)
-    const amrBySltType = new Map<string, number>();
-    for (const row of amrSltData || []) {
-      if (
-        (row.region || "").toLowerCase() !== regionProperCase.toLowerCase()
-      ) {
-        continue;
-      }
-      const key = (row.slt_type || "").trim() || "Unknown";
-      amrBySltType.set(
-        key,
-        (amrBySltType.get(key) || 0) + (row.total_consumption || 0),
-      );
-    }
-
-    return { total, bySrc, amrBySltType };
-  }, [
-    customerConsumptionAggData,
-    mmsAggData,
-    amrAggData,
-    amrSltData,
-    regionProperCase,
-  ]);
+    return { total, bySrc };
+  }, [customerConsumptionAggData, mmsAggData]);
 
   // Fetch meter health status for REGIONAL_BOUNDARY — only when this region actually has boundary points.
   // If boundaryMeteringPoints is empty and we fire the query, the API returns ALL boundary meters globally,
@@ -6162,6 +6098,7 @@ export function RegionDetail({ region }: RegionDetailProps) {
                 <RegionalCustomerSalesKpis
                   region={zeusRegion}
                   dateRange={dateRange}
+                  meterModelType="Postpaid"
                 />
               </div>
 
@@ -6172,17 +6109,6 @@ export function RegionDetail({ region }: RegionDetailProps) {
                 </span>
                 <RegionalMmsCustomerSalesKpis
                   region={mmsRegion}
-                  dateRange={dateRange}
-                />
-              </div>
-
-              {/* AMR — Daily Metering */}
-              <div className="space-y-3">
-                <span className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
-                  AMR — Daily Metering
-                </span>
-                <RegionalAmrConsumptionKpis
-                  region={regionProperCase}
                   dateRange={dateRange}
                 />
               </div>
@@ -6232,7 +6158,6 @@ export function RegionDetail({ region }: RegionDetailProps) {
               expressInbound={expressFeederMetrics.diagramInbound}
               expressOutbound={expressFeederMetrics.diagramOutbound}
               customerBySrc={customerSalesMetrics.bySrc}
-              amrBySltType={customerSalesMetrics.amrBySltType}
               customerSalesLoading={customerSalesLoading}
             />
           </div>
@@ -8022,8 +7947,7 @@ export function RegionDetail({ region }: RegionDetailProps) {
         </Card>
       )}
 
-      {/* Customer Sales Tables — Postpaid (Zeus + AMR) / Prepaid (Zeus + MMS),
-          same grouping convention as the /customer-sales Postpaid/Prepaid hubs. */}
+      {/* Customer Sales Tables — Postpaid (Zeus billing) / Prepaid (Zeus + MMS). */}
       <Tabs defaultValue="postpaid">
         <TabsList className="grid w-full grid-cols-2 max-w-md mb-4">
           <TabsTrigger value="postpaid">Postpaid</TabsTrigger>
@@ -8034,10 +7958,6 @@ export function RegionDetail({ region }: RegionDetailProps) {
             region={zeusRegion}
             dateRange={dateRange}
             meterModelType="Postpaid"
-          />
-          <AmrCustomerSalesDetail
-            dateRange={dateRange}
-            region={regionProperCase}
           />
         </TabsContent>
         <TabsContent value="prepaid" className="space-y-6">

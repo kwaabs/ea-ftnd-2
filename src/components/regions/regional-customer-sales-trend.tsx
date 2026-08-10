@@ -24,6 +24,7 @@ export function RegionalCustomerSalesTrend({ region, dateRange }: RegionalCustom
     dateFrom: dateRange.start,
     dateTo: dateRange.end,
     region,
+    meterModelType: "Postpaid,Prepaid",
     limit: 10000,
     page: 1,
   })

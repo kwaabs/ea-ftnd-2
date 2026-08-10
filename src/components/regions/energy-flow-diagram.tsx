@@ -30,7 +30,7 @@ interface DrillRow {
     value: number;
     href?: string;
     precise?: boolean;
-    /** Nested breakdown (e.g. SLT types under AMR) */
+    /** Nested breakdown (e.g. sources under Postpaid/Prepaid) */
     children?: DrillRow[];
 }
 
@@ -80,9 +80,7 @@ interface EnergyFlowDiagramProps {
     expressInbound: FeederLike[];
     expressOutbound: FeederLike[];
     customerBySrc: Map<string, number>;
-    /** When AMR is present, further drill into SLT type under the AMR row */
-    amrBySltType?: Map<string, number>;
-    /** True while Zeus / MMS / AMR sales aggregates are still fetching */
+    /** True while Zeus / MMS sales aggregates are still fetching */
     customerSalesLoading?: boolean;
 }
 
@@ -140,7 +138,6 @@ export function EnergyFlowDiagram({
     expressInbound,
     expressOutbound,
     customerBySrc,
-    amrBySltType,
     customerSalesLoading = false,
 }: EnergyFlowDiagramProps) {
     const containerRef = useRef<HTMLDivElement>(null);
@@ -241,65 +238,38 @@ export function EnergyFlowDiagram({
             href: `/express-feeders/${encodeURIComponent(f.feederName)}`,
         }));
 
-    const amrSltChildren: DrillRow[] = Array.from(amrBySltType?.entries() || [])
-        .filter(([, kwh]) => kwh > 0)
-        .sort((a, b) => b[1] - a[1])
-        .map(([slt, kwh]) => ({
-            label: slt.replace(/_/g, " "),
-            value: kwh,
-        }));
-
     const formatCustomerSource = (src: string) => {
         const key = src.trim().toLowerCase();
-        if (key === "amr" || (key.startsWith("amr") && !key.includes("zeus")))
-            return "AMR";
         if (key.includes("zeus") && key.includes("prepaid"))
             return "Zeus (Prepaid)";
         if (key.includes("zeus") && key.includes("postpaid"))
             return "Zeus (Postpaid)";
-        if (key.includes("zeus") && key.includes("amr")) return "Zeus (AMR)";
         if (key.includes("zeus")) return src.trim() || "Zeus";
         if (key === "mms" || key.includes("mms")) return "MMS (Prepaid)";
         return src;
     };
 
-    // Same IA as Customer Consumption overview:
-    // Postpaid = Zeus Postpaid + Zeus AMR + daily AMR
-    // Prepaid  = Zeus Prepaid + MMS
+    // Postpaid = Zeus Postpaid (billing). Prepaid = Zeus Prepaid + MMS daily.
     const postpaidChildren: DrillRow[] = [];
     const prepaidChildren: DrillRow[] = [];
 
     for (const [src, kwh] of customerBySrc.entries()) {
         if (!kwh) continue;
         const label = formatCustomerSource(src);
-        const isDailyAmr = label === "AMR";
         const row: DrillRow = {
             label,
             value: kwh,
-            sub: isDailyAmr
-                ? amrSltChildren.length > 0
-                    ? `${amrSltChildren.length} SLT type${amrSltChildren.length !== 1 ? "s" : ""}`
-                    : "Daily AMR meters"
-                : label === "Zeus (Postpaid)"
-                  ? "Postpaid billing"
-                  : label === "Zeus (Prepaid)"
-                    ? "Prepaid billing"
-                    : label === "Zeus (AMR)"
-                      ? "AMR billing"
+            sub:
+                label === "Zeus (Postpaid)"
+                    ? "Postpaid billing"
+                    : label === "Zeus (Prepaid)"
+                      ? "Prepaid billing"
                       : label.startsWith("MMS")
                         ? "Prepaid sales"
                         : undefined,
-            children:
-                isDailyAmr && amrSltChildren.length > 0
-                    ? amrSltChildren
-                    : undefined,
         };
 
-        if (
-            label === "Zeus (Postpaid)" ||
-            label === "Zeus (AMR)" ||
-            label === "AMR"
-        ) {
+        if (label === "Zeus (Postpaid)") {
             postpaidChildren.push(row);
         } else if (
             label === "Zeus (Prepaid)" ||
@@ -323,7 +293,7 @@ export function EnergyFlowDiagram({
         customerRows.push({
             label: "Postpaid",
             value: postpaidTotal,
-            sub: "Zeus + daily AMR",
+            sub: "Zeus billing",
             children: postpaidChildren,
         });
     }
@@ -578,7 +548,7 @@ export function EnergyFlowDiagram({
                                     Loading sales…
                                 </span>
                                 <div className="text-[11px] text-muted-foreground">
-                                    Zeus · MMS · AMR
+                                    Zeus · MMS
                                 </div>
                             </div>
                         ) : (
@@ -767,11 +737,10 @@ export function EnergyFlowDiagram({
                             <span className="font-medium text-foreground">Distribution — Customer Sales</span>
                             <p className="mt-0.5 leading-relaxed">
                                 Energy billed or metered to customers, drawn from DTX distribution.
-                                Expand Customer Sales for Postpaid (Zeus Postpaid / Zeus AMR / daily
-                                AMR) and Prepaid (Zeus Prepaid / MMS), then drill into each source;
-                                daily AMR further splits by SLT type. The gap between DTX
-                                Distribution and Customer Sales reflects unbilled energy and system
-                                losses.
+                                Expand Customer Sales for Postpaid (Zeus Postpaid billing) and
+                                Prepaid (Zeus Prepaid / MMS), then drill into each source. The gap
+                                between DTX Distribution and Customer Sales reflects unbilled
+                                energy and system losses.
                             </p>
                         </div>
                         <div>
