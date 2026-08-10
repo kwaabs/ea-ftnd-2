@@ -194,9 +194,10 @@ export function ZeusPageView({
       meterModelType: serviceType,
     });
 
-  // Deliberately not locked to `serviceType` — this tab exists to show the
-  // real mix of meter types (e.g. Postpaid/Prepaid/AMR) rather than trivially
-  // reflecting whichever single type this hub page is scoped to.
+  // Locked to `serviceType` like every other breakdown on this page — a
+  // Postpaid/Prepaid hub must never surface another meter type's figures,
+  // even as a summary row. AMR-tagged Zeus records live under the AMR tab
+  // instead (see AmrPageView), Prepaid under its own hub.
   const { data: meterTypeAgg = [], isLoading: meterTypeLoading } =
     useZeusBillingAggregate({
       dateFrom: dateRange.start,
@@ -204,6 +205,7 @@ export function ZeusPageView({
       groupBy: "metermodeltype",
       region: effectiveRegion,
       district,
+      meterModelType: serviceType,
     });
 
   const stats = useMemo(() => {
