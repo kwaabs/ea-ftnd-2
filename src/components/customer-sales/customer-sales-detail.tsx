@@ -414,9 +414,9 @@ export function CustomerSalesDetail({
                 </div>
 
                 <div className={`border rounded-lg overflow-hidden ${isFetching && !isLoading ? "opacity-70" : ""}`}>
-                    <div className="overflow-x-auto">
+                    <div className="overflow-x-auto max-h-[500px] overflow-y-auto">
                         <Table>
-                            <TableHeader>
+                            <TableHeader className="sticky top-0 z-10 bg-background">
                                 <TableRow className="bg-muted/40">
                                     <TableHead className="w-[190px]">
                                         <SortButton field="customerName">Customer</SortButton>

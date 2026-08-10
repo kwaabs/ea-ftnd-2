@@ -84,6 +84,7 @@ export function PostpaidHubView() {
             district={district}
             embedded
             hideConsumptionDetail
+            hideMeterStatus
           />
         </TabsContent>
       </Tabs>
