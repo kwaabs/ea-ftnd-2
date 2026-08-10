@@ -85,6 +85,7 @@ export function CustomerSalesDetail({
     const [filterAccountType, setFilterAccountType] = useState(ALL)
     const [filterBillStatus, setFilterBillStatus] = useState(ALL)
     const [filterMeterType, setFilterMeterType] = useState(serviceType?.trim() || ALL)
+    const [filterServiceClass, setFilterServiceClass] = useState(ALL)
     const [sortField, setSortField] = useState<SortField>(initialSortField)
     const [sortOrder, setSortOrder] = useState<SortOrder>(initialSortOrder)
 
@@ -108,6 +109,8 @@ export function CustomerSalesDetail({
         filterBillStatus === ALL ? undefined : filterBillStatus
     const effectiveMeterType =
         filterMeterType === ALL ? undefined : filterMeterType
+    const effectiveServiceClass =
+        filterServiceClass === ALL ? undefined : filterServiceClass
 
     useEffect(() => {
         setPage(1)
@@ -118,6 +121,7 @@ export function CustomerSalesDetail({
         filterAccountType,
         filterBillStatus,
         filterMeterType,
+        filterServiceClass,
         dateRange.start,
         dateRange.end,
     ])
@@ -162,6 +166,13 @@ export function CustomerSalesDetail({
         groupBy: "metermodeltype",
         enabled: !serviceType,
     })
+    const { data: serviceClassAgg } = useZeusBillingAggregate({
+        ...aggBase,
+        region: effectiveRegion,
+        district: effectiveDistrict,
+        accountType: effectiveAccountType,
+        groupBy: "serviceclass",
+    })
 
     const regionOptions = useMemo(
         () => uniqueSorted((regionAgg || []).map((r) => r.regionname)),
@@ -183,6 +194,10 @@ export function CustomerSalesDetail({
         () => uniqueSorted((meterTypeAgg || []).map((r) => r.metermodeltype)),
         [meterTypeAgg],
     )
+    const serviceClassOptions = useMemo(
+        () => uniqueSorted((serviceClassAgg || []).map((r) => r.serviceclass)),
+        [serviceClassAgg],
+    )
 
     // Drop district if it is no longer valid for the selected region.
     useEffect(() => {
@@ -203,6 +218,7 @@ export function CustomerSalesDetail({
         meterModelType: effectiveMeterType,
         accountType: effectiveAccountType,
         billStatus: effectiveBillStatus,
+        serviceClass: effectiveServiceClass,
         search: debouncedSearch || undefined,
         page,
         limit: PAGE_SIZE,
@@ -245,6 +261,7 @@ export function CustomerSalesDetail({
         filterAccountType !== ALL ? filterAccountType : null,
         filterBillStatus !== ALL ? filterBillStatus : null,
         filterMeterType !== ALL ? filterMeterType : null,
+        filterServiceClass !== ALL ? filterServiceClass : null,
     ]
         .filter(Boolean)
         .join(" · ")
@@ -286,7 +303,7 @@ export function CustomerSalesDetail({
                             className="pl-8"
                         />
                     </div>
-                    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3">
+                    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-6 gap-3">
                         <Select
                             value={filterRegion}
                             onValueChange={(v) => {
@@ -370,6 +387,23 @@ export function CustomerSalesDetail({
                             <SelectContent>
                                 <SelectItem value={ALL}>All meter types</SelectItem>
                                 {meterTypeOptions.map((name) => (
+                                    <SelectItem key={name} value={name}>
+                                        {name}
+                                    </SelectItem>
+                                ))}
+                            </SelectContent>
+                        </Select>
+
+                        <Select
+                            value={filterServiceClass}
+                            onValueChange={setFilterServiceClass}
+                        >
+                            <SelectTrigger className="w-full">
+                                <SelectValue placeholder="Service class" />
+                            </SelectTrigger>
+                            <SelectContent>
+                                <SelectItem value={ALL}>All service classes</SelectItem>
+                                {serviceClassOptions.map((name) => (
                                     <SelectItem key={name} value={name}>
                                         {name}
                                     </SelectItem>
