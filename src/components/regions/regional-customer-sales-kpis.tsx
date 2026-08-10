@@ -8,6 +8,10 @@ import { Zap, Users, TrendingUp, DollarSign, Scale } from "lucide-react"
 interface RegionalCustomerSalesKpisProps {
   region: string
   dateRange: { start: string; end: string }
+  /** Restrict to a single Zeus meterModelType (e.g. "Postpaid"). Unfiltered
+   * by default, which would otherwise mix Postpaid/Prepaid/AMR billing rows
+   * together. */
+  meterModelType?: string
 }
 
 function formatNumber(value: number | null | undefined, decimals = 0): string {
@@ -18,11 +22,12 @@ function formatNumber(value: number | null | undefined, decimals = 0): string {
   })
 }
 
-export function RegionalCustomerSalesKpis({ region, dateRange }: RegionalCustomerSalesKpisProps) {
+export function RegionalCustomerSalesKpis({ region, dateRange, meterModelType }: RegionalCustomerSalesKpisProps) {
   const { data: aggregateData } = useZeusBillingAggregate({
     dateFrom: dateRange.start,
     dateTo: dateRange.end,
     region,
+    meterModelType,
   })
 
   const metrics = useMemo(() => {

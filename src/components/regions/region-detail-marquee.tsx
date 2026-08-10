@@ -4,7 +4,6 @@ import { useEffect, useMemo, useState } from "react"
 import { Marquee, MarqueeItem } from "@/components/ui/marquee"
 import { useZeusBillingAggregate } from "@/hooks/api/use-zeus-billing-aggregate-api"
 import { useMmsCustomerSalesAggregate } from "@/hooks/api/use-mms-customer-sales-aggregate-api"
-import { useAmrConsumptionAggregate } from "@/hooks/api/use-amr-consumption-aggregate-api"
 
 /** Rotate sales (region + its districts) -> debt (region + its districts), two minutes each. */
 const PHASE_MS = 2 * 60 * 1000
@@ -48,9 +47,8 @@ function normalizeType(raw?: string | null): "Postpaid" | "Prepaid" | "Other" {
  * Region-detail page ticker: cycles between customer sales (region total,
  * then each district) and debt (region total, then each district) — two
  * minutes each, within one continuous scroll per phase rather than as
- * separate region/district phases. Debt is Zeus-only (the only source that
- * carries debt/due/outstanding); sales combine Zeus + MMS (+ AMR for the
- * region total — AMR has no per-district breakdown available).
+ * separate region/district phases. Both phases are Zeus billing (Postpaid /
+ * Prepaid) + MMS daily only — AMR is not sourced anywhere on this page.
  */
 export function RegionDetailMarquee({
   region,
@@ -79,6 +77,7 @@ export function RegionDetailMarquee({
     ...dateParams,
     region: zeusRegion ?? region,
     groupBy: ["districtname", "metermodeltype"],
+    meterModelType: "Postpaid,Prepaid",
   })
   const {
     data: mmsDistrictData,
@@ -90,12 +89,7 @@ export function RegionDetailMarquee({
     region: mmsRegion ?? region,
     groupBy: "district",
   })
-  const { data: amrData, isLoading: amrLoading } = useAmrConsumptionAggregate({
-    ...dateParams,
-    region,
-  })
-
-  const isLoading = zeusLoading || mmsLoading || amrLoading
+  const isLoading = zeusLoading || mmsLoading
 
   // Surface fetch failures distinctly from "genuinely empty" — a silent
   // `data || []` fallback would otherwise make an errored request look
@@ -142,17 +136,13 @@ export function RegionDetailMarquee({
     return [...map.values()]
   }, [zeusDistrictData, mmsDistrictData])
 
-  // Region totals — derived from the district rows (sum) plus AMR, which has
-  // no district breakdown and only contributes at the region level.
+  // Region totals — derived from summing the district rows.
   const regionSummary = useMemo(() => {
-    let postpaidKwh = districtRows.reduce((s, r) => s + r.postpaidKwh, 0)
+    const postpaidKwh = districtRows.reduce((s, r) => s + r.postpaidKwh, 0)
     const prepaidKwh = districtRows.reduce((s, r) => s + r.prepaidKwh, 0)
     const debt = districtRows.reduce((s, r) => s + r.debt, 0)
-    ;(amrData || []).forEach((item) => {
-      postpaidKwh += item.total_consumption || 0
-    })
     return { postpaidKwh, prepaidKwh, totalKwh: postpaidKwh + prepaidKwh, debt }
-  }, [districtRows, amrData])
+  }, [districtRows])
 
   const districtSalesRows = useMemo(
     () =>
