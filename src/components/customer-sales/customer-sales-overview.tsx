@@ -381,37 +381,42 @@ export function CustomerSalesOverview({
   return (
     <div className="space-y-6">
       {/* ── PER-REGION SALES MARQUEE ── */}
-      <Marquee speed="slow" gap="medium">
-        {isLoading ? (
-          <MarqueeItem className="text-sm font-medium text-muted-foreground">
-            Loading customer sales figures…
-          </MarqueeItem>
-        ) : combinedChartData.length === 0 ? (
-          <MarqueeItem className="text-sm font-medium text-muted-foreground">
-            No customer sales data for this period.
-          </MarqueeItem>
-        ) : (
-          combinedChartData.map(({ region, postpaid, prepaid }) => (
-            <MarqueeItem
-              key={region}
-              className="text-sm font-medium text-foreground flex items-center gap-2"
-            >
-              <span className="font-semibold text-foreground">{region}:</span>
-              <span className="text-blue-700 dark:text-blue-400">
-                Postpaid {formatKwh(postpaid)}
-              </span>
-              <span className="text-muted-foreground">·</span>
-              <span className="text-emerald-700 dark:text-emerald-400">
-                Prepaid {formatKwh(prepaid)}
-              </span>
-              <span className="text-muted-foreground">·</span>
-              <span className="font-semibold text-purple-700 dark:text-purple-400">
-                Total {formatKwh(postpaid + prepaid)}
-              </span>
+      <div className="flex items-center gap-2.5 rounded-lg border border-border/80 bg-card px-3 py-2 shadow-sm">
+        <span className="shrink-0 text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
+          Customer sales
+        </span>
+        <Marquee speed="slow" gap="medium" className="bg-transparent border-0 flex-1">
+          {isLoading ? (
+            <MarqueeItem className="text-sm font-medium text-muted-foreground">
+              Loading customer sales figures…
             </MarqueeItem>
-          ))
-        )}
-      </Marquee>
+          ) : combinedChartData.length === 0 ? (
+            <MarqueeItem className="text-sm font-medium text-muted-foreground">
+              No customer sales data for this period.
+            </MarqueeItem>
+          ) : (
+            combinedChartData.map(({ region, postpaid, prepaid }) => (
+              <MarqueeItem
+                key={region}
+                className="text-sm font-medium text-foreground flex items-center gap-2"
+              >
+                <span className="font-semibold text-foreground">{region}:</span>
+                <span className="text-blue-700 dark:text-blue-400">
+                  Postpaid {formatKwh(postpaid)}
+                </span>
+                <span className="text-muted-foreground">·</span>
+                <span className="text-emerald-700 dark:text-emerald-400">
+                  Prepaid {formatKwh(prepaid)}
+                </span>
+                <span className="text-muted-foreground">·</span>
+                <span className="font-semibold text-purple-700 dark:text-purple-400">
+                  Total {formatKwh(postpaid + prepaid)}
+                </span>
+              </MarqueeItem>
+            ))
+          )}
+        </Marquee>
+      </div>
 
       {/* ── COMBINED SUMMARY HEADER ── */}
       <div className="grid gap-4 md:grid-cols-4">

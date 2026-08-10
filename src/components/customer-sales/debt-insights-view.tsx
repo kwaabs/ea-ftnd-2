@@ -122,37 +122,42 @@ export function DebtInsightsView() {
       </div>
 
       {/* ── PER-REGION DEBT MARQUEE ── */}
-      <Marquee speed="slow" gap="medium">
-        {regionAggLoading ? (
-          <MarqueeItem className="text-sm font-medium text-muted-foreground">
-            Loading regional debt figures…
-          </MarqueeItem>
-        ) : regionDebtRows.length === 0 ? (
-          <MarqueeItem className="text-sm font-medium text-muted-foreground">
-            No debt data for this period.
-          </MarqueeItem>
-        ) : (
-          regionDebtRows.map((row) => (
-            <MarqueeItem
-              key={row.regionname}
-              className="text-sm font-medium text-foreground flex items-center gap-2"
-            >
-              <span className="font-semibold text-foreground">{row.regionname}:</span>
-              <span className="text-sky-700 dark:text-sky-400">
-                Debt {formatMoney(row.sum_debtamount)}
-              </span>
-              <span className="text-muted-foreground">·</span>
-              <span className="text-amber-700 dark:text-amber-400">
-                Due {formatMoney(row.sum_amountdue)}
-              </span>
-              <span className="text-muted-foreground">·</span>
-              <span className="text-rose-700 dark:text-rose-400">
-                Outstanding {formatMoney(row.sum_outstandingamount)}
-              </span>
+      <div className="flex items-center gap-2.5 rounded-lg border border-border/80 bg-card px-3 py-2 shadow-sm">
+        <span className="shrink-0 text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
+          Debt
+        </span>
+        <Marquee speed="slow" gap="medium" className="bg-transparent border-0 flex-1">
+          {regionAggLoading ? (
+            <MarqueeItem className="text-sm font-medium text-muted-foreground">
+              Loading regional debt figures…
             </MarqueeItem>
-          ))
-        )}
-      </Marquee>
+          ) : regionDebtRows.length === 0 ? (
+            <MarqueeItem className="text-sm font-medium text-muted-foreground">
+              No debt data for this period.
+            </MarqueeItem>
+          ) : (
+            regionDebtRows.map((row) => (
+              <MarqueeItem
+                key={row.regionname}
+                className="text-sm font-medium text-foreground flex items-center gap-2"
+              >
+                <span className="font-semibold text-foreground">{row.regionname}:</span>
+                <span className="text-sky-700 dark:text-sky-400">
+                  Debt {formatMoney(row.sum_debtamount)}
+                </span>
+                <span className="text-muted-foreground">·</span>
+                <span className="text-amber-700 dark:text-amber-400">
+                  Due {formatMoney(row.sum_amountdue)}
+                </span>
+                <span className="text-muted-foreground">·</span>
+                <span className="text-rose-700 dark:text-rose-400">
+                  Outstanding {formatMoney(row.sum_outstandingamount)}
+                </span>
+              </MarqueeItem>
+            ))
+          )}
+        </Marquee>
+      </div>
 
       {/* KPIs */}
       <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
