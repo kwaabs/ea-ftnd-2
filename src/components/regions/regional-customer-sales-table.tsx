@@ -15,7 +15,8 @@ import { ExportButton } from "@/components/ui/export-button"
 const ALL_BILL_STATUS = "all"
 
 interface RegionalCustomerSalesTableProps {
-  region: string
+  region?: string
+  district?: string
   dateRange: { start: string; end: string }
   /** Locks the table to this Zeus meter model type (e.g. "Postpaid" / "Prepaid"). */
   meterModelType?: string
@@ -51,7 +52,7 @@ function billingPeriodValue(record: { billingYear?: number; billingMonth?: numbe
   return (record.billingYear || 0) * 100 + (record.billingMonth || 0)
 }
 
-export function RegionalCustomerSalesTable({ region, dateRange, meterModelType }: RegionalCustomerSalesTableProps) {
+export function RegionalCustomerSalesTable({ region, district, dateRange, meterModelType }: RegionalCustomerSalesTableProps) {
   const [page, setPage] = useState(1)
   const pageSize = 20
   const [searchTerm, setSearchTerm] = useState("")
@@ -63,6 +64,7 @@ export function RegionalCustomerSalesTable({ region, dateRange, meterModelType }
     dateFrom: dateRange.start,
     dateTo: dateRange.end,
     region,
+    district,
     meterModelType,
     page: 1,
     limit: 1000,
@@ -168,7 +170,7 @@ export function RegionalCustomerSalesTable({ region, dateRange, meterModelType }
                 debt_amount: r.debtAmount,
                 billing_period: formatBillingPeriod(r.billingMonth, r.billingYear),
               }))}
-              filename={`${region.replace(/\s+/g, "-").toLowerCase()}-zeus-customer-sales`}
+              filename={`${(region || district || "zeus").replace(/\s+/g, "-").toLowerCase()}-zeus-customer-sales`}
             />
             <Select
               value={billStatusFilter}

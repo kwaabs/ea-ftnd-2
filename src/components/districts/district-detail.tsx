@@ -15,8 +15,13 @@ import { useDistrictBoundaryAggregate, useDistrictBoundaryDaily } from "@/hooks/
 import { useDistrictGeometry, useDistrictsByRegion } from "@/hooks/api/use-districts-geometry-api"
 import { useMeters } from "@/hooks/api/use-meter-api"
 import { useMeterStatusSummary, useStatusTimeline, useMeterStatusDetails } from "@/hooks/api/use-meter-status-api"
+import { useZeusBillingAggregate } from "@/hooks/api/use-zeus-billing-aggregate-api"
+import { useMmsCustomerSalesAggregate } from "@/hooks/api/use-mms-customer-sales-aggregate-api"
+import { useResolvedRegionName } from "@/hooks/use-resolved-region-name"
 import { useAppStore } from "@/stores/app-store"
 import { formatNumber } from "@/lib/utils"
+import { RegionalCustomerSalesTable } from "@/components/regions/regional-customer-sales-table"
+import { MmsCustomerSalesDetail } from "@/components/customer-sales/mms-customer-sales-detail"
 import {
     ArrowLeft,
     ChevronDown,
@@ -31,6 +36,8 @@ import {
     Trophy,
     AlertTriangle,
     Calendar,
+    Scale,
+    Users,
 } from "lucide-react"
 import {
     LineChart,
@@ -53,6 +60,11 @@ import { DistrictMiniMap } from "./district-mini-map"
 
 interface DistrictDetailProps {
     district: string
+}
+
+function formatMoney(value: number | null | undefined): string {
+    if (value === null || value === undefined) return "₵0.00"
+    return `₵${(value || 0).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
 }
 
 export function DistrictDetail({ district }: DistrictDetailProps) {
@@ -108,6 +120,85 @@ export function DistrictDetail({ district }: DistrictDetailProps) {
     // Fetch THIS district's geometry to get its parent region
     const { data: districtGeo, isLoading: districtGeoLoading } = useDistrictGeometry(district)
     const parentRegion = districtGeo?.data?.districts?.[0]?.region
+
+    // Zeus/MMS each maintain their own district column, independent of the
+    // meter-infrastructure district naming this page's `district` comes
+    // from — resolve to whichever real value each source actually has, same
+    // approach as the region-detail page's zeusRegion/mmsRegion.
+    const { data: zeusDistrictNamesData } = useZeusBillingAggregate({
+        dateFrom: dateRange.start,
+        dateTo: dateRange.end,
+        groupBy: "districtname",
+    })
+    const { data: mmsDistrictNamesData } = useMmsCustomerSalesAggregate({
+        dateFrom: dateRange.start,
+        dateTo: dateRange.end,
+        groupBy: "district",
+    })
+    const zeusDistrict = useResolvedRegionName(
+        district,
+        (zeusDistrictNamesData || []).map((r) => r.districtname),
+    )
+    const mmsDistrict = useResolvedRegionName(
+        district,
+        (mmsDistrictNamesData || []).map((r) => r.district),
+    )
+
+    // Customer sales totals for this district — Zeus billing (Postpaid /
+    // Prepaid only; AMR is not sourced anywhere on this page) + MMS daily
+    // for the Prepaid customer count.
+    const { data: zeusSalesTotals, isLoading: zeusSalesTotalsLoading } = useZeusBillingAggregate({
+        dateFrom: dateRange.start,
+        dateTo: dateRange.end,
+        district: zeusDistrict,
+        meterModelType: "Postpaid,Prepaid",
+    })
+    const { data: zeusSalesByType, isLoading: zeusSalesByTypeLoading } = useZeusBillingAggregate({
+        dateFrom: dateRange.start,
+        dateTo: dateRange.end,
+        district: zeusDistrict,
+        meterModelType: "Postpaid,Prepaid",
+        groupBy: "metermodeltype",
+    })
+    const { data: mmsSalesTotals, isLoading: mmsSalesTotalsLoading } = useMmsCustomerSalesAggregate({
+        dateFrom: dateRange.start,
+        dateTo: dateRange.end,
+        district: mmsDistrict,
+    })
+
+    const customerSalesLoading = zeusSalesTotalsLoading || zeusSalesByTypeLoading || mmsSalesTotalsLoading
+
+    const customerSalesStats = useMemo(() => {
+        const totals = zeusSalesTotals || []
+        const totalConsumptionZeus = totals.reduce((s, r) => s + (r.sum_billconsumptionvalue || 0), 0)
+        const totalDebt = totals.reduce((s, r) => s + (r.sum_debtamount || 0), 0)
+        const totalDue = totals.reduce((s, r) => s + (r.sum_amountdue || 0), 0)
+        const totalOutstanding = totals.reduce((s, r) => s + (r.sum_outstandingamount || 0), 0)
+
+        const byType = zeusSalesByType || []
+        const postpaidRow = byType.find((r) => (r.metermodeltype || "").trim().toLowerCase() === "postpaid")
+        const prepaidRow = byType.find((r) => (r.metermodeltype || "").trim().toLowerCase() === "prepaid")
+        const postpaidCustomers = postpaidRow?.customer_count || 0
+        const zeusPrepaidCustomers = prepaidRow?.customer_count || 0
+
+        const mmsRow = mmsSalesTotals && mmsSalesTotals.length > 0 ? mmsSalesTotals[0] : null
+        const mmsCustomers = mmsRow?.customer_count || 0
+        const mmsKwh = mmsRow?.sum_last_month_kwh_read || 0
+
+        const prepaidCustomers = zeusPrepaidCustomers + mmsCustomers
+        const totalCustomers = postpaidCustomers + prepaidCustomers
+        const totalConsumption = totalConsumptionZeus + mmsKwh
+
+        return {
+            totalConsumption,
+            totalDebt,
+            totalDue,
+            totalOutstanding,
+            postpaidCustomers,
+            prepaidCustomers,
+            totalCustomers,
+        }
+    }, [zeusSalesTotals, zeusSalesByType, mmsSalesTotals])
 
     // Fetch DTX consumption (meters IN this district)
     const { data: dtxAggregate, isLoading: dtxAggregateLoading } = useDtxAggregate({
@@ -879,6 +970,135 @@ export function DistrictDetail({ district }: DistrictDetailProps) {
                         )}
                     </CardContent>
                 </Card>
+            </div>
+
+            {/* Customer Sales */}
+            <div className="space-y-4">
+                <h2 className="text-lg font-semibold">Customer Sales</h2>
+
+                <div className="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-5 gap-4">
+                    <Card>
+                        <CardHeader className="pb-3">
+                            <CardTitle className="text-sm font-medium text-muted-foreground flex items-center gap-2">
+                                <Zap className="h-4 w-4 text-blue-600" />
+                                Consumption
+                            </CardTitle>
+                        </CardHeader>
+                        <CardContent>
+                            {customerSalesLoading ? (
+                                <Skeleton className="h-10 w-32" />
+                            ) : (
+                                <>
+                                    <div className="text-2xl font-bold">{formatNumber(customerSalesStats.totalConsumption)} kWh</div>
+                                    <p className="text-xs text-muted-foreground mt-1">Zeus + MMS</p>
+                                </>
+                            )}
+                        </CardContent>
+                    </Card>
+
+                    <Card>
+                        <CardHeader className="pb-3">
+                            <CardTitle className="text-sm font-medium text-muted-foreground flex items-center gap-2">
+                                <Scale className="h-4 w-4 text-sky-600" />
+                                Debt
+                            </CardTitle>
+                        </CardHeader>
+                        <CardContent>
+                            {customerSalesLoading ? (
+                                <Skeleton className="h-10 w-32" />
+                            ) : (
+                                <>
+                                    <div className="text-2xl font-bold text-sky-700">{formatMoney(customerSalesStats.totalDebt)}</div>
+                                    <p className="text-xs text-muted-foreground mt-1">Zeus billing</p>
+                                </>
+                            )}
+                        </CardContent>
+                    </Card>
+
+                    <Card>
+                        <CardHeader className="pb-3">
+                            <CardTitle className="text-sm font-medium text-muted-foreground flex items-center gap-2">
+                                <TrendingDown className="h-4 w-4 text-amber-600" />
+                                Expected
+                            </CardTitle>
+                        </CardHeader>
+                        <CardContent>
+                            {customerSalesLoading ? (
+                                <Skeleton className="h-10 w-32" />
+                            ) : (
+                                <>
+                                    <div className="text-2xl font-bold text-amber-700">{formatMoney(customerSalesStats.totalDue)}</div>
+                                    <p className="text-xs text-muted-foreground mt-1">Amount due</p>
+                                </>
+                            )}
+                        </CardContent>
+                    </Card>
+
+                    <Card>
+                        <CardHeader className="pb-3">
+                            <CardTitle className="text-sm font-medium text-muted-foreground flex items-center gap-2">
+                                <AlertTriangle className="h-4 w-4 text-rose-600" />
+                                Outstanding
+                            </CardTitle>
+                        </CardHeader>
+                        <CardContent>
+                            {customerSalesLoading ? (
+                                <Skeleton className="h-10 w-32" />
+                            ) : (
+                                <>
+                                    <div className="text-2xl font-bold text-rose-700">{formatMoney(customerSalesStats.totalOutstanding)}</div>
+                                    <p className="text-xs text-muted-foreground mt-1">Unpaid balance</p>
+                                </>
+                            )}
+                        </CardContent>
+                    </Card>
+
+                    <Card>
+                        <CardHeader className="pb-3">
+                            <CardTitle className="text-sm font-medium text-muted-foreground flex items-center gap-2">
+                                <Users className="h-4 w-4 text-purple-600" />
+                                Customer Count
+                            </CardTitle>
+                        </CardHeader>
+                        <CardContent>
+                            {customerSalesLoading ? (
+                                <Skeleton className="h-10 w-32" />
+                            ) : (
+                                <>
+                                    <div className="text-2xl font-bold text-purple-700">{formatNumber(customerSalesStats.totalCustomers)}</div>
+                                    <p className="text-xs text-muted-foreground mt-1">
+                                        Postpaid {formatNumber(customerSalesStats.postpaidCustomers)} · Prepaid {formatNumber(customerSalesStats.prepaidCustomers)}
+                                    </p>
+                                </>
+                            )}
+                        </CardContent>
+                    </Card>
+                </div>
+
+                <Tabs defaultValue="postpaid">
+                    <TabsList className="grid w-full grid-cols-2 max-w-md">
+                        <TabsTrigger value="postpaid">Postpaid</TabsTrigger>
+                        <TabsTrigger value="prepaid">Prepaid</TabsTrigger>
+                    </TabsList>
+                    <TabsContent value="postpaid" className="space-y-4 mt-4">
+                        <RegionalCustomerSalesTable
+                            district={zeusDistrict}
+                            dateRange={dateRange}
+                            meterModelType="Postpaid"
+                        />
+                    </TabsContent>
+                    <TabsContent value="prepaid" className="space-y-4 mt-4">
+                        <RegionalCustomerSalesTable
+                            district={zeusDistrict}
+                            dateRange={dateRange}
+                            meterModelType="Prepaid"
+                        />
+                        <MmsCustomerSalesDetail
+                            dateRange={dateRange}
+                            district={mmsDistrict}
+                        />
+                    </TabsContent>
+                </Tabs>
             </div>
 
             {/* District Profile & Map */}
