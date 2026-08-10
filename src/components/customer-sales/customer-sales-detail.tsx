@@ -84,6 +84,7 @@ export function CustomerSalesDetail({
     const [filterDistrict, setFilterDistrict] = useState(district?.trim() || ALL)
     const [filterAccountType, setFilterAccountType] = useState(ALL)
     const [filterBillStatus, setFilterBillStatus] = useState(ALL)
+    const [filterMeterType, setFilterMeterType] = useState(serviceType?.trim() || ALL)
     const [sortField, setSortField] = useState<SortField>(initialSortField)
     const [sortOrder, setSortOrder] = useState<SortOrder>(initialSortOrder)
 
@@ -91,7 +92,8 @@ export function CustomerSalesDetail({
     useEffect(() => {
         setFilterRegion(region?.trim() || ALL)
         setFilterDistrict(district?.trim() || ALL)
-    }, [region, district])
+        setFilterMeterType(serviceType?.trim() || ALL)
+    }, [region, district, serviceType])
 
     useEffect(() => {
         const t = setTimeout(() => setDebouncedSearch(searchTerm.trim()), 300)
@@ -104,6 +106,8 @@ export function CustomerSalesDetail({
         filterAccountType === ALL ? undefined : filterAccountType
     const effectiveBillStatus =
         filterBillStatus === ALL ? undefined : filterBillStatus
+    const effectiveMeterType =
+        filterMeterType === ALL ? undefined : filterMeterType
 
     useEffect(() => {
         setPage(1)
@@ -113,15 +117,15 @@ export function CustomerSalesDetail({
         filterDistrict,
         filterAccountType,
         filterBillStatus,
+        filterMeterType,
         dateRange.start,
         dateRange.end,
-        serviceType,
     ])
 
     const aggBase = {
         dateFrom: dateRange.start,
         dateTo: dateRange.end,
-        meterModelType: serviceType,
+        meterModelType: effectiveMeterType,
     }
 
     const { data: regionAgg } = useZeusBillingAggregate({
@@ -146,6 +150,14 @@ export function CustomerSalesDetail({
         accountType: effectiveAccountType,
         groupBy: "billstatus",
     })
+    const { data: meterTypeAgg } = useZeusBillingAggregate({
+        dateFrom: dateRange.start,
+        dateTo: dateRange.end,
+        region: effectiveRegion,
+        district: effectiveDistrict,
+        accountType: effectiveAccountType,
+        groupBy: "metermodeltype",
+    })
 
     const regionOptions = useMemo(
         () => uniqueSorted((regionAgg || []).map((r) => r.regionname)),
@@ -162,6 +174,10 @@ export function CustomerSalesDetail({
     const billStatusOptions = useMemo(
         () => uniqueSorted((billStatusAgg || []).map((r) => r.billstatus)),
         [billStatusAgg],
+    )
+    const meterTypeOptions = useMemo(
+        () => uniqueSorted((meterTypeAgg || []).map((r) => r.metermodeltype)),
+        [meterTypeAgg],
     )
 
     // Drop district if it is no longer valid for the selected region.
@@ -180,7 +196,7 @@ export function CustomerSalesDetail({
         dateTo: dateRange.end,
         region: effectiveRegion,
         district: effectiveDistrict,
-        meterModelType: serviceType,
+        meterModelType: effectiveMeterType,
         accountType: effectiveAccountType,
         billStatus: effectiveBillStatus,
         search: debouncedSearch || undefined,
@@ -224,6 +240,7 @@ export function CustomerSalesDetail({
         filterDistrict !== ALL ? filterDistrict : null,
         filterAccountType !== ALL ? filterAccountType : null,
         filterBillStatus !== ALL ? filterBillStatus : null,
+        filterMeterType !== ALL ? filterMeterType : null,
     ]
         .filter(Boolean)
         .join(" · ")
@@ -265,7 +282,7 @@ export function CustomerSalesDetail({
                             className="pl-8"
                         />
                     </div>
-                    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
+                    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3">
                         <Select
                             value={filterRegion}
                             onValueChange={(v) => {
@@ -331,6 +348,23 @@ export function CustomerSalesDetail({
                             <SelectContent>
                                 <SelectItem value={ALL}>All bill statuses</SelectItem>
                                 {billStatusOptions.map((name) => (
+                                    <SelectItem key={name} value={name}>
+                                        {name}
+                                    </SelectItem>
+                                ))}
+                            </SelectContent>
+                        </Select>
+
+                        <Select
+                            value={filterMeterType}
+                            onValueChange={setFilterMeterType}
+                        >
+                            <SelectTrigger className="w-full">
+                                <SelectValue placeholder="Meter type" />
+                            </SelectTrigger>
+                            <SelectContent>
+                                <SelectItem value={ALL}>All meter types</SelectItem>
+                                {meterTypeOptions.map((name) => (
                                     <SelectItem key={name} value={name}>
                                         {name}
                                     </SelectItem>
