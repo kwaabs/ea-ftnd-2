@@ -53,6 +53,10 @@ interface AmrPageViewProps {
   embedded?: boolean;
   /** Lock the view to a single SLT type (hides in-page SLT filter cards). */
   lockedSltType?: string;
+  /** When true, skip the daily AMR meter consumption/SLT breakdown (which
+   * uses the amr-consumption-daily/aggregate sources) and show only the
+   * Zeus-billed AMR accounts in the Consumption tab. */
+  hideConsumptionDetail?: boolean;
 }
 
 function formatKwh(value: number | null | undefined) {
@@ -80,6 +84,7 @@ export function AmrPageView({
   district,
   embedded = false,
   lockedSltType,
+  hideConsumptionDetail = false,
 }: AmrPageViewProps) {
   const [selectedSltType, setSelectedSltType] = useState<string | null>(
     lockedSltType ?? null,
@@ -385,17 +390,19 @@ export function AmrPageView({
         </TabsList>
 
         <TabsContent value="consumption" className="mt-4 space-y-4">
-          <AmrCustomerSalesDetail
-            dateRange={dateRange}
-            region={region}
-            district={district}
-            selectedSltType={effectiveSltType}
-            onSelectedSltTypeChange={
-              lockedSltType ? undefined : setSelectedSltType
-            }
-            hideSltCards={Boolean(lockedSltType)}
-            linkSltTypes={!lockedSltType}
-          />
+          {!hideConsumptionDetail && (
+            <AmrCustomerSalesDetail
+              dateRange={dateRange}
+              region={region}
+              district={district}
+              selectedSltType={effectiveSltType}
+              onSelectedSltTypeChange={
+                lockedSltType ? undefined : setSelectedSltType
+              }
+              hideSltCards={Boolean(lockedSltType)}
+              linkSltTypes={!lockedSltType}
+            />
+          )}
 
           {/* Zeus billing accounts tagged meterModelType=AMR — a distinct
               lineage from the daily AMR meter readings above (same "AMR"
