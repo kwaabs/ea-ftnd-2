@@ -150,6 +150,9 @@ export function CustomerSalesDetail({
         accountType: effectiveAccountType,
         groupBy: "billstatus",
     })
+    // Only fetched when the meter type isn't locked by a parent hub page —
+    // a locked hub (e.g. Postpaid) must never let its Customer Records table
+    // filter across into another hub's records (e.g. Prepaid).
     const { data: meterTypeAgg } = useZeusBillingAggregate({
         dateFrom: dateRange.start,
         dateTo: dateRange.end,
@@ -157,6 +160,7 @@ export function CustomerSalesDetail({
         district: effectiveDistrict,
         accountType: effectiveAccountType,
         groupBy: "metermodeltype",
+        enabled: !serviceType,
     })
 
     const regionOptions = useMemo(
@@ -358,6 +362,7 @@ export function CustomerSalesDetail({
                         <Select
                             value={filterMeterType}
                             onValueChange={setFilterMeterType}
+                            disabled={Boolean(serviceType)}
                         >
                             <SelectTrigger className="w-full">
                                 <SelectValue placeholder="Meter type" />

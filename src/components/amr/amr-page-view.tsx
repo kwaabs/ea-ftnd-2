@@ -32,6 +32,7 @@ import { Input } from "@/components/ui/input";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { AmrCustomerSalesDetail } from "@/components/customer-sales/amr-customer-sales-detail";
+import { CustomerSalesDetail } from "@/components/customer-sales/customer-sales-detail";
 import {
   useAmrStatusDetails,
   useAmrStatusSummary,
@@ -394,6 +395,17 @@ export function AmrPageView({
             }
             hideSltCards={Boolean(lockedSltType)}
             linkSltTypes={!lockedSltType}
+          />
+
+          {/* Zeus billing accounts tagged meterModelType=AMR — a distinct
+              lineage from the daily AMR meter readings above (same "AMR"
+              label, different pipeline), surfaced here rather than under
+              the Postpaid/Prepaid Zeus tabs since it belongs with AMR. */}
+          <CustomerSalesDetail
+            dateRange={dateRange}
+            region={region}
+            district={district}
+            serviceType="AMR"
           />
         </TabsContent>
 
