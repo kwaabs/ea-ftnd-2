@@ -5,6 +5,7 @@ import Link from "next/link";
 import { format, parseISO } from "date-fns";
 import {
   Activity,
+  ArrowLeftRight,
   ChevronLeft,
   ChevronRight,
   Radio,
@@ -16,6 +17,7 @@ import {
   CartesianGrid,
   Cell,
   Legend,
+  LabelList,
   ResponsiveContainer,
   Tooltip,
   XAxis,
@@ -29,7 +31,15 @@ import {
   CardTitle,
 } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { AmrCustomerSalesDetail } from "@/components/customer-sales/amr-customer-sales-detail";
@@ -41,6 +51,7 @@ import {
   useAmrStatusTimeline,
 } from "@/hooks/api/use-amr-status-api";
 import { cn } from "@/lib/utils";
+import type { ZeusBillingAggregateItem } from "@/types/api";
 
 const AMR_CHART_COLORS = [
   "#c2410c",
@@ -52,6 +63,29 @@ const AMR_CHART_COLORS = [
   "#7c2d12",
   "#fed7aa",
 ];
+
+const ALL = "all";
+
+function uniqueSorted(values: Array<string | null | undefined>) {
+  return Array.from(
+    new Set(values.map((v) => (v || "").trim()).filter(Boolean)),
+  ).sort((a, b) => a.localeCompare(b));
+}
+
+function formatAxisNumber(v: number) {
+  return Math.abs(v) >= 1_000_000
+    ? `${(v / 1_000_000).toFixed(0)}M`
+    : Math.abs(v) >= 1_000
+      ? `${(v / 1_000).toFixed(0)}k`
+      : String(v);
+}
+
+type AmrMetricKey =
+  | "sum_billconsumptionvalue"
+  | "sum_amountdue"
+  | "sum_debtamount"
+  | "sum_outstandingamount"
+  | "sum_billamount";
 
 interface DateRange {
   start: string;
@@ -97,6 +131,89 @@ function formatDate(date: string | null | undefined) {
   } catch {
     return date;
   }
+}
+
+const AMR_CHART_METRICS: Record<
+  AmrMetricKey,
+  {
+    label: string;
+    format: (value: number | null | undefined) => string;
+    tooltipLabel: string;
+  }
+> = {
+  sum_billconsumptionvalue: {
+    label: "kWh Consumed",
+    format: formatKwh,
+    tooltipLabel: "Consumption",
+  },
+  sum_amountdue: {
+    label: "Amount Due",
+    format: formatMoney,
+    tooltipLabel: "Amount due",
+  },
+  sum_debtamount: {
+    label: "Debt",
+    format: formatMoney,
+    tooltipLabel: "Debt",
+  },
+  sum_outstandingamount: {
+    label: "Outstanding Balance",
+    format: formatMoney,
+    tooltipLabel: "Outstanding balance",
+  },
+  sum_billamount: {
+    label: "Bill Amount",
+    format: formatMoney,
+    tooltipLabel: "Bill amount",
+  },
+};
+
+// Always renders the customer count alongside the selected metric's value —
+// a second axis is never used, so the count is a direct label instead.
+function AmrMetricLabel(
+  props: {
+    data: ZeusBillingAggregateItem[];
+    metric: AmrMetricKey;
+    format: (value: number | null | undefined) => string;
+    horizontal: boolean;
+  } & Record<string, unknown>,
+) {
+  const x = Number(props.x) || 0;
+  const y = Number(props.y) || 0;
+  const width = Number(props.width) || 0;
+  const height = Number(props.height) || 0;
+  const index = Number(props.index) || 0;
+  const row = props.data[index];
+  if (!row) return null;
+  const valueText = props.format(row[props.metric]);
+  const custText = `${formatNumber(row.customer_count)} cust.`;
+
+  if (props.horizontal) {
+    const lx = x + width + 6;
+    const cy = y + height / 2;
+    return (
+      <g>
+        <text x={lx} y={cy - 5} textAnchor="start" className="fill-orange-800 text-[10px] font-semibold">
+          {valueText}
+        </text>
+        <text x={lx} y={cy + 8} textAnchor="start" className="fill-purple-700 text-[9px] font-medium">
+          {custText}
+        </text>
+      </g>
+    );
+  }
+
+  const cx = x + width / 2;
+  return (
+    <g>
+      <text x={cx} y={y - 20} textAnchor="middle" className="fill-orange-800 text-[10px] font-semibold">
+        {valueText}
+      </text>
+      <text x={cx} y={y - 7} textAnchor="middle" className="fill-purple-700 text-[9px] font-medium">
+        {custText}
+      </text>
+    </g>
+  );
 }
 
 export function AmrPageView({
@@ -146,14 +263,91 @@ export function AmrPageView({
       sortOrder: "asc",
     });
 
-  // Zeus AMR aggregate — powers the charts above the Customer Records table
-  // when the daily/status AMR sources are hidden (postpaid hub context).
+  // Zeus AMR aggregate — powers the combined chart above the Customer
+  // Records table when the daily/status AMR sources are hidden (postpaid
+  // hub context).
+  const [amrMetric, setAmrMetric] = useState<AmrMetricKey>(
+    "sum_billconsumptionvalue",
+  );
+  const [amrOrientation, setAmrOrientation] = useState<"columns" | "bars">(
+    "columns",
+  );
+  const [amrFilterDistrict, setAmrFilterDistrict] = useState(
+    district?.trim() || ALL,
+  );
+  const [amrFilterAccountType, setAmrFilterAccountType] = useState(ALL);
+  const [amrFilterBillStatus, setAmrFilterBillStatus] = useState(ALL);
+
+  // Re-derive the local district filter when the parent's district scope
+  // changes, without an effect (React's "adjust state during render"
+  // pattern) — an effect here would cause an extra render pass.
+  const [amrPrevDistrictProp, setAmrPrevDistrictProp] = useState(district);
+  if (district !== amrPrevDistrictProp) {
+    setAmrPrevDistrictProp(district);
+    setAmrFilterDistrict(district?.trim() || ALL);
+  }
+
+  const amrEffectiveDistrict =
+    amrFilterDistrict === ALL ? undefined : amrFilterDistrict;
+  const amrEffectiveAccountType =
+    amrFilterAccountType === ALL ? undefined : amrFilterAccountType;
+  const amrEffectiveBillStatus =
+    amrFilterBillStatus === ALL ? undefined : amrFilterBillStatus;
+
+  const { data: amrDistrictOptionsData } = useZeusBillingAggregate({
+    dateFrom: dateRange.start,
+    dateTo: dateRange.end,
+    region,
+    meterModelType: "AMR",
+    groupBy: "districtname",
+    enabled: hideConsumptionDetail,
+  });
+  const { data: amrAccountTypeOptionsData } = useZeusBillingAggregate({
+    dateFrom: dateRange.start,
+    dateTo: dateRange.end,
+    region,
+    district: amrEffectiveDistrict,
+    meterModelType: "AMR",
+    groupBy: "accounttype",
+    enabled: hideConsumptionDetail,
+  });
+  const { data: amrBillStatusOptionsData } = useZeusBillingAggregate({
+    dateFrom: dateRange.start,
+    dateTo: dateRange.end,
+    region,
+    district: amrEffectiveDistrict,
+    accountType: amrEffectiveAccountType,
+    meterModelType: "AMR",
+    groupBy: "billstatus",
+    enabled: hideConsumptionDetail,
+  });
+
+  const amrDistrictOptions = useMemo(
+    () =>
+      uniqueSorted((amrDistrictOptionsData || []).map((r) => r.districtname)),
+    [amrDistrictOptionsData],
+  );
+  const amrAccountTypeOptions = useMemo(
+    () =>
+      uniqueSorted(
+        (amrAccountTypeOptionsData || []).map((r) => r.accounttype),
+      ),
+    [amrAccountTypeOptionsData],
+  );
+  const amrBillStatusOptions = useMemo(
+    () =>
+      uniqueSorted((amrBillStatusOptionsData || []).map((r) => r.billstatus)),
+    [amrBillStatusOptionsData],
+  );
+
   const { data: zeusAmrRegionData, isLoading: zeusAmrChartsLoading } =
     useZeusBillingAggregate({
       dateFrom: dateRange.start,
       dateTo: dateRange.end,
       region,
-      district,
+      district: amrEffectiveDistrict,
+      accountType: amrEffectiveAccountType,
+      billStatus: amrEffectiveBillStatus,
       groupBy: "regionname",
       meterModelType: "AMR",
       enabled: hideConsumptionDetail,
@@ -162,12 +356,9 @@ export function AmrPageView({
   const zeusAmrByRegion = useMemo(
     () =>
       [...(zeusAmrRegionData || [])]
-        .sort(
-          (a, b) =>
-            (b.sum_billconsumptionvalue || 0) - (a.sum_billconsumptionvalue || 0),
-        )
+        .sort((a, b) => (Number(b[amrMetric]) || 0) - (Number(a[amrMetric]) || 0))
         .slice(0, 12),
-    [zeusAmrRegionData],
+    [zeusAmrRegionData, amrMetric],
   );
 
   const timelineData = useMemo(() => {
@@ -440,85 +631,206 @@ export function AmrPageView({
             )}
 
             {hideConsumptionDetail && (
-              <div className="grid gap-4 md:grid-cols-3">
-                {(
-                  [
-                    {
-                      key: "sum_billconsumptionvalue" as const,
-                      title: "kWh Consumed",
-                      format: formatKwh,
-                      tooltipLabel: "Consumption",
-                    },
-                    {
-                      key: "sum_amountdue" as const,
-                      title: "Amount Due",
-                      format: formatMoney,
-                      tooltipLabel: "Amount due",
-                    },
-                    {
-                      key: "sum_debtamount" as const,
-                      title: "Debt",
-                      format: formatMoney,
-                      tooltipLabel: "Debt",
-                    },
-                  ]
-                ).map((metric) => (
-                  <Card key={metric.key}>
-                    <CardHeader>
-                      <CardTitle className="text-sm">{metric.title}</CardTitle>
-                      <CardDescription className="text-xs">
-                        Zeus AMR — {metric.title.toLowerCase()} by region
+              <Card>
+                <CardHeader>
+                  <div className="flex flex-wrap items-start justify-between gap-3">
+                    <div>
+                      <CardTitle className="text-base">
+                        AMR Aggregate by Region
+                      </CardTitle>
+                      <CardDescription>
+                        Zeus AMR — {AMR_CHART_METRICS[amrMetric].label.toLowerCase()}{" "}
+                        by region · customer count always shown
                       </CardDescription>
-                    </CardHeader>
-                    <CardContent>
-                      {zeusAmrChartsLoading ? (
-                        <Skeleton className="h-[200px] w-full" />
-                      ) : zeusAmrByRegion.length === 0 ? (
-                        <p className="text-xs text-muted-foreground py-10 text-center">
-                          No data for this period.
-                        </p>
-                      ) : (
-                        <ResponsiveContainer width="100%" height={200}>
-                          <BarChart
-                            data={zeusAmrByRegion}
-                            margin={{ top: 8, right: 8, left: 8, bottom: 40 }}
-                          >
-                            <CartesianGrid strokeDasharray="3 3" vertical={false} />
-                            <XAxis
-                              dataKey="regionname"
-                              angle={-35}
-                              textAnchor="end"
-                              tick={{ fontSize: 10 }}
-                              interval={0}
+                    </div>
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      onClick={() =>
+                        setAmrOrientation((o) =>
+                          o === "columns" ? "bars" : "columns",
+                        )
+                      }
+                      className="gap-1.5 shrink-0"
+                    >
+                      <ArrowLeftRight className="h-3.5 w-3.5" />
+                      Flip
+                    </Button>
+                  </div>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 pt-2">
+                    <Select
+                      value={amrMetric}
+                      onValueChange={(v) => setAmrMetric(v as AmrMetricKey)}
+                    >
+                      <SelectTrigger className="w-full">
+                        <SelectValue placeholder="Metric" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {(Object.keys(AMR_CHART_METRICS) as AmrMetricKey[]).map(
+                          (key) => (
+                            <SelectItem key={key} value={key}>
+                              {AMR_CHART_METRICS[key].label}
+                            </SelectItem>
+                          ),
+                        )}
+                      </SelectContent>
+                    </Select>
+
+                    <Select
+                      value={amrFilterDistrict}
+                      onValueChange={(v) => {
+                        setAmrFilterDistrict(v);
+                        setAmrFilterAccountType(ALL);
+                        setAmrFilterBillStatus(ALL);
+                      }}
+                    >
+                      <SelectTrigger className="w-full">
+                        <SelectValue placeholder="District" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value={ALL}>All districts</SelectItem>
+                        {amrDistrictOptions.map((name) => (
+                          <SelectItem key={name} value={name}>
+                            {name}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+
+                    <Select
+                      value={amrFilterAccountType}
+                      onValueChange={(v) => {
+                        setAmrFilterAccountType(v);
+                        setAmrFilterBillStatus(ALL);
+                      }}
+                    >
+                      <SelectTrigger className="w-full">
+                        <SelectValue placeholder="Account type" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value={ALL}>All account types</SelectItem>
+                        {amrAccountTypeOptions.map((name) => (
+                          <SelectItem key={name} value={name}>
+                            {name}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+
+                    <Select
+                      value={amrFilterBillStatus}
+                      onValueChange={setAmrFilterBillStatus}
+                    >
+                      <SelectTrigger className="w-full">
+                        <SelectValue placeholder="Bill status" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value={ALL}>All bill statuses</SelectItem>
+                        {amrBillStatusOptions.map((name) => (
+                          <SelectItem key={name} value={name}>
+                            {name}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                </CardHeader>
+                <CardContent>
+                  {zeusAmrChartsLoading ? (
+                    <Skeleton className="h-[300px] w-full" />
+                  ) : zeusAmrByRegion.length === 0 ? (
+                    <p className="text-sm text-muted-foreground py-16 text-center">
+                      No data for the selected filters.
+                    </p>
+                  ) : (
+                    <ResponsiveContainer
+                      width="100%"
+                      height={
+                        amrOrientation === "bars"
+                          ? Math.max(240, zeusAmrByRegion.length * 44)
+                          : 300
+                      }
+                    >
+                      <BarChart
+                        data={zeusAmrByRegion}
+                        layout={amrOrientation === "bars" ? "vertical" : "horizontal"}
+                        margin={
+                          amrOrientation === "bars"
+                            ? { top: 8, right: 130, left: 8, bottom: 8 }
+                            : { top: 40, right: 16, left: 8, bottom: 60 }
+                        }
+                      >
+                        {amrOrientation === "bars" ? (
+                          <CartesianGrid strokeDasharray="3 3" horizontal={false} />
+                        ) : (
+                          <CartesianGrid strokeDasharray="3 3" vertical={false} />
+                        )}
+                        {amrOrientation === "bars" ? (
+                          <XAxis
+                            type="number"
+                            tickFormatter={formatAxisNumber}
+                            tick={{ fontSize: 10 }}
+                          />
+                        ) : (
+                          <XAxis
+                            dataKey="regionname"
+                            angle={-35}
+                            textAnchor="end"
+                            tick={{ fontSize: 10 }}
+                            interval={0}
+                          />
+                        )}
+                        {amrOrientation === "bars" ? (
+                          <YAxis
+                            type="category"
+                            dataKey="regionname"
+                            tick={{ fontSize: 11 }}
+                            width={110}
+                          />
+                        ) : (
+                          <YAxis
+                            tickFormatter={formatAxisNumber}
+                            tick={{ fontSize: 10 }}
+                          />
+                        )}
+                        <Tooltip
+                          formatter={(v: number) => [
+                            AMR_CHART_METRICS[amrMetric].format(v),
+                            AMR_CHART_METRICS[amrMetric].tooltipLabel,
+                          ]}
+                        />
+                        <Bar
+                          dataKey={amrMetric}
+                          radius={
+                            amrOrientation === "bars"
+                              ? [0, 4, 4, 0]
+                              : [4, 4, 0, 0]
+                          }
+                        >
+                          <LabelList
+                            content={(p) => (
+                              <AmrMetricLabel
+                                {...p}
+                                data={zeusAmrByRegion}
+                                metric={amrMetric}
+                                format={AMR_CHART_METRICS[amrMetric].format}
+                                horizontal={amrOrientation === "bars"}
+                              />
+                            )}
+                          />
+                          {zeusAmrByRegion.map((row, i) => (
+                            <Cell
+                              key={row.regionname}
+                              fill={AMR_CHART_COLORS[i % AMR_CHART_COLORS.length]}
                             />
-                            <YAxis
-                              tickFormatter={(v) =>
-                                Math.abs(v) >= 1_000_000
-                                  ? `${(v / 1_000_000).toFixed(0)}M`
-                                  : Math.abs(v) >= 1_000
-                                    ? `${(v / 1_000).toFixed(0)}k`
-                                    : String(v)
-                              }
-                              tick={{ fontSize: 10 }}
-                            />
-                            <Tooltip
-                              formatter={(v: number) => [metric.format(v), metric.tooltipLabel]}
-                            />
-                            <Bar dataKey={metric.key} radius={[4, 4, 0, 0]}>
-                              {zeusAmrByRegion.map((row, i) => (
-                                <Cell
-                                  key={row.regionname}
-                                  fill={AMR_CHART_COLORS[i % AMR_CHART_COLORS.length]}
-                                />
-                              ))}
-                            </Bar>
-                          </BarChart>
-                        </ResponsiveContainer>
-                      )}
-                    </CardContent>
-                  </Card>
-                ))}
-              </div>
+                          ))}
+                        </Bar>
+                      </BarChart>
+                    </ResponsiveContainer>
+                  )}
+                </CardContent>
+              </Card>
             )}
 
             {/* Zeus billing accounts tagged meterModelType=AMR — a distinct
