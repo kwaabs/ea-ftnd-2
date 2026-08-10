@@ -2,16 +2,21 @@
 
 import { useMemo, useState } from "react";
 import {
+  AreaChartIcon,
+  BarChart3,
   BatteryCharging,
   Users,
   Wallet,
   Zap,
 } from "lucide-react";
 import {
+  Area,
+  AreaChart,
   Bar,
   BarChart,
   CartesianGrid,
   Cell,
+  LabelList,
   ResponsiveContainer,
   Tooltip,
   XAxis,
@@ -26,6 +31,7 @@ import {
 } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
 import { useMmsCustomerSalesAggregate } from "@/hooks/api/use-mms-customer-sales-aggregate-api";
 import { MmsCustomerSalesDetail } from "@/components/customer-sales/mms-customer-sales-detail";
 import { cn } from "@/lib/utils";
@@ -80,6 +86,37 @@ function formatMoney(value: number | null | undefined) {
   })}`;
 }
 
+type ChartKind = "bar" | "area";
+
+interface RegionChartRow {
+  region: string;
+  sum_last_month_kwh_read: number;
+  customer_count: number;
+}
+
+/** Renders both the consumption and customer-count figures above a single bar/area point. */
+function DualValueLabel(
+  props: { data: RegionChartRow[] } & Record<string, unknown>,
+) {
+  const x = Number(props.x) || 0;
+  const y = Number(props.y) || 0;
+  const width = Number(props.width) || 0;
+  const index = Number(props.index) || 0;
+  const row = props.data[index];
+  if (!row) return null;
+  const cx = x + width / 2;
+  return (
+    <g>
+      <text x={cx} y={y - 20} textAnchor="middle" className="fill-green-700 text-[11px] font-semibold">
+        {formatKwh(row.sum_last_month_kwh_read)}
+      </text>
+      <text x={cx} y={y - 7} textAnchor="middle" className="fill-emerald-700 text-[10px] font-medium">
+        {formatNumber(row.customer_count)} cust.
+      </text>
+    </g>
+  );
+}
+
 export function MmsPageView({
   dateRange,
   region,
@@ -87,6 +124,7 @@ export function MmsPageView({
   embedded = false,
 }: MmsPageViewProps) {
   const [selectedRegion, setSelectedRegion] = useState<string | null>(null);
+  const [chartKind, setChartKind] = useState<ChartKind>("bar");
 
   const effectiveRegion = selectedRegion || region;
 
@@ -269,25 +307,42 @@ export function MmsPageView({
         </Card>
       </div>
 
-      {/* Charts */}
-      <div className="grid gap-4 md:grid-cols-2">
-        <Card>
-          <CardHeader>
-            <CardTitle>Consumption by region</CardTitle>
-            <CardDescription>Prepaid kWh read per region</CardDescription>
-          </CardHeader>
-          <CardContent>
-            {regionLoading ? (
-              <Skeleton className="h-[280px] w-full" />
-            ) : byConsumption.length === 0 ? (
-              <p className="text-sm text-muted-foreground py-12 text-center">
-                No MMS aggregate data for this period.
-              </p>
-            ) : (
-              <ResponsiveContainer width="100%" height={280}>
+      {/* Chart */}
+      <Card>
+        <CardHeader className="flex flex-row items-start justify-between gap-3 flex-wrap">
+          <div>
+            <CardTitle>Consumption &amp; customers by region</CardTitle>
+            <CardDescription>Prepaid kWh read and accounts per region</CardDescription>
+          </div>
+          <ToggleGroup
+            type="single"
+            value={chartKind}
+            onValueChange={(v) => {
+              if (v) setChartKind(v as ChartKind);
+            }}
+            variant="outline"
+          >
+            <ToggleGroupItem value="bar" aria-label="Bar chart">
+              <BarChart3 className="h-4 w-4" />
+            </ToggleGroupItem>
+            <ToggleGroupItem value="area" aria-label="Area chart">
+              <AreaChartIcon className="h-4 w-4" />
+            </ToggleGroupItem>
+          </ToggleGroup>
+        </CardHeader>
+        <CardContent>
+          {regionLoading ? (
+            <Skeleton className="h-[320px] w-full" />
+          ) : byConsumption.length === 0 ? (
+            <p className="text-sm text-muted-foreground py-12 text-center">
+              No MMS aggregate data for this period.
+            </p>
+          ) : (
+            <ResponsiveContainer width="100%" height={320}>
+              {chartKind === "bar" ? (
                 <BarChart
                   data={byConsumption}
-                  margin={{ top: 8, right: 8, left: 8, bottom: 80 }}
+                  margin={{ top: 40, right: 8, left: 8, bottom: 80 }}
                 >
                   <CartesianGrid strokeDasharray="3 3" vertical={false} />
                   <XAxis
@@ -308,16 +363,25 @@ export function MmsPageView({
                     tick={{ fontSize: 11 }}
                   />
                   <Tooltip
-                    formatter={(v: number) => [formatKwhRaw(v), "Consumption"]}
+                    formatter={(v: number, name: string) =>
+                      name === "customer_count"
+                        ? [formatNumber(v), "Customers"]
+                        : [formatKwhRaw(v), "Consumption"]
+                    }
                   />
                   <Bar
                     dataKey="sum_last_month_kwh_read"
                     radius={[6, 6, 0, 0]}
                     cursor="pointer"
+                    isAnimationActive={false}
                     onClick={(data: { region?: string }) => {
                       if (data?.region) selectRegion(data.region);
                     }}
                   >
+                    <LabelList
+                      dataKey="sum_last_month_kwh_read"
+                      content={(props) => <DualValueLabel {...props} data={byConsumption} />}
+                    />
                     {byConsumption.map((row, i) => (
                       <Cell
                         key={row.region}
@@ -330,26 +394,10 @@ export function MmsPageView({
                     ))}
                   </Bar>
                 </BarChart>
-              </ResponsiveContainer>
-            )}
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardHeader>
-            <CardTitle>Customers by region</CardTitle>
-            <CardDescription>Prepaid accounts per region</CardDescription>
-          </CardHeader>
-          <CardContent>
-            {regionLoading ? (
-              <Skeleton className="h-[280px] w-full" />
-            ) : (
-              <ResponsiveContainer width="100%" height={280}>
-                <BarChart
-                  data={[...byConsumption].sort(
-                    (a, b) => b.customer_count - a.customer_count,
-                  )}
-                  margin={{ top: 8, right: 8, left: 8, bottom: 80 }}
+              ) : (
+                <AreaChart
+                  data={byConsumption}
+                  margin={{ top: 40, right: 8, left: 8, bottom: 80 }}
                 >
                   <CartesianGrid strokeDasharray="3 3" vertical={false} />
                   <XAxis
@@ -360,27 +408,43 @@ export function MmsPageView({
                     interval={0}
                   />
                   <YAxis
-                    tickFormatter={(v) => v.toLocaleString()}
+                    tickFormatter={(v) =>
+                      Math.abs(v) >= 1_000_000
+                        ? `${(v / 1_000_000).toFixed(0)}M`
+                        : Math.abs(v) >= 1_000
+                          ? `${(v / 1_000).toFixed(0)}k`
+                          : String(v)
+                    }
                     tick={{ fontSize: 11 }}
                   />
                   <Tooltip
-                    formatter={(v: number) => [formatNumber(v), "Customers"]}
+                    formatter={(v: number, name: string) =>
+                      name === "customer_count"
+                        ? [formatNumber(v), "Customers"]
+                        : [formatKwhRaw(v), "Consumption"]
+                    }
                   />
-                  <Bar
-                    dataKey="customer_count"
-                    fill="#22c55e"
-                    radius={[6, 6, 0, 0]}
-                    cursor="pointer"
-                    onClick={(data: { region?: string }) => {
-                      if (data?.region) selectRegion(data.region);
-                    }}
-                  />
-                </BarChart>
-              </ResponsiveContainer>
-            )}
-          </CardContent>
-        </Card>
-      </div>
+                  <Area
+                    type="monotone"
+                    dataKey="sum_last_month_kwh_read"
+                    stroke="#16a34a"
+                    fill="#16a34a"
+                    fillOpacity={0.25}
+                    strokeWidth={2}
+                    dot={{ r: 3, fill: "#16a34a" }}
+                    isAnimationActive={false}
+                  >
+                    <LabelList
+                      dataKey="sum_last_month_kwh_read"
+                      content={(props) => <DualValueLabel {...props} data={byConsumption} />}
+                    />
+                  </Area>
+                </AreaChart>
+              )}
+            </ResponsiveContainer>
+          )}
+        </CardContent>
+      </Card>
 
       <Tabs defaultValue="regions">
         <TabsList className="grid w-full max-w-lg grid-cols-3">
