@@ -16,6 +16,7 @@ import { Marquee, MarqueeItem } from "@/components/ui/marquee";
 import { useZeusBillingAggregate } from "@/hooks/api/use-zeus-billing-aggregate-api";
 import { useMmsCustomerSalesAggregate } from "@/hooks/api/use-mms-customer-sales-aggregate-api";
 import { useAmrConsumptionAggregate } from "@/hooks/api/use-amr-consumption-aggregate-api";
+import { AmrCustomerSalesDetail } from "@/components/customer-sales/amr-customer-sales-detail";
 import {
   BarChart,
   Bar,
@@ -172,6 +173,14 @@ export function CustomerSalesOverview({
     [zeusRaw],
   );
 
+  // Zeus billing accounts tagged meterModelType=AMR — a distinct lineage from
+  // the daily AMR meter readings (same "AMR" label, different pipeline),
+  // grouped here the same way zeusItems is for Postpaid.
+  const zeusAmrItems = useMemo(
+    () => zeusRaw.filter((i) => normalizeZeusType(i.metermodeltype) === "AMR"),
+    [zeusRaw],
+  );
+
   const zeusByServiceType = useMemo(() => {
     const totals = {
       Postpaid: { totalKwh: 0, totalCustomers: 0, totalBilling: 0, totalBalance: 0 },
@@ -265,6 +274,14 @@ export function CustomerSalesOverview({
       zeusByServiceType.Postpaid.totalCustomers > 0
         ? zeusByServiceType.Postpaid.totalKwh /
           zeusByServiceType.Postpaid.totalCustomers
+        : 0,
+  };
+
+  const zeusAmrStats = {
+    ...zeusByServiceType.AMR,
+    avgKwh:
+      zeusByServiceType.AMR.totalCustomers > 0
+        ? zeusByServiceType.AMR.totalKwh / zeusByServiceType.AMR.totalCustomers
         : 0,
   };
 
@@ -881,6 +898,21 @@ export function CustomerSalesOverview({
                 <ArrowRight className="h-3.5 w-3.5" />
               </Link>
             </div>
+
+            {/* Postpaid classifies by meterModelType: "Postpaid" here, "AMR"
+                (Zeus-billed AMR accounts + the daily AMR meter pipeline) in
+                its own sub-tab below — never mixed together. */}
+            <Tabs defaultValue="zeus">
+              <TabsList className="grid w-full max-w-xs grid-cols-2">
+                <TabsTrigger value="zeus" className="data-[state=active]:text-blue-700">
+                  Zeus
+                </TabsTrigger>
+                <TabsTrigger value="amr" className="data-[state=active]:text-orange-700">
+                  AMR
+                </TabsTrigger>
+              </TabsList>
+
+              <TabsContent value="zeus" className="space-y-6 mt-4">
             {/* Zeus KPIs */}
             <div className="grid gap-4 md:grid-cols-2">
               <Card className="border-dashed">
@@ -1146,7 +1178,115 @@ export function CustomerSalesOverview({
                 )}
               </CardContent>
             </Card>
-          </TabsContent>
+              </TabsContent>
+
+              <TabsContent value="amr" className="space-y-6 mt-4">
+                {/* Zeus billing accounts tagged meterModelType=AMR — invisible
+                    everywhere else on this page until now. */}
+                <div className="grid gap-4 md:grid-cols-2">
+                  <Card className="border-dashed">
+                    <CardContent className="pt-4 pb-4">
+                      <div className="flex items-center justify-between">
+                        <div className="flex items-center gap-2">
+                          <Zap className="h-4 w-4 text-muted-foreground" />
+                          <span className="text-sm text-muted-foreground font-medium">
+                            Zeus AMR Consumption
+                          </span>
+                        </div>
+                        {zeusLoading ? (
+                          <Skeleton className="h-5 w-28" />
+                        ) : (
+                          <span className="text-base font-semibold text-orange-700">
+                            {formatKwhRaw(zeusAmrStats.totalKwh)}
+                          </span>
+                        )}
+                      </div>
+                    </CardContent>
+                  </Card>
+                  <Card className="border-dashed">
+                    <CardContent className="pt-4 pb-4">
+                      <div className="flex items-center justify-between">
+                        <div className="flex items-center gap-2">
+                          <DollarSign className="h-4 w-4 text-muted-foreground" />
+                          <span className="text-sm text-muted-foreground font-medium">
+                            Zeus AMR Billing
+                          </span>
+                        </div>
+                        {zeusLoading ? (
+                          <Skeleton className="h-5 w-28" />
+                        ) : (
+                          <span className="text-base font-semibold text-orange-700">
+                            {formatMoney(zeusAmrStats.totalBilling)}
+                          </span>
+                        )}
+                      </div>
+                    </CardContent>
+                  </Card>
+                </div>
+
+                {zeusAmrItems.length > 0 && (
+                  <Card>
+                    <CardHeader>
+                      <CardTitle>Region Breakdown — Zeus (AMR)</CardTitle>
+                      <CardDescription>
+                        Zeus-billed AMR accounts — consumption and billing by region
+                      </CardDescription>
+                    </CardHeader>
+                    <CardContent>
+                      {zeusLoading ? (
+                        <Skeleton className="h-48 w-full" />
+                      ) : (
+                        <div className="overflow-x-auto">
+                          <table className="w-full text-sm">
+                            <thead>
+                              <tr className="border-b">
+                                <th className="text-left py-2 pr-4 font-medium text-muted-foreground">
+                                  Region
+                                </th>
+                                <th className="text-right py-2 px-4 font-medium text-orange-700">
+                                  Consumption (kWh)
+                                </th>
+                                <th className="text-right py-2 px-4 font-medium text-muted-foreground">
+                                  Customers
+                                </th>
+                                <th className="text-right py-2 pl-4 font-medium text-muted-foreground">
+                                  Billing
+                                </th>
+                              </tr>
+                            </thead>
+                            <tbody>
+                              {[...zeusAmrItems]
+                                .sort(
+                                  (a, b) =>
+                                    (b.sum_billconsumptionvalue || 0) -
+                                    (a.sum_billconsumptionvalue || 0),
+                                )
+                                .map((item, idx) => (
+                                  <tr
+                                    key={idx}
+                                    className="border-b last:border-0 hover:bg-muted/40"
+                                  >
+                                    <td className="py-2.5 pr-4 font-medium">
+                                      {item.regionname}
+                                    </td>
+                                    <td className="py-2.5 px-4 text-right font-semibold text-orange-700 tabular-nums">
+                                      {formatKwhRaw(item.sum_billconsumptionvalue)}
+                                    </td>
+                                    <td className="py-2.5 px-4 text-right tabular-nums">
+                                      {formatNumber(item.customer_count)}
+                                    </td>
+                                    <td className="py-2.5 pl-4 text-right text-orange-700 tabular-nums">
+                                      {formatMoney(item.sum_billamount)}
+                                    </td>
+                                  </tr>
+                                ))}
+                            </tbody>
+                          </table>
+                        </div>
+                      )}
+                    </CardContent>
+                  </Card>
+                )}
 
           {/* ── PREPAID TAB (MMS + Zeus Prepaid) ── */}
           <TabsContent value="prepaid" className="space-y-6 mt-6">
@@ -1480,9 +1620,8 @@ export function CustomerSalesOverview({
               </CardContent>
             </Card>
           </TabsContent>
-          {/* ── AMR section under Postpaid tab ── */}
-          <TabsContent value="postpaid" className="space-y-6 mt-6">
-            <div className="flex items-center justify-between gap-3 flex-wrap border-t pt-6">
+                {/* ── Daily AMR meter pipeline (separate from Zeus AMR billing above) ── */}
+                <div className="flex items-center justify-between gap-3 flex-wrap border-t pt-6">
               <div>
                 <p className="text-sm font-medium text-orange-800">
                   Daily AMR (SLT / NSLT)
@@ -1653,6 +1792,11 @@ export function CustomerSalesOverview({
                 )}
               </CardContent>
             </Card>
+
+                {/* SLT / NSLT breakdown for the daily AMR meter pipeline */}
+                <AmrCustomerSalesDetail dateRange={dateRange} linkSltTypes />
+              </TabsContent>
+            </Tabs>
           </TabsContent>
         </Tabs>
       </div>
