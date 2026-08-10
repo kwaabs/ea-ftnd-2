@@ -17,7 +17,6 @@ import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
 import { useZeusBillingAggregate } from "@/hooks/api/use-zeus-billing-aggregate-api";
 import { useMmsCustomerSalesAggregate } from "@/hooks/api/use-mms-customer-sales-aggregate-api";
 import { useAmrConsumptionAggregate } from "@/hooks/api/use-amr-consumption-aggregate-api";
-import { AmrCustomerSalesDetail } from "@/components/customer-sales/amr-customer-sales-detail";
 import { cn } from "@/lib/utils";
 import {
   Area,
@@ -199,6 +198,14 @@ export function CustomerSalesOverview({
       region: selectedPostpaidRegion || undefined,
       meterModelType: "Postpaid",
       enabled: Boolean(selectedPostpaidRegion),
+    });
+
+  // Service class breakdown for Zeus's own AMR-tagged billing accounts.
+  const { data: zeusAmrServiceClassData, isLoading: zeusAmrServiceClassLoading } =
+    useZeusBillingAggregate({
+      ...params,
+      groupBy: "serviceclass",
+      meterModelType: "AMR",
     });
 
   const zeusRaw = zeusData || [];
@@ -1457,6 +1464,75 @@ export function CustomerSalesOverview({
                   </Card>
                 )}
 
+                <Card>
+                  <CardHeader>
+                    <CardTitle>Service class breakdown — Zeus (AMR)</CardTitle>
+                    <CardDescription>
+                      Zeus-billed AMR accounts — consumption and billing by service class
+                    </CardDescription>
+                  </CardHeader>
+                  <CardContent>
+                    {zeusAmrServiceClassLoading ? (
+                      <Skeleton className="h-48 w-full" />
+                    ) : !zeusAmrServiceClassData || zeusAmrServiceClassData.length === 0 ? (
+                      <p className="text-sm text-muted-foreground py-8 text-center">
+                        No service class data for Zeus AMR accounts.
+                      </p>
+                    ) : (
+                      <div className="overflow-x-auto">
+                        <table className="w-full text-sm">
+                          <thead>
+                            <tr className="border-b">
+                              <th className="text-left py-2 pr-4 font-medium text-muted-foreground">
+                                Service class
+                              </th>
+                              <th className="text-right py-2 px-4 font-medium text-orange-700">
+                                Consumption (kWh)
+                              </th>
+                              <th className="text-right py-2 px-4 font-medium text-muted-foreground">
+                                Customers
+                              </th>
+                              <th className="text-right py-2 pl-4 font-medium text-muted-foreground">
+                                Billing
+                              </th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {[...zeusAmrServiceClassData]
+                              .sort(
+                                (a, b) =>
+                                  (b.sum_billconsumptionvalue || 0) -
+                                  (a.sum_billconsumptionvalue || 0),
+                              )
+                              .map((item, idx) => (
+                                <tr
+                                  key={idx}
+                                  className="border-b last:border-0 hover:bg-muted/40"
+                                >
+                                  <td className="py-2.5 pr-4 font-medium">
+                                    {item.serviceclass || "—"}
+                                  </td>
+                                  <td className="py-2.5 px-4 text-right font-semibold text-orange-700 tabular-nums">
+                                    {formatKwhRaw(item.sum_billconsumptionvalue)}
+                                  </td>
+                                  <td className="py-2.5 px-4 text-right tabular-nums">
+                                    {formatNumber(item.customer_count)}
+                                  </td>
+                                  <td className="py-2.5 pl-4 text-right text-orange-700 tabular-nums">
+                                    {formatMoney(item.sum_billamount)}
+                                  </td>
+                                </tr>
+                              ))}
+                          </tbody>
+                        </table>
+                      </div>
+                    )}
+                  </CardContent>
+                </Card>
+              </TabsContent>
+            </Tabs>
+          </TabsContent>
+
           {/* ── PREPAID TAB (MMS + Zeus Prepaid) ── */}
           <TabsContent value="prepaid" className="space-y-6 mt-6">
             <div className="flex items-center justify-between gap-3 flex-wrap">
@@ -1788,184 +1864,6 @@ export function CustomerSalesOverview({
                 )}
               </CardContent>
             </Card>
-          </TabsContent>
-                {/* ── Daily AMR meter pipeline (separate from Zeus AMR billing above) ── */}
-                <div className="flex items-center justify-between gap-3 flex-wrap border-t pt-6">
-              <div>
-                <p className="text-sm font-medium text-orange-800">
-                  Daily AMR (SLT / NSLT)
-                </p>
-                <p className="text-xs text-muted-foreground">
-                  Part of Postpaid — open by SLT type for meter detail
-                </p>
-              </div>
-              <Link
-                href="/customer-sales/postpaid/amr"
-                className="inline-flex items-center gap-1.5 rounded-md bg-orange-600 hover:bg-orange-700 px-3 py-1.5 text-xs font-medium text-white"
-              >
-                Open AMR by SLT type
-                <ArrowRight className="h-3.5 w-3.5" />
-              </Link>
-            </div>
-            <div className="grid gap-4 md:grid-cols-3">
-              <Card className="border-dashed">
-                <CardContent className="pt-4 pb-4">
-                  <div className="flex items-center justify-between">
-                    <div className="flex items-center gap-2">
-                      <Zap className="h-4 w-4 text-muted-foreground" />
-                      <span className="text-sm text-muted-foreground font-medium">
-                        Total Consumption
-                      </span>
-                    </div>
-                    {amrLoading ? (
-                      <Skeleton className="h-5 w-28" />
-                    ) : (
-                      <span className="text-base font-semibold text-orange-700">
-                        {formatKwhRaw(amrStats.totalKwh)}
-                      </span>
-                    )}
-                  </div>
-                </CardContent>
-              </Card>
-              <Card className="border-dashed">
-                <CardContent className="pt-4 pb-4">
-                  <div className="flex items-center justify-between">
-                    <div className="flex items-center gap-2">
-                      <TrendingUp className="h-4 w-4 text-muted-foreground" />
-                      <span className="text-sm text-muted-foreground font-medium">
-                        Import kWh
-                      </span>
-                    </div>
-                    {amrLoading ? (
-                      <Skeleton className="h-5 w-28" />
-                    ) : (
-                      <span className="text-base font-semibold text-orange-700">
-                        {formatKwhRaw(amrStats.importKwh)}
-                      </span>
-                    )}
-                  </div>
-                </CardContent>
-              </Card>
-              <Card className="border-dashed">
-                <CardContent className="pt-4 pb-4">
-                  <div className="flex items-center justify-between">
-                    <div className="flex items-center gap-2">
-                      <TrendingUp className="h-4 w-4 text-muted-foreground" />
-                      <span className="text-sm text-muted-foreground font-medium">
-                        Export kWh
-                      </span>
-                    </div>
-                    {amrLoading ? (
-                      <Skeleton className="h-5 w-28" />
-                    ) : (
-                      <span className="text-base font-semibold text-orange-600">
-                        {formatKwhRaw(amrStats.exportKwh)}
-                      </span>
-                    )}
-                  </div>
-                </CardContent>
-              </Card>
-            </div>
-
-            <Card>
-              <CardHeader>
-                <CardTitle>Region Breakdown — AMR</CardTitle>
-                <CardDescription>
-                  Daily meter import and export consumption by region
-                </CardDescription>
-              </CardHeader>
-              <CardContent>
-                {amrLoading ? (
-                  <Skeleton className="h-48 w-full" />
-                ) : (
-                  <div className="overflow-x-auto">
-                    <table className="w-full text-sm">
-                      <thead>
-                        <tr className="border-b">
-                          <th className="text-left py-2 pr-4 font-medium text-muted-foreground">
-                            Region
-                          </th>
-                          <th className="text-right py-2 px-4 font-medium text-orange-700">
-                            Import kWh
-                          </th>
-                          <th className="text-right py-2 px-4 font-medium text-orange-600">
-                            Export kWh
-                          </th>
-                          <th className="text-right py-2 px-4 font-medium text-muted-foreground">
-                            Total kWh
-                          </th>
-                          <th className="text-right py-2 pl-4 font-medium text-muted-foreground">
-                            Active Meters
-                          </th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {amrByRegion.map((item, idx) => {
-                          const total = item.importKwh + item.exportKwh;
-                          const pct =
-                            amrStats.totalKwh > 0
-                              ? (total / amrStats.totalKwh) * 100
-                              : 0;
-                          return (
-                            <tr
-                              key={idx}
-                              className="border-b last:border-0 hover:bg-muted/40"
-                            >
-                              <td className="py-2.5 pr-4 font-medium">
-                                {item.region}
-                              </td>
-                              <td className="py-2.5 px-4 text-right font-semibold text-orange-700 tabular-nums">
-                                {formatKwhRaw(item.importKwh)}
-                              </td>
-                              <td className="py-2.5 px-4 text-right text-orange-600 tabular-nums">
-                                {formatKwhRaw(item.exportKwh)}
-                              </td>
-                              <td className="py-2.5 px-4 text-right font-semibold tabular-nums">
-                                {formatKwhRaw(total)}
-                              </td>
-                              <td className="py-2.5 pl-4 text-right">
-                                <div className="flex items-center justify-end gap-2">
-                                  <span className="tabular-nums">
-                                    {formatNumber(item.meters)}
-                                  </span>
-                                  <span className="text-xs text-muted-foreground">
-                                    ({pct.toFixed(1)}%)
-                                  </span>
-                                </div>
-                              </td>
-                            </tr>
-                          );
-                        })}
-                      </tbody>
-                      <tfoot>
-                        <tr className="border-t bg-muted/30">
-                          <td className="py-2.5 pr-4 font-semibold">Total</td>
-                          <td className="py-2.5 px-4 text-right font-bold text-orange-700 tabular-nums">
-                            {formatKwhRaw(amrStats.importKwh)}
-                          </td>
-                          <td className="py-2.5 px-4 text-right font-semibold text-orange-600 tabular-nums">
-                            {formatKwhRaw(amrStats.exportKwh)}
-                          </td>
-                          <td className="py-2.5 px-4 text-right font-bold tabular-nums">
-                            {formatKwhRaw(amrStats.totalKwh)}
-                          </td>
-                          <td className="py-2.5 pl-4 text-right font-semibold tabular-nums">
-                            {formatNumber(
-                              amrByRegion.reduce((s, r) => s + r.meters, 0),
-                            )}
-                          </td>
-                        </tr>
-                      </tfoot>
-                    </table>
-                  </div>
-                )}
-              </CardContent>
-            </Card>
-
-                {/* SLT / NSLT breakdown for the daily AMR meter pipeline */}
-                <AmrCustomerSalesDetail dateRange={dateRange} linkSltTypes />
-              </TabsContent>
-            </Tabs>
           </TabsContent>
         </Tabs>
       </div>
