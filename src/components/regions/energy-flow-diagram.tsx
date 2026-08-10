@@ -254,7 +254,6 @@ export function EnergyFlowDiagram({
     const prepaidChildren: DrillRow[] = [];
 
     for (const [src, kwh] of customerBySrc.entries()) {
-        if (!kwh) continue;
         const label = formatCustomerSource(src);
         const row: DrillRow = {
             label,
@@ -301,7 +300,6 @@ export function EnergyFlowDiagram({
         {
             label: "Prepaid",
             value: prepaidTotal,
-            sub: "Zeus + MMS",
             children: prepaidChildren,
         },
     ];
