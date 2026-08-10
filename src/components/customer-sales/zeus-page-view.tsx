@@ -2,12 +2,23 @@
 
 import { useMemo, useState } from "react";
 import Link from "next/link";
-import { ArrowUpRight, DollarSign, Scale, Users, Zap } from "lucide-react";
 import {
+  AreaChartIcon,
+  ArrowUpRight,
+  BarChart3,
+  DollarSign,
+  Scale,
+  Users,
+  Zap,
+} from "lucide-react";
+import {
+  Area,
+  AreaChart,
   Bar,
   BarChart,
   CartesianGrid,
   Cell,
+  LabelList,
   ResponsiveContainer,
   Tooltip,
   XAxis,
@@ -22,6 +33,7 @@ import {
 } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
 import { useZeusBillingAggregate } from "@/hooks/api/use-zeus-billing-aggregate-api";
 import { CustomerSalesDetail } from "@/components/customer-sales/customer-sales-detail";
 import { cn } from "@/lib/utils";
@@ -103,6 +115,38 @@ function formatMoney(value: number | null | undefined) {
   })}`;
 }
 
+type ChartKind = "bar" | "area";
+
+interface RegionChartRow {
+  regionname: string;
+  sum_billconsumptionvalue: number;
+  customer_count: number;
+  sum_billamount: number;
+}
+
+/** Renders both the consumption and customer-count figures above a single bar/area point. */
+function DualValueLabel(
+  props: { data: RegionChartRow[] } & Record<string, unknown>,
+) {
+  const x = Number(props.x) || 0;
+  const y = Number(props.y) || 0;
+  const width = Number(props.width) || 0;
+  const index = Number(props.index) || 0;
+  const row = props.data[index];
+  if (!row) return null;
+  const cx = x + width / 2;
+  return (
+    <g>
+      <text x={cx} y={y - 20} textAnchor="middle" className="fill-blue-700 text-[11px] font-semibold">
+        {formatKwh(row.sum_billconsumptionvalue)}
+      </text>
+      <text x={cx} y={y - 7} textAnchor="middle" className="fill-purple-700 text-[10px] font-medium">
+        {formatNumber(row.customer_count)} cust.
+      </text>
+    </g>
+  );
+}
+
 export function ZeusPageView({
   dateRange,
   region,
@@ -115,6 +159,7 @@ export function ZeusPageView({
   const serviceType: ZeusServiceType = lockedServiceType ?? unlockedServiceType;
   const isLocked = Boolean(lockedServiceType);
   const [selectedRegion, setSelectedRegion] = useState<string | null>(null);
+  const [chartKind, setChartKind] = useState<ChartKind>("bar");
   const effectiveRegion = selectedRegion || region;
   const serviceMeta = ZEUS_SERVICE_META[serviceType];
 
@@ -360,27 +405,45 @@ export function ZeusPageView({
         </Card>
       </div>
 
-      {/* Charts */}
-      <div className="grid gap-4 md:grid-cols-2">
-        <Card>
-          <CardHeader>
-            <CardTitle>Consumption by region</CardTitle>
+      {/* Chart */}
+      <Card>
+        <CardHeader className="flex flex-row items-start justify-between gap-3 flex-wrap">
+          <div>
+            <CardTitle>Consumption &amp; customers by region</CardTitle>
             <CardDescription>
-              Billed kWh per region — Zeus {serviceMeta.label}
+              Billed kWh and {serviceMeta.label.toLowerCase()} accounts per region — Zeus{" "}
+              {serviceMeta.label}
             </CardDescription>
-          </CardHeader>
-          <CardContent>
-            {regionLoading ? (
-              <Skeleton className="h-[280px] w-full" />
-            ) : byConsumption.length === 0 ? (
-              <p className="text-sm text-muted-foreground py-12 text-center">
-                No Zeus aggregate data for this period.
-              </p>
-            ) : (
-              <ResponsiveContainer width="100%" height={280}>
+          </div>
+          <ToggleGroup
+            type="single"
+            value={chartKind}
+            onValueChange={(v) => {
+              if (v) setChartKind(v as ChartKind);
+            }}
+            variant="outline"
+          >
+            <ToggleGroupItem value="bar" aria-label="Bar chart">
+              <BarChart3 className="h-4 w-4" />
+            </ToggleGroupItem>
+            <ToggleGroupItem value="area" aria-label="Area chart">
+              <AreaChartIcon className="h-4 w-4" />
+            </ToggleGroupItem>
+          </ToggleGroup>
+        </CardHeader>
+        <CardContent>
+          {regionLoading ? (
+            <Skeleton className="h-[320px] w-full" />
+          ) : byConsumption.length === 0 ? (
+            <p className="text-sm text-muted-foreground py-12 text-center">
+              No Zeus aggregate data for this period.
+            </p>
+          ) : (
+            <ResponsiveContainer width="100%" height={320}>
+              {chartKind === "bar" ? (
                 <BarChart
                   data={byConsumption}
-                  margin={{ top: 8, right: 8, left: 8, bottom: 80 }}
+                  margin={{ top: 40, right: 8, left: 8, bottom: 80 }}
                 >
                   <CartesianGrid strokeDasharray="3 3" vertical={false} />
                   <XAxis
@@ -401,16 +464,25 @@ export function ZeusPageView({
                     tick={{ fontSize: 11 }}
                   />
                   <Tooltip
-                    formatter={(v: number) => [formatKwhRaw(v), "Consumption"]}
+                    formatter={(v: number, name: string) =>
+                      name === "customer_count"
+                        ? [formatNumber(v), "Customers"]
+                        : [formatKwhRaw(v), "Consumption"]
+                    }
                   />
                   <Bar
                     dataKey="sum_billconsumptionvalue"
                     radius={[6, 6, 0, 0]}
                     cursor="pointer"
+                    isAnimationActive={false}
                     onClick={(data: { regionname?: string }) => {
                       if (data?.regionname) selectRegion(data.regionname);
                     }}
                   >
+                    <LabelList
+                      dataKey="sum_billconsumptionvalue"
+                      content={(props) => <DualValueLabel {...props} data={byConsumption} />}
+                    />
                     {byConsumption.map((row, i) => (
                       <Cell
                         key={row.regionname}
@@ -423,26 +495,10 @@ export function ZeusPageView({
                     ))}
                   </Bar>
                 </BarChart>
-              </ResponsiveContainer>
-            )}
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardHeader>
-            <CardTitle>Customers by region</CardTitle>
-            <CardDescription>{serviceMeta.label} accounts per region</CardDescription>
-          </CardHeader>
-          <CardContent>
-            {regionLoading ? (
-              <Skeleton className="h-[280px] w-full" />
-            ) : (
-              <ResponsiveContainer width="100%" height={280}>
-                <BarChart
-                  data={[...byConsumption].sort(
-                    (a, b) => b.customer_count - a.customer_count,
-                  )}
-                  margin={{ top: 8, right: 8, left: 8, bottom: 80 }}
+              ) : (
+                <AreaChart
+                  data={byConsumption}
+                  margin={{ top: 40, right: 8, left: 8, bottom: 80 }}
                 >
                   <CartesianGrid strokeDasharray="3 3" vertical={false} />
                   <XAxis
@@ -453,27 +509,43 @@ export function ZeusPageView({
                     interval={0}
                   />
                   <YAxis
-                    tickFormatter={(v) => v.toLocaleString()}
+                    tickFormatter={(v) =>
+                      Math.abs(v) >= 1_000_000
+                        ? `${(v / 1_000_000).toFixed(0)}M`
+                        : Math.abs(v) >= 1_000
+                          ? `${(v / 1_000).toFixed(0)}k`
+                          : String(v)
+                    }
                     tick={{ fontSize: 11 }}
                   />
                   <Tooltip
-                    formatter={(v: number) => [formatNumber(v), "Customers"]}
+                    formatter={(v: number, name: string) =>
+                      name === "customer_count"
+                        ? [formatNumber(v), "Customers"]
+                        : [formatKwhRaw(v), "Consumption"]
+                    }
                   />
-                  <Bar
-                    dataKey="customer_count"
-                    fill="#8b5cf6"
-                    radius={[6, 6, 0, 0]}
-                    cursor="pointer"
-                    onClick={(data: { regionname?: string }) => {
-                      if (data?.regionname) selectRegion(data.regionname);
-                    }}
-                  />
-                </BarChart>
-              </ResponsiveContainer>
-            )}
-          </CardContent>
-        </Card>
-      </div>
+                  <Area
+                    type="monotone"
+                    dataKey="sum_billconsumptionvalue"
+                    stroke="#1d4ed8"
+                    fill="#1d4ed8"
+                    fillOpacity={0.25}
+                    strokeWidth={2}
+                    dot={{ r: 3, fill: "#1d4ed8" }}
+                    isAnimationActive={false}
+                  >
+                    <LabelList
+                      dataKey="sum_billconsumptionvalue"
+                      content={(props) => <DualValueLabel {...props} data={byConsumption} />}
+                    />
+                  </Area>
+                </AreaChart>
+              )}
+            </ResponsiveContainer>
+          )}
+        </CardContent>
+      </Card>
 
       <Tabs defaultValue="regions">
         <TabsList className="grid w-full max-w-md grid-cols-3">

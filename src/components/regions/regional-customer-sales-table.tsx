@@ -7,9 +7,12 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { useZeusBillingDetail } from "@/hooks/api/use-zeus-billing-detail-api"
 import { ArrowUpDown, ChevronLeft, ChevronRight, Search } from "lucide-react"
 import { ExportButton } from "@/components/ui/export-button"
+
+const ALL_BILL_STATUS = "all"
 
 interface RegionalCustomerSalesTableProps {
   region: string
@@ -52,6 +55,7 @@ export function RegionalCustomerSalesTable({ region, dateRange, meterModelType }
   const [page, setPage] = useState(1)
   const pageSize = 20
   const [searchTerm, setSearchTerm] = useState("")
+  const [billStatusFilter, setBillStatusFilter] = useState(ALL_BILL_STATUS)
   const [sortField, setSortField] = useState<SortField>("billConsumptionValue")
   const [sortOrder, setSortOrder] = useState<SortOrder>("desc")
 
@@ -64,17 +68,27 @@ export function RegionalCustomerSalesTable({ region, dateRange, meterModelType }
     limit: 1000,
   })
 
+  const billStatusOptions = useMemo(() => {
+    const values = new Set<string>()
+    ;(data?.data || []).forEach((r) => {
+      if (r.billStatus?.trim()) values.add(r.billStatus.trim())
+    })
+    return [...values].sort((a, b) => a.localeCompare(b))
+  }, [data])
+
   const filteredData = useMemo(() => {
     const records = data?.data || []
     return records.filter((r) => {
       const searchLower = searchTerm.toLowerCase()
-      return (
+      const matchesSearch =
         (r.customerName?.toLowerCase() || "").includes(searchLower) ||
         (r.accountCode?.toLowerCase() || "").includes(searchLower) ||
         (r.servicePointCode?.toLowerCase() || "").includes(searchLower)
-      )
+      const matchesBillStatus =
+        billStatusFilter === ALL_BILL_STATUS || r.billStatus === billStatusFilter
+      return matchesSearch && matchesBillStatus
     })
-  }, [data, searchTerm])
+  }, [data, searchTerm, billStatusFilter])
 
   const sortedData = useMemo(() => {
     const sorted = [...filteredData].sort((a, b) => {
@@ -156,6 +170,25 @@ export function RegionalCustomerSalesTable({ region, dateRange, meterModelType }
               }))}
               filename={`${region.replace(/\s+/g, "-").toLowerCase()}-zeus-customer-sales`}
             />
+            <Select
+              value={billStatusFilter}
+              onValueChange={(v) => {
+                setBillStatusFilter(v)
+                setPage(1)
+              }}
+            >
+              <SelectTrigger className="w-[160px]">
+                <SelectValue placeholder="Bill status" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value={ALL_BILL_STATUS}>All bill statuses</SelectItem>
+                {billStatusOptions.map((name) => (
+                  <SelectItem key={name} value={name}>
+                    {name}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
             <div className="relative">
               <Search className="absolute left-2 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground pointer-events-none" />
               <Input
