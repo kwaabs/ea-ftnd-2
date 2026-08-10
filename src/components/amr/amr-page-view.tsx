@@ -14,6 +14,7 @@ import {
   Bar,
   BarChart,
   CartesianGrid,
+  Cell,
   Legend,
   ResponsiveContainer,
   Tooltip,
@@ -33,12 +34,24 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { AmrCustomerSalesDetail } from "@/components/customer-sales/amr-customer-sales-detail";
 import { CustomerSalesDetail } from "@/components/customer-sales/customer-sales-detail";
+import { useZeusBillingAggregate } from "@/hooks/api/use-zeus-billing-aggregate-api";
 import {
   useAmrStatusDetails,
   useAmrStatusSummary,
   useAmrStatusTimeline,
 } from "@/hooks/api/use-amr-status-api";
 import { cn } from "@/lib/utils";
+
+const AMR_CHART_COLORS = [
+  "#c2410c",
+  "#ea580c",
+  "#f97316",
+  "#fb923c",
+  "#fdba74",
+  "#9a3412",
+  "#7c2d12",
+  "#fed7aa",
+];
 
 interface DateRange {
   start: string;
@@ -57,6 +70,9 @@ interface AmrPageViewProps {
    * uses the amr-consumption-daily/aggregate sources) and show only the
    * Zeus-billed AMR accounts in the Consumption tab. */
   hideConsumptionDetail?: boolean;
+  /** When true, skip the meter online/offline health summary and the
+   * "Meter status" sub-tab (which use the separate amr-status source). */
+  hideMeterStatus?: boolean;
 }
 
 function formatKwh(value: number | null | undefined) {
@@ -67,6 +83,11 @@ function formatKwh(value: number | null | undefined) {
 function formatNumber(value: number | null | undefined) {
   if (value === null || value === undefined) return "0";
   return (value || 0).toLocaleString("en-US", { maximumFractionDigits: 0 });
+}
+
+function formatMoney(value: number | null | undefined) {
+  if (value === null || value === undefined) return "₵0.00";
+  return `₵${(value || 0).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 }
 
 function formatDate(date: string | null | undefined) {
@@ -85,6 +106,7 @@ export function AmrPageView({
   embedded = false,
   lockedSltType,
   hideConsumptionDetail = false,
+  hideMeterStatus = false,
 }: AmrPageViewProps) {
   const [selectedSltType, setSelectedSltType] = useState<string | null>(
     lockedSltType ?? null,
@@ -104,6 +126,7 @@ export function AmrPageView({
     region,
     district,
     sltType: effectiveSltType || undefined,
+    enabled: !hideMeterStatus,
   };
 
   const { data: statusSummary, isLoading: summaryLoading } =
@@ -122,6 +145,30 @@ export function AmrPageView({
       sortBy: "uptime",
       sortOrder: "asc",
     });
+
+  // Zeus AMR aggregate — powers the charts above the Customer Records table
+  // when the daily/status AMR sources are hidden (postpaid hub context).
+  const { data: zeusAmrRegionData, isLoading: zeusAmrChartsLoading } =
+    useZeusBillingAggregate({
+      dateFrom: dateRange.start,
+      dateTo: dateRange.end,
+      region,
+      district,
+      groupBy: "regionname",
+      meterModelType: "AMR",
+      enabled: hideConsumptionDetail,
+    });
+
+  const zeusAmrByRegion = useMemo(
+    () =>
+      [...(zeusAmrRegionData || [])]
+        .sort(
+          (a, b) =>
+            (b.sum_billconsumptionvalue || 0) - (a.sum_billconsumptionvalue || 0),
+        )
+        .slice(0, 12),
+    [zeusAmrRegionData],
+  );
 
   const timelineData = useMemo(() => {
     return (statusTimeline || []).map((d) => ({
@@ -163,6 +210,7 @@ export function AmrPageView({
       ) : null}
 
       {/* Meter health */}
+      {!hideMeterStatus && (
       <Card>
         <CardHeader>
           <CardTitle className="flex items-center gap-2">
@@ -372,51 +420,146 @@ export function AmrPageView({
           )}
         </CardContent>
       </Card>
+      )}
 
-      <Tabs defaultValue="consumption">
-        <TabsList className="grid w-full max-w-md grid-cols-2">
-          <TabsTrigger
-            value="consumption"
-            className="data-[state=active]:text-orange-700"
-          >
-            Consumption
-          </TabsTrigger>
-          <TabsTrigger
-            value="status"
-            className="data-[state=active]:text-orange-700"
-          >
-            Meter status
-          </TabsTrigger>
-        </TabsList>
+      {(() => {
+        const consumptionContent = (
+          <>
+            {!hideConsumptionDetail && (
+              <AmrCustomerSalesDetail
+                dateRange={dateRange}
+                region={region}
+                district={district}
+                selectedSltType={effectiveSltType}
+                onSelectedSltTypeChange={
+                  lockedSltType ? undefined : setSelectedSltType
+                }
+                hideSltCards={Boolean(lockedSltType)}
+                linkSltTypes={!lockedSltType}
+              />
+            )}
 
-        <TabsContent value="consumption" className="mt-4 space-y-4">
-          {!hideConsumptionDetail && (
-            <AmrCustomerSalesDetail
+            {hideConsumptionDetail && (
+              <div className="grid gap-4 md:grid-cols-3">
+                {(
+                  [
+                    {
+                      key: "sum_billconsumptionvalue" as const,
+                      title: "kWh Consumed",
+                      format: formatKwh,
+                      tooltipLabel: "Consumption",
+                    },
+                    {
+                      key: "sum_amountdue" as const,
+                      title: "Amount Due",
+                      format: formatMoney,
+                      tooltipLabel: "Amount due",
+                    },
+                    {
+                      key: "sum_debtamount" as const,
+                      title: "Debt",
+                      format: formatMoney,
+                      tooltipLabel: "Debt",
+                    },
+                  ]
+                ).map((metric) => (
+                  <Card key={metric.key}>
+                    <CardHeader>
+                      <CardTitle className="text-sm">{metric.title}</CardTitle>
+                      <CardDescription className="text-xs">
+                        Zeus AMR — {metric.title.toLowerCase()} by region
+                      </CardDescription>
+                    </CardHeader>
+                    <CardContent>
+                      {zeusAmrChartsLoading ? (
+                        <Skeleton className="h-[200px] w-full" />
+                      ) : zeusAmrByRegion.length === 0 ? (
+                        <p className="text-xs text-muted-foreground py-10 text-center">
+                          No data for this period.
+                        </p>
+                      ) : (
+                        <ResponsiveContainer width="100%" height={200}>
+                          <BarChart
+                            data={zeusAmrByRegion}
+                            margin={{ top: 8, right: 8, left: 8, bottom: 40 }}
+                          >
+                            <CartesianGrid strokeDasharray="3 3" vertical={false} />
+                            <XAxis
+                              dataKey="regionname"
+                              angle={-35}
+                              textAnchor="end"
+                              tick={{ fontSize: 10 }}
+                              interval={0}
+                            />
+                            <YAxis
+                              tickFormatter={(v) =>
+                                Math.abs(v) >= 1_000_000
+                                  ? `${(v / 1_000_000).toFixed(0)}M`
+                                  : Math.abs(v) >= 1_000
+                                    ? `${(v / 1_000).toFixed(0)}k`
+                                    : String(v)
+                              }
+                              tick={{ fontSize: 10 }}
+                            />
+                            <Tooltip
+                              formatter={(v: number) => [metric.format(v), metric.tooltipLabel]}
+                            />
+                            <Bar dataKey={metric.key} radius={[4, 4, 0, 0]}>
+                              {zeusAmrByRegion.map((row, i) => (
+                                <Cell
+                                  key={row.regionname}
+                                  fill={AMR_CHART_COLORS[i % AMR_CHART_COLORS.length]}
+                                />
+                              ))}
+                            </Bar>
+                          </BarChart>
+                        </ResponsiveContainer>
+                      )}
+                    </CardContent>
+                  </Card>
+                ))}
+              </div>
+            )}
+
+            {/* Zeus billing accounts tagged meterModelType=AMR — a distinct
+                lineage from the daily AMR meter readings above (same "AMR"
+                label, different pipeline), surfaced here rather than under
+                the Postpaid/Prepaid Zeus tabs since it belongs with AMR. */}
+            <CustomerSalesDetail
               dateRange={dateRange}
               region={region}
               district={district}
-              selectedSltType={effectiveSltType}
-              onSelectedSltTypeChange={
-                lockedSltType ? undefined : setSelectedSltType
-              }
-              hideSltCards={Boolean(lockedSltType)}
-              linkSltTypes={!lockedSltType}
+              serviceType="AMR"
             />
-          )}
+          </>
+        );
 
-          {/* Zeus billing accounts tagged meterModelType=AMR — a distinct
-              lineage from the daily AMR meter readings above (same "AMR"
-              label, different pipeline), surfaced here rather than under
-              the Postpaid/Prepaid Zeus tabs since it belongs with AMR. */}
-          <CustomerSalesDetail
-            dateRange={dateRange}
-            region={region}
-            district={district}
-            serviceType="AMR"
-          />
-        </TabsContent>
+        if (hideMeterStatus) {
+          return <div className="space-y-4">{consumptionContent}</div>;
+        }
 
-        <TabsContent value="status" className="mt-4">
+        return (
+          <Tabs defaultValue="consumption">
+            <TabsList className="grid w-full max-w-md grid-cols-2">
+              <TabsTrigger
+                value="consumption"
+                className="data-[state=active]:text-orange-700"
+              >
+                Consumption
+              </TabsTrigger>
+              <TabsTrigger
+                value="status"
+                className="data-[state=active]:text-orange-700"
+              >
+                Meter status
+              </TabsTrigger>
+            </TabsList>
+
+            <TabsContent value="consumption" className="mt-4 space-y-4">
+              {consumptionContent}
+            </TabsContent>
+
+            <TabsContent value="status" className="mt-4">
           <Card>
             <CardHeader>
               <CardTitle>AMR meter status</CardTitle>
@@ -598,8 +741,10 @@ export function AmrPageView({
               )}
             </CardContent>
           </Card>
-        </TabsContent>
-      </Tabs>
+            </TabsContent>
+          </Tabs>
+        );
+      })()}
     </div>
   );
 }
