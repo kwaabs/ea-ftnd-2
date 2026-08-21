@@ -16,7 +16,6 @@ import { Marquee, MarqueeItem } from "@/components/ui/marquee";
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
 import { useZeusBillingAggregate } from "@/hooks/api/use-zeus-billing-aggregate-api";
 import { useMmsCustomerSalesAggregate } from "@/hooks/api/use-mms-customer-sales-aggregate-api";
-import { useAmrConsumptionAggregate } from "@/hooks/api/use-amr-consumption-aggregate-api";
 import { cn } from "@/lib/utils";
 import {
   Area,
@@ -190,11 +189,6 @@ export function CustomerSalesOverview({
     useMmsCustomerSalesAggregate({
       ...params,
     });
-  const { data: amrData, isLoading: amrLoading } = useAmrConsumptionAggregate({
-    dateFrom: dateRange.start,
-    dateTo: dateRange.end,
-  });
-
   // District drill-down for the Postpaid/Zeus combined chart — only fetched
   // once a region is clicked.
   const { data: postpaidDistrictData, isLoading: postpaidDistrictLoading } =
@@ -221,7 +215,6 @@ export function CustomerSalesOverview({
   const zeusNationalRaw = zeusNationalData || [];
   const mmsItems = mmsData || [];
   const mmsNationalItems = mmsNationalData || [];
-  const amrItems = amrData || [];
 
   const normalizeZeusType = (raw?: string | null) => {
     const t = (raw || "").trim().toLowerCase();
@@ -352,31 +345,21 @@ export function CustomerSalesOverview({
     };
   }, [mmsItems, mmsNationalItems]);
 
-  // ── AMR stats (aggregate import + export) ──
-  const amrStats = useMemo(() => {
-    if (!amrItems.length) return { totalKwh: 0, importKwh: 0, exportKwh: 0 };
-    const importKwh = amrItems
-      .filter((i) => i.system_name === "import_kwh")
-      .reduce((s, i) => s + (i.total_consumption || 0), 0);
-    const exportKwh = amrItems
-      .filter((i) => i.system_name === "export_kwh")
-      .reduce((s, i) => s + (i.total_consumption || 0), 0);
-    return { totalKwh: importKwh + exportKwh, importKwh, exportKwh };
-  }, [amrItems]);
-
   // ── Category buckets (Customer Consumption IA) ──
-  // Postpaid = Zeus Postpaid + daily AMR; Prepaid = Zeus Prepaid + MMS
-  // Zeus meterModelType=AMR is shown as a badge only (not in category totals).
+  // Postpaid = Zeus Postpaid + Zeus AMR; Prepaid = Zeus Prepaid + MMS
   const postpaidKwh =
-    zeusByServiceType.Postpaid.totalKwh + amrStats.totalKwh;
+    zeusByServiceType.Postpaid.totalKwh + zeusByServiceType.AMR.totalKwh;
   const prepaidKwh =
     zeusByServiceType.Prepaid.totalKwh + mmsStats.totalKwh;
   const combinedKwh = postpaidKwh + prepaidKwh;
   const combinedCustomers =
     zeusByServiceType.Postpaid.totalCustomers +
+    zeusByServiceType.AMR.totalCustomers +
     zeusByServiceType.Prepaid.totalCustomers +
     mmsStats.totalCustomers;
-  const postpaidCustomers = zeusByServiceType.Postpaid.totalCustomers;
+  const postpaidCustomers =
+    zeusByServiceType.Postpaid.totalCustomers +
+    zeusByServiceType.AMR.totalCustomers;
   const prepaidCustomers =
     zeusByServiceType.Prepaid.totalCustomers + mmsStats.totalCustomers;
 
@@ -403,55 +386,6 @@ export function CustomerSalesOverview({
     [mmsItems],
   );
 
-  // ── AMR by region (import + export) ──
-  // active_meters is a per-day count from the backend (already correctly
-  // deduplicated within that day). Summing it across every day in the range
-  // — like the old code did — inflates "meters" by roughly the number of
-  // days selected, and double-counts again since both the import_kwh and
-  // export_kwh rows for the same day carry their own active_meters value.
-  // Average across days instead, counted once (off the import_kwh axis
-  // only) so the two system_name rows per day don't double it.
-  const amrByRegion = useMemo(() => {
-    const map = new Map<
-      string,
-      {
-        region: string;
-        importKwh: number;
-        exportKwh: number;
-        meterSum: number;
-        meterDays: number;
-      }
-    >();
-    amrItems.forEach((i) => {
-      const r = i.region || "Unknown";
-      if (!map.has(r)) {
-        map.set(r, {
-          region: r,
-          importKwh: 0,
-          exportKwh: 0,
-          meterSum: 0,
-          meterDays: 0,
-        });
-      }
-      const entry = map.get(r)!;
-      if (i.system_name === "import_kwh") {
-        entry.importKwh += i.total_consumption || 0;
-        entry.meterSum += i.active_meters || 0;
-        entry.meterDays += 1;
-      } else if (i.system_name === "export_kwh") {
-        entry.exportKwh += i.total_consumption || 0;
-      }
-    });
-    return [...map.values()]
-      .map((e) => ({
-        region: e.region,
-        importKwh: e.importKwh,
-        exportKwh: e.exportKwh,
-        meters: e.meterDays > 0 ? Math.round(e.meterSum / e.meterDays) : 0,
-      }))
-      .sort((a, b) => b.importKwh + b.exportKwh - (a.importKwh + a.exportKwh));
-  }, [amrItems]);
-
   // ── Combined chart: Postpaid vs Prepaid kWh by region ──
   const combinedChartData = useMemo(() => {
     const regionMap = new Map<
@@ -468,8 +402,9 @@ export function CustomerSalesOverview({
       ensure(i.regionname || "Unknown").postpaid +=
         i.sum_billconsumptionvalue || 0;
     });
-    amrItems.forEach((i) => {
-      ensure(i.region || "Unknown").postpaid += i.total_consumption || 0;
+    zeusAmrItems.forEach((i) => {
+      ensure(i.regionname || "Unknown").postpaid +=
+        i.sum_billconsumptionvalue || 0;
     });
     zeusPrepaidItems.forEach((i) => {
       ensure(i.regionname || "Unknown").prepaid +=
@@ -481,14 +416,10 @@ export function CustomerSalesOverview({
     return [...regionMap.values()].sort(
       (a, b) => b.postpaid + b.prepaid - (a.postpaid + a.prepaid),
     );
-  }, [zeusItems, zeusPrepaidItems, mmsItems, amrItems]);
+  }, [zeusItems, zeusAmrItems, zeusPrepaidItems, mmsItems]);
 
   const isLoading =
-    zeusLoading ||
-    zeusNationalLoading ||
-    mmsLoading ||
-    mmsNationalLoading ||
-    amrLoading;
+    zeusLoading || zeusNationalLoading || mmsLoading || mmsNationalLoading;
 
   return (
     <div className="space-y-6">
@@ -645,7 +576,7 @@ export function CustomerSalesOverview({
         <CardHeader>
           <CardTitle>Consumption by Region — Postpaid vs Prepaid</CardTitle>
           <CardDescription>
-            Postpaid (Zeus + daily AMR) and Prepaid (Zeus + MMS) kWh per region
+            Postpaid (Zeus + AMR) and Prepaid (Zeus + MMS) kWh per region
           </CardDescription>
         </CardHeader>
         <CardContent>
@@ -750,7 +681,7 @@ export function CustomerSalesOverview({
                 </CardDescription>
               </CardHeader>
               <CardContent>
-                {zeusLoading || mmsLoading || amrLoading ? (
+                {zeusLoading || mmsLoading ? (
                   <Skeleton className="h-96 w-full" />
                 ) : (
                   <div className="overflow-x-auto">
@@ -808,13 +739,13 @@ export function CustomerSalesOverview({
                             Credit
                           </th>
                           <th className="text-right py-2 px-4 font-medium text-xs text-orange-600">
-                            Import kWh
+                            kWh
                           </th>
                           <th className="text-right py-2 px-4 font-medium text-xs text-orange-600">
-                            Export kWh
+                            Customers
                           </th>
                           <th className="text-right py-2 px-4 font-medium text-xs text-orange-600">
-                            Meters
+                            Billing
                           </th>
                           <th className="text-right py-2 px-4 font-medium text-xs text-purple-600">
                             kWh
@@ -832,7 +763,7 @@ export function CustomerSalesOverview({
                           new Set([
                             ...zeusItems.map((z) => z.regionname),
                             ...mmsItems.map((m) => m.region || "Unknown"),
-                            ...amrByRegion.map((a) => a.region),
+                            ...zeusAmrItems.map((a) => a.regionname),
                           ]),
                         )
                           .sort()
@@ -851,25 +782,25 @@ export function CustomerSalesOverview({
                               customer_count: 0,
                               sum_last_month_credit_read: 0,
                             };
-                            const amrData = amrByRegion.find(
-                              (a) => a.region === region,
+                            const amrData = zeusAmrItems.find(
+                              (a) => a.regionname === region,
                             ) || {
-                              importKwh: 0,
-                              exportKwh: 0,
-                              meters: 0,
+                              sum_billconsumptionvalue: 0,
+                              customer_count: 0,
+                              sum_billamount: 0,
                             };
-                            const amrKwh =
-                              amrData.importKwh + amrData.exportKwh;
                             const totalKwh =
                               (zeusData.sum_billconsumptionvalue || 0) +
                               (mmsData.sum_last_month_kwh_read || 0) +
-                              amrKwh;
+                              (amrData.sum_billconsumptionvalue || 0);
                             const totalCustomers =
                               (zeusData.customer_count || 0) +
-                              (mmsData.customer_count || 0);
+                              (mmsData.customer_count || 0) +
+                              (amrData.customer_count || 0);
                             const totalValue =
                               (zeusData.sum_billamount || 0) +
-                              (mmsData.sum_last_month_credit_read || 0);
+                              (mmsData.sum_last_month_credit_read || 0) +
+                              (amrData.sum_billamount || 0);
                             return (
                               <tr
                                 key={idx}
@@ -903,13 +834,15 @@ export function CustomerSalesOverview({
                                   )}
                                 </td>
                                 <td className="py-2.5 px-4 text-right font-semibold text-orange-700 tabular-nums text-xs">
-                                  {formatKwhRaw(amrData.importKwh)}
+                                  {formatKwhRaw(
+                                    amrData.sum_billconsumptionvalue,
+                                  )}
                                 </td>
                                 <td className="py-2.5 px-4 text-right text-orange-600 tabular-nums text-xs">
-                                  {formatKwhRaw(amrData.exportKwh)}
+                                  {formatNumber(amrData.customer_count)}
                                 </td>
-                                <td className="py-2.5 px-4 text-right text-orange-600 tabular-nums text-xs">
-                                  {formatNumber(amrData.meters)}
+                                <td className="py-2.5 px-4 text-right text-orange-700 tabular-nums text-xs">
+                                  {formatMoney(amrData.sum_billamount)}
                                 </td>
                                 <td className="py-2.5 px-4 text-right font-bold text-purple-700 tabular-nums text-xs">
                                   {formatKwhRaw(totalKwh)}
@@ -946,15 +879,15 @@ export function CustomerSalesOverview({
                             {formatMoney(mmsStats.totalCredit)}
                           </td>
                           <td className="py-2.5 px-4 text-right font-bold text-orange-700 tabular-nums">
-                            {formatKwhRaw(amrStats.importKwh)}
-                          </td>
-                          <td className="py-2.5 px-4 text-right font-semibold text-orange-700 tabular-nums">
-                            {formatKwhRaw(amrStats.exportKwh)}
+                            {formatKwhRaw(zeusByServiceType.AMR.totalKwh)}
                           </td>
                           <td className="py-2.5 px-4 text-right font-semibold text-orange-700 tabular-nums">
                             {formatNumber(
-                              amrByRegion.reduce((s, r) => s + r.meters, 0),
+                              zeusByServiceType.AMR.totalCustomers,
                             )}
+                          </td>
+                          <td className="py-2.5 px-4 text-right font-semibold text-orange-700 tabular-nums">
+                            {formatMoney(zeusByServiceType.AMR.totalBilling)}
                           </td>
                           <td className="py-2.5 px-4 text-right font-bold text-purple-700 tabular-nums">
                             {formatKwhRaw(combinedKwh)}
@@ -964,7 +897,9 @@ export function CustomerSalesOverview({
                           </td>
                           <td className="py-2.5 px-4 text-right font-bold text-purple-700 tabular-nums">
                             {formatMoney(
-                              zeusStats.totalBilling + mmsStats.totalCredit,
+                              zeusStats.totalBilling +
+                                mmsStats.totalCredit +
+                                zeusByServiceType.AMR.totalBilling,
                             )}
                           </td>
                         </tr>
