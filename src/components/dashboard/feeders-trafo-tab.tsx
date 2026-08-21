@@ -589,17 +589,19 @@ export function FeedersTrafoTab({ meterTypes = ["BSP"] }: FeedersTrafoTabProps) 
                         </div>
                     ) : (
                         <>
+                            <div className="border rounded-lg overflow-hidden">
+                            <div className="overflow-x-auto max-h-[500px] overflow-y-auto">
                             <Table>
-                                <TableHeader>
+                                <TableHeader className="sticky top-0 z-20 bg-background">
                                     <TableRow>
-                                        <TableHead className="sticky left-0 z-10 bg-background">
+                                        <TableHead className="sticky left-0 z-20 bg-background">
                                             <Button variant="ghost" onClick={() => handleStatusSort("meter_number")} className="h-8 px-2">
                                                 Meter Number
                                                 <ArrowUpDown className="ml-2 h-4 w-4" />
                                             </Button>
                                         </TableHead>
-                                        <TableHead className="sticky left-[180px] z-10 bg-background">Region/Station</TableHead>
-                                        <TableHead className="sticky left-[360px] z-10 bg-background">
+                                        <TableHead className="sticky left-[180px] z-20 bg-background">Region/Station</TableHead>
+                                        <TableHead className="sticky left-[360px] z-20 bg-background">
                                             <Button variant="ghost" onClick={() => handleStatusSort("status")} className="h-8 px-2">
                                                 Status
                                                 <ArrowUpDown className="ml-2 h-4 w-4" />
@@ -712,6 +714,8 @@ export function FeedersTrafoTab({ meterTypes = ["BSP"] }: FeedersTrafoTabProps) 
                                     )}
                                 </TableBody>
                             </Table>
+                            </div>
+                            </div>
 
                             {meterStatusTableData.length > 0 && (
                                 <div className="mt-4">
