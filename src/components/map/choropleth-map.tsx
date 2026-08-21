@@ -10,7 +10,6 @@ import { useRegionalBoundaryAggregate } from "@/hooks/api/use-regional-boundary-
 import { useMeters } from "@/hooks/api/use-meter-api"
 import { useZeusBillingAggregate } from "@/hooks/api/use-zeus-billing-aggregate-api"
 import { useMmsCustomerSalesAggregate } from "@/hooks/api/use-mms-customer-sales-aggregate-api"
-import { useAmrConsumptionAggregate } from "@/hooks/api/use-amr-consumption-aggregate-api"
 import { useAppStore } from "@/stores/app-store"
 import { formatApiDate } from "@/lib/utils"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
@@ -26,9 +25,8 @@ interface SelectedRegion {
     dtx_import: number
     net_consumption: number
     cross_boundary: number
-    zeus_kwh: number
-    mms_kwh: number
-    amr_kwh: number
+    postpaid_kwh: number
+    prepaid_kwh: number
     loss_kwh: number
 }
 
@@ -44,9 +42,8 @@ export function ChoroplethMap() {
         dtx: false,
         net: false,
         crossBoundary: false,
-        zeus: false,
-        mms: false,
-        amr: false,
+        postpaid: false,
+        prepaid: false,
         loss: false,
     })
 
@@ -62,18 +59,23 @@ export function ChoroplethMap() {
     const { data: boundaryData, isLoading: isLoadingBoundary } = useRegionalBoundaryAggregate({ dateFrom, dateTo })
 
     // Customer sales sources — billed/read kWh, not grid-side metering.
-    // Fetched unfiltered (all regions) and grouped by region server-side, same
-    // pattern as the BSP/DTX/boundary hooks above.
-    const { data: zeusData, isLoading: isLoadingZeus } = useZeusBillingAggregate({ dateFrom, dateTo })
+    // Postpaid = Zeus Postpaid + Zeus AMR; Prepaid = Zeus Prepaid + MMS —
+    // same convention used everywhere else in the app (region/district
+    // detail, customer sales overview, dashboard). Zeus is grouped by both
+    // region and meter type so Postpaid vs Prepaid can be split out below.
+    const { data: zeusData, isLoading: isLoadingZeus } = useZeusBillingAggregate({
+        dateFrom,
+        dateTo,
+        groupBy: ["metermodeltype", "regionname"],
+    })
     const { data: mmsData, isLoading: isLoadingMms } = useMmsCustomerSalesAggregate({
         dateFrom,
         dateTo,
         groupBy: "region",
     })
-    const { data: amrData, isLoading: isLoadingAmr } = useAmrConsumptionAggregate({ dateFrom, dateTo })
 
     const isLoadingEnergy = isLoadingBsp || isLoadingDtx || isLoadingBoundary
-    const isLoadingSales = isLoadingZeus || isLoadingMms || isLoadingAmr
+    const isLoadingSales = isLoadingZeus || isLoadingMms
 
     // ── Per-type region lookup helpers ──────────────────────────────────────
     // BSP: byRegion[].region is lowercased, value is supplyKwh / netSupplyKwh
@@ -101,36 +103,39 @@ export function ChoroplethMap() {
     }
 
     // ── Customer sales lookup helpers ───────────────────────────────────────
-    // Zeus: billed consumption per region (postpaid)
-    const getZeusKwh = (regionName: string): number => {
-        const match = zeusData?.find((z) => (z.regionname || "").toLowerCase() === regionName.toLowerCase())
-        return match?.sum_billconsumptionvalue ?? 0
-    }
-    // MMS: kWh read per region (prepaid, last month)
-    const getMmsKwh = (regionName: string): number => {
-        const match = mmsData?.find((m) => (m.region || "").toLowerCase() === regionName.toLowerCase())
-        return match?.sum_last_month_kwh_read ?? 0
-    }
-    // AMR: rows are per (day, system_name, region) — sum import+export across
-    // every day in range for this region. Unlike active_meters (a per-day
-    // headcount, not additive across days — see customer-sales-overview.tsx),
-    // consumption kWh genuinely is additive across days.
-    const getAmrKwh = (regionName: string): number => {
-        if (!amrData) return 0
+    const normalizeZeusType = (raw?: string | null) => (raw || "").trim().toLowerCase()
+
+    // Postpaid: Zeus Postpaid + Zeus AMR billed consumption per region — AMR
+    // is just another metermodeltype value within Zeus data, not a separate
+    // source (see customer-sales-overview.tsx).
+    const getPostpaidKwh = (regionName: string): number => {
         const lower = regionName.toLowerCase()
-        return amrData
-            .filter((a) => (a.region || "").toLowerCase() === lower)
-            .reduce((sum, a) => sum + (a.total_consumption ?? 0), 0)
+        return (zeusData ?? [])
+            .filter((z) => {
+                const t = normalizeZeusType(z.metermodeltype)
+                return (t === "postpaid" || t === "amr") && (z.regionname || "").toLowerCase() === lower
+            })
+            .reduce((sum, z) => sum + (z.sum_billconsumptionvalue ?? 0), 0)
+    }
+    // Prepaid: Zeus Prepaid billed consumption + MMS kWh read (last month),
+    // per region.
+    const getPrepaidKwh = (regionName: string): number => {
+        const lower = regionName.toLowerCase()
+        const zeusPrepaid = (zeusData ?? [])
+            .filter((z) => normalizeZeusType(z.metermodeltype) === "prepaid" && (z.regionname || "").toLowerCase() === lower)
+            .reduce((sum, z) => sum + (z.sum_billconsumptionvalue ?? 0), 0)
+        const mmsKwh = mmsData?.find((m) => (m.region || "").toLowerCase() === lower)?.sum_last_month_kwh_read ?? 0
+        return zeusPrepaid + mmsKwh
     }
     // Loss: total supply into the region (BSP import + regional boundary
-    // import) minus everything billed/read across all three sales sources.
+    // import) minus everything billed/read across both sales categories.
     // Positive = unaccounted-for energy (technical + commercial losses, or
     // theft). Can go negative if sales exceed the region's own recorded
     // supply — e.g. power drawn from a neighboring region's BSP/boundary
     // point but billed under this region, or a data/attribution mismatch
     // between the grid-side and sales-side region labels.
     const getSupply = (regionName: string): number => getBspImport(regionName) + getBoundaryImport(regionName)
-    const getSales = (regionName: string): number => getZeusKwh(regionName) + getMmsKwh(regionName) + getAmrKwh(regionName)
+    const getSales = (regionName: string): number => getPostpaidKwh(regionName) + getPrepaidKwh(regionName)
     const getLoss = (regionName: string): number => getSupply(regionName) - getSales(regionName)
 
     // limit is well above any single region's meter count today (largest is
@@ -180,12 +185,11 @@ export function ChoroplethMap() {
             dtx: rangeFrom(allRegionNames.map(getDtxImport)),
             net: rangeFrom(allRegionNames.map(getBspNet)),
             crossBoundary: rangeFrom(allRegionNames.map(getBoundaryImport)),
-            zeus: rangeFrom(allRegionNames.map(getZeusKwh)),
-            mms: rangeFrom(allRegionNames.map(getMmsKwh)),
-            amr: rangeFrom(allRegionNames.map(getAmrKwh)),
+            postpaid: rangeFrom(allRegionNames.map(getPostpaidKwh)),
+            prepaid: rangeFrom(allRegionNames.map(getPrepaidKwh)),
             loss: rangeFrom(allRegionNames.map(getLoss)),
         }
-    }, [bspData, dtxData, boundaryData, zeusData, mmsData, amrData, allRegionNames])
+    }, [bspData, dtxData, boundaryData, zeusData, mmsData, allRegionNames])
 
     // Global min/max across all active metrics — used for choropleth color scaling
     const { minValue, maxValue } = useMemo(() => {
@@ -196,14 +200,13 @@ export function ChoroplethMap() {
             if (selectedMetrics.dtx) total += getDtxImport(region)
             if (selectedMetrics.net) total += getBspNet(region)
             if (selectedMetrics.crossBoundary) total += getBoundaryImport(region)
-            if (selectedMetrics.zeus) total += getZeusKwh(region)
-            if (selectedMetrics.mms) total += getMmsKwh(region)
-            if (selectedMetrics.amr) total += getAmrKwh(region)
+            if (selectedMetrics.postpaid) total += getPostpaidKwh(region)
+            if (selectedMetrics.prepaid) total += getPrepaidKwh(region)
             if (selectedMetrics.loss) total += getLoss(region)
             return total
         })
         return { minValue: Math.min(...values), maxValue: Math.max(...values) }
-    }, [bspData, dtxData, boundaryData, zeusData, mmsData, amrData, allRegionNames, selectedMetrics])
+    }, [bspData, dtxData, boundaryData, zeusData, mmsData, allRegionNames, selectedMetrics])
 
     const getRegionColor = (regionName: string) => {
         const noMetric =
@@ -211,9 +214,8 @@ export function ChoroplethMap() {
             !selectedMetrics.dtx &&
             !selectedMetrics.net &&
             !selectedMetrics.crossBoundary &&
-            !selectedMetrics.zeus &&
-            !selectedMetrics.mms &&
-            !selectedMetrics.amr &&
+            !selectedMetrics.postpaid &&
+            !selectedMetrics.prepaid &&
             !selectedMetrics.loss
         if (noMetric) return "#e5e7eb"
 
@@ -222,9 +224,8 @@ export function ChoroplethMap() {
         if (selectedMetrics.dtx) total += getDtxImport(regionName)
         if (selectedMetrics.net) total += getBspNet(regionName)
         if (selectedMetrics.crossBoundary) total += getBoundaryImport(regionName)
-        if (selectedMetrics.zeus) total += getZeusKwh(regionName)
-        if (selectedMetrics.mms) total += getMmsKwh(regionName)
-        if (selectedMetrics.amr) total += getAmrKwh(regionName)
+        if (selectedMetrics.postpaid) total += getPostpaidKwh(regionName)
+        if (selectedMetrics.prepaid) total += getPrepaidKwh(regionName)
         if (selectedMetrics.loss) total += getLoss(regionName)
 
         const range = maxValue - minValue
@@ -251,9 +252,8 @@ export function ChoroplethMap() {
             const dtx_import = getDtxImport(regionName)
             const net_consumption = getBspNet(regionName)
             const cross_boundary = getBoundaryImport(regionName)
-            const zeus_kwh = getZeusKwh(regionName)
-            const mms_kwh = getMmsKwh(regionName)
-            const amr_kwh = getAmrKwh(regionName)
+            const postpaid_kwh = getPostpaidKwh(regionName)
+            const prepaid_kwh = getPrepaidKwh(regionName)
             const loss_kwh = getLoss(regionName)
             const color = getRegionColor(regionName)
 
@@ -265,9 +265,8 @@ export function ChoroplethMap() {
                     dtx_import,
                     net_consumption,
                     cross_boundary,
-                    zeus_kwh,
-                    mms_kwh,
-                    amr_kwh,
+                    postpaid_kwh,
+                    prepaid_kwh,
                     loss_kwh,
                     color,
                 },
@@ -275,7 +274,7 @@ export function ChoroplethMap() {
         })
 
         return { type: "FeatureCollection" as const, features }
-    }, [geometryData, bspData, dtxData, boundaryData, zeusData, mmsData, amrData, selectedMetrics])
+    }, [geometryData, bspData, dtxData, boundaryData, zeusData, mmsData, selectedMetrics])
 
     // Initialize map with retry mechanism
     useEffect(() => {
@@ -453,9 +452,8 @@ export function ChoroplethMap() {
                             dtx_import: Number(props.dtx_import),
                             net_consumption: Number(props.net_consumption),
                             cross_boundary: Number(props.cross_boundary),
-                            zeus_kwh: Number(props.zeus_kwh),
-                            mms_kwh: Number(props.mms_kwh),
-                            amr_kwh: Number(props.amr_kwh),
+                            postpaid_kwh: Number(props.postpaid_kwh),
+                            prepaid_kwh: Number(props.prepaid_kwh),
                             loss_kwh: Number(props.loss_kwh),
                         })
                     }
@@ -569,44 +567,30 @@ export function ChoroplethMap() {
                         </div>
                         <div className="flex items-center space-x-2">
                             <Checkbox
-                                id="zeus"
-                                checked={selectedMetrics.zeus}
+                                id="postpaid"
+                                checked={selectedMetrics.postpaid}
                                 disabled={selectedMetrics.loss}
-                                onCheckedChange={(checked) => setSelectedMetrics((prev) => ({ ...prev, zeus: checked as boolean }))}
+                                onCheckedChange={(checked) => setSelectedMetrics((prev) => ({ ...prev, postpaid: checked as boolean }))}
                             />
                             <label
-                                htmlFor="zeus"
+                                htmlFor="postpaid"
                                 className={`text-sm font-medium ${selectedMetrics.loss ? "text-muted-foreground/50 cursor-not-allowed" : "cursor-pointer"}`}
                             >
-                                Zeus Sales (Postpaid)
+                                Postpaid Sales (Zeus + AMR)
                             </label>
                         </div>
                         <div className="flex items-center space-x-2">
                             <Checkbox
-                                id="mms"
-                                checked={selectedMetrics.mms}
+                                id="prepaid"
+                                checked={selectedMetrics.prepaid}
                                 disabled={selectedMetrics.loss}
-                                onCheckedChange={(checked) => setSelectedMetrics((prev) => ({ ...prev, mms: checked as boolean }))}
+                                onCheckedChange={(checked) => setSelectedMetrics((prev) => ({ ...prev, prepaid: checked as boolean }))}
                             />
                             <label
-                                htmlFor="mms"
+                                htmlFor="prepaid"
                                 className={`text-sm font-medium ${selectedMetrics.loss ? "text-muted-foreground/50 cursor-not-allowed" : "cursor-pointer"}`}
                             >
-                                MMS Sales (Prepaid)
-                            </label>
-                        </div>
-                        <div className="flex items-center space-x-2">
-                            <Checkbox
-                                id="amr"
-                                checked={selectedMetrics.amr}
-                                disabled={selectedMetrics.loss}
-                                onCheckedChange={(checked) => setSelectedMetrics((prev) => ({ ...prev, amr: checked as boolean }))}
-                            />
-                            <label
-                                htmlFor="amr"
-                                className={`text-sm font-medium ${selectedMetrics.loss ? "text-muted-foreground/50 cursor-not-allowed" : "cursor-pointer"}`}
-                            >
-                                AMR Sales (Daily)
+                                Prepaid Sales (Zeus + MMS)
                             </label>
                         </div>
                         <div className="flex items-center space-x-2">
@@ -621,9 +605,8 @@ export function ChoroplethMap() {
                                                   dtx: false,
                                                   net: false,
                                                   crossBoundary: false,
-                                                  zeus: false,
-                                                  mms: false,
-                                                  amr: false,
+                                                  postpaid: false,
+                                                  prepaid: false,
                                                   loss: true,
                                               }
                                             : { ...prev, loss: false },
@@ -714,52 +697,35 @@ export function ChoroplethMap() {
                                 </div>
                             )}
 
-                            {selectedMetrics.zeus && (
+                            {selectedMetrics.postpaid && (
                                 <div className="flex items-center gap-2">
-                                    <span className="text-xs font-medium text-sky-700 dark:text-sky-400 min-w-[110px]">Zeus Sales:</span>
+                                    <span className="text-xs font-medium text-blue-700 dark:text-blue-400 min-w-[110px]">Postpaid Sales:</span>
                                     <div className="flex items-center gap-2 flex-1">
-                                        <span className="text-xs text-muted-foreground">{metricRanges.zeus.min.toLocaleString()}</span>
+                                        <span className="text-xs text-muted-foreground">{metricRanges.postpaid.min.toLocaleString()}</span>
                                         <div
                                             className="flex-1 h-5 rounded"
                                             style={{
                                                 background: "linear-gradient(to right, rgb(34, 197, 94), rgb(255, 155, 94), rgb(255, 0, 0))",
                                             }}
                                         />
-                                        <span className="text-xs text-muted-foreground">{metricRanges.zeus.max.toLocaleString()}</span>
+                                        <span className="text-xs text-muted-foreground">{metricRanges.postpaid.max.toLocaleString()}</span>
                                     </div>
                                     <span className="text-xs text-muted-foreground">kWh</span>
                                 </div>
                             )}
 
-                            {selectedMetrics.mms && (
+                            {selectedMetrics.prepaid && (
                                 <div className="flex items-center gap-2">
-                                    <span className="text-xs font-medium text-emerald-700 dark:text-emerald-400 min-w-[110px]">MMS Sales:</span>
+                                    <span className="text-xs font-medium text-emerald-700 dark:text-emerald-400 min-w-[110px]">Prepaid Sales:</span>
                                     <div className="flex items-center gap-2 flex-1">
-                                        <span className="text-xs text-muted-foreground">{metricRanges.mms.min.toLocaleString()}</span>
+                                        <span className="text-xs text-muted-foreground">{metricRanges.prepaid.min.toLocaleString()}</span>
                                         <div
                                             className="flex-1 h-5 rounded"
                                             style={{
                                                 background: "linear-gradient(to right, rgb(34, 197, 94), rgb(255, 155, 94), rgb(255, 0, 0))",
                                             }}
                                         />
-                                        <span className="text-xs text-muted-foreground">{metricRanges.mms.max.toLocaleString()}</span>
-                                    </div>
-                                    <span className="text-xs text-muted-foreground">kWh</span>
-                                </div>
-                            )}
-
-                            {selectedMetrics.amr && (
-                                <div className="flex items-center gap-2">
-                                    <span className="text-xs font-medium text-rose-700 dark:text-rose-400 min-w-[110px]">AMR Sales:</span>
-                                    <div className="flex items-center gap-2 flex-1">
-                                        <span className="text-xs text-muted-foreground">{metricRanges.amr.min.toLocaleString()}</span>
-                                        <div
-                                            className="flex-1 h-5 rounded"
-                                            style={{
-                                                background: "linear-gradient(to right, rgb(34, 197, 94), rgb(255, 155, 94), rgb(255, 0, 0))",
-                                            }}
-                                        />
-                                        <span className="text-xs text-muted-foreground">{metricRanges.amr.max.toLocaleString()}</span>
+                                        <span className="text-xs text-muted-foreground">{metricRanges.prepaid.max.toLocaleString()}</span>
                                     </div>
                                     <span className="text-xs text-muted-foreground">kWh</span>
                                 </div>
@@ -856,39 +822,29 @@ export function ChoroplethMap() {
                                     </div>
                                 )}
 
-                                {selectedMetrics.zeus && (
-                                    <div className="space-y-1 p-4 rounded-lg bg-sky-50 dark:bg-sky-950/20 border border-sky-200 dark:border-sky-900">
-                                        <p className="text-xs font-medium text-sky-700 dark:text-sky-400">Zeus Sales</p>
-                                        <p className="text-2xl font-bold text-sky-900 dark:text-sky-100">
-                                            {selectedRegion.zeus_kwh.toLocaleString()}
+                                {selectedMetrics.postpaid && (
+                                    <div className="space-y-1 p-4 rounded-lg bg-blue-50 dark:bg-blue-950/20 border border-blue-200 dark:border-blue-900">
+                                        <p className="text-xs font-medium text-blue-700 dark:text-blue-400">Postpaid Sales</p>
+                                        <p className="text-2xl font-bold text-blue-900 dark:text-blue-100">
+                                            {selectedRegion.postpaid_kwh.toLocaleString()}
                                         </p>
-                                        <p className="text-xs text-sky-600 dark:text-sky-500">kWh billed (postpaid)</p>
+                                        <p className="text-xs text-blue-600 dark:text-blue-500">kWh billed (Zeus + AMR)</p>
                                     </div>
                                 )}
 
-                                {selectedMetrics.mms && (
+                                {selectedMetrics.prepaid && (
                                     <div className="space-y-1 p-4 rounded-lg bg-emerald-50 dark:bg-emerald-950/20 border border-emerald-200 dark:border-emerald-900">
-                                        <p className="text-xs font-medium text-emerald-700 dark:text-emerald-400">MMS Sales</p>
+                                        <p className="text-xs font-medium text-emerald-700 dark:text-emerald-400">Prepaid Sales</p>
                                         <p className="text-2xl font-bold text-emerald-900 dark:text-emerald-100">
-                                            {selectedRegion.mms_kwh.toLocaleString()}
+                                            {selectedRegion.prepaid_kwh.toLocaleString()}
                                         </p>
-                                        <p className="text-xs text-emerald-600 dark:text-emerald-500">kWh read (prepaid)</p>
-                                    </div>
-                                )}
-
-                                {selectedMetrics.amr && (
-                                    <div className="space-y-1 p-4 rounded-lg bg-rose-50 dark:bg-rose-950/20 border border-rose-200 dark:border-rose-900">
-                                        <p className="text-xs font-medium text-rose-700 dark:text-rose-400">AMR Sales</p>
-                                        <p className="text-2xl font-bold text-rose-900 dark:text-rose-100">
-                                            {selectedRegion.amr_kwh.toLocaleString()}
-                                        </p>
-                                        <p className="text-xs text-rose-600 dark:text-rose-500">kWh (daily meters)</p>
+                                        <p className="text-xs text-emerald-600 dark:text-emerald-500">kWh (Zeus + MMS)</p>
                                     </div>
                                 )}
 
                                 {selectedMetrics.loss && (() => {
                                     const supply = selectedRegion.bsp_import + selectedRegion.cross_boundary
-                                    const sales = selectedRegion.zeus_kwh + selectedRegion.mms_kwh + selectedRegion.amr_kwh
+                                    const sales = selectedRegion.postpaid_kwh + selectedRegion.prepaid_kwh
                                     const noSalesData = sales === 0
                                     return (
                                         <div className="space-y-1 p-4 rounded-lg bg-red-50 dark:bg-red-950/20 border border-red-200 dark:border-red-900">
@@ -901,7 +857,7 @@ export function ChoroplethMap() {
                                                     ? "kWh — no sales data for this period, see breakdown below"
                                                     : supply > 0
                                                         ? `${((selectedRegion.loss_kwh / supply) * 100).toFixed(1)}% of supply`
-                                                        : "kWh (Supply − Zeus − MMS − AMR)"}
+                                                        : "kWh (Supply − Postpaid − Prepaid)"}
                                             </p>
                                         </div>
                                     )
@@ -913,14 +869,13 @@ export function ChoroplethMap() {
                                 const bsp = selectedRegion.bsp_import
                                 const boundary = selectedRegion.cross_boundary
                                 const supply = bsp + boundary
-                                const sales = selectedRegion.zeus_kwh + selectedRegion.mms_kwh + selectedRegion.amr_kwh
+                                const sales = selectedRegion.postpaid_kwh + selectedRegion.prepaid_kwh
                                 const loss = selectedRegion.loss_kwh
                                 const lossPct = supply > 0 ? (loss / supply) * 100 : null
-                                // All three sales sources at exactly zero almost always means no
+                                // Both sales categories at exactly zero almost always means no
                                 // sales data exists for the selected date range in this region —
-                                // Zeus, MMS, and AMR each cover very different historical windows —
-                                // not that the region genuinely sold zero kWh. Surface that instead
-                                // of a confident-looking percentage.
+                                // not that the region genuinely sold zero kWh. Surface that
+                                // instead of a confident-looking percentage.
                                 const noSalesData = sales === 0
 
                                 return (
@@ -936,16 +891,12 @@ export function ChoroplethMap() {
                                                 <span className="font-medium tabular-nums">{boundary.toLocaleString()} kWh</span>
                                             </div>
                                             <div className="flex justify-between pl-3">
-                                                <span className="text-muted-foreground">− Zeus Sales</span>
-                                                <span className="tabular-nums">{selectedRegion.zeus_kwh.toLocaleString()} kWh</span>
+                                                <span className="text-muted-foreground">− Postpaid Sales</span>
+                                                <span className="tabular-nums">{selectedRegion.postpaid_kwh.toLocaleString()} kWh</span>
                                             </div>
                                             <div className="flex justify-between pl-3">
-                                                <span className="text-muted-foreground">− MMS Sales</span>
-                                                <span className="tabular-nums">{selectedRegion.mms_kwh.toLocaleString()} kWh</span>
-                                            </div>
-                                            <div className="flex justify-between pl-3">
-                                                <span className="text-muted-foreground">− AMR Sales</span>
-                                                <span className="tabular-nums">{selectedRegion.amr_kwh.toLocaleString()} kWh</span>
+                                                <span className="text-muted-foreground">− Prepaid Sales</span>
+                                                <span className="tabular-nums">{selectedRegion.prepaid_kwh.toLocaleString()} kWh</span>
                                             </div>
                                             <div className="flex justify-between pt-1.5 border-t font-semibold">
                                                 <span className={loss >= 0 ? "text-red-700 dark:text-red-400" : "text-blue-700 dark:text-blue-400"}>
@@ -962,10 +913,9 @@ export function ChoroplethMap() {
 
                                         {noSalesData ? (
                                             <p className="text-xs text-amber-600 dark:text-amber-500 leading-relaxed">
-                                                Zeus, MMS, and AMR all show zero sales for {selectedRegion.region} in the
-                                                selected date range. Each source only has data for a different historical
-                                                window, so this almost certainly means the date range doesn&apos;t overlap
-                                                with available sales data — not that the region has a real {lossPct !== null ? `${lossPct.toFixed(0)}%` : ""} loss.
+                                                Postpaid and Prepaid both show zero sales for {selectedRegion.region} in the
+                                                selected date range. This almost certainly means the date range doesn&apos;t
+                                                overlap with available sales data — not that the region has a real {lossPct !== null ? `${lossPct.toFixed(0)}%` : ""} loss.
                                                 Try a date range covering 2025 to see actual sales-backed loss figures.
                                             </p>
                                         ) : (
@@ -973,14 +923,14 @@ export function ChoroplethMap() {
                                                 {supply === 0 ? (
                                                     <>
                                                         {selectedRegion.region} has no recorded BSP or boundary import for this
-                                                        period, so loss can&apos;t be computed as a share of supply. Total sales
-                                                        across Zeus, MMS, and AMR were {sales.toLocaleString()} kWh.
+                                                        period, so loss can&apos;t be computed as a share of supply. Total
+                                                        Postpaid + Prepaid sales were {sales.toLocaleString()} kWh.
                                                     </>
                                                 ) : loss >= 0 ? (
                                                     <>
                                                         Of the {supply.toLocaleString()} kWh supplied to {selectedRegion.region}
                                                         {" "}(BSP + regional boundary imports), {sales.toLocaleString()} kWh was
-                                                        billed across all three customer sales sources. The remaining{" "}
+                                                        billed across Postpaid and Prepaid sales. The remaining{" "}
                                                         {loss.toLocaleString()} kWh ({lossPct?.toFixed(1)}%) is unaccounted for
                                                         — this covers technical losses (line/transformer losses), commercial
                                                         losses (theft, metering error, unbilled connections), and any sales
@@ -989,7 +939,7 @@ export function ChoroplethMap() {
                                                     </>
                                                 ) : (
                                                     <>
-                                                        Sales across Zeus, MMS, and AMR ({sales.toLocaleString()} kWh) exceed
+                                                        Postpaid + Prepaid sales ({sales.toLocaleString()} kWh) exceed
                                                         this region&apos;s own recorded supply ({supply.toLocaleString()} kWh)
                                                         by {Math.abs(loss).toLocaleString()} kWh. That usually means some of
                                                         the power billed under {selectedRegion.region} was physically supplied
