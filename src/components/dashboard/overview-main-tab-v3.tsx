@@ -92,6 +92,7 @@ import {
   Pie,
   Cell,
   ReferenceLine,
+  LabelList,
 } from "recharts";
 import {
   TooltipContent,
@@ -7991,6 +7992,51 @@ export function OverviewMainTabV3({
             </CardContent>
           </Card>
         </div>
+
+        <Card className="shadow-none border bg-card shrink-0">
+          <CardContent className="py-2.5 px-4">
+            <p className="text-sm font-medium text-muted-foreground mb-1.5">
+              Purchases vs Sales
+            </p>
+            {energySales === null ? (
+              <p className="text-sm text-muted-foreground py-3 text-center">
+                Sales not yet available
+              </p>
+            ) : (
+              <ResponsiveContainer width="100%" height={90}>
+                <RechartsBarChart
+                  data={[
+                    { name: "Purchases", value: energyPurchases },
+                    { name: "Sales", value: energySales },
+                  ]}
+                  layout="vertical"
+                  margin={{ top: 4, right: 48, left: 0, bottom: 4 }}
+                >
+                  <XAxis type="number" hide />
+                  <YAxis
+                    type="category"
+                    dataKey="name"
+                    width={80}
+                    tick={{ fontSize: 12 }}
+                    axisLine={false}
+                    tickLine={false}
+                  />
+                  <Tooltip formatter={(value: number) => [`${formatNumber(value)} kWh`, ""]} />
+                  <Bar dataKey="value" radius={[0, 4, 4, 0]} barSize={22}>
+                    <Cell fill="#10b981" />
+                    <Cell fill="#2563eb" />
+                    <LabelList
+                      dataKey="value"
+                      position="right"
+                      formatter={(v: number) => `${formatNumber(v)} kWh`}
+                      className="fill-foreground text-xs font-semibold"
+                    />
+                  </Bar>
+                </RechartsBarChart>
+              </ResponsiveContainer>
+            )}
+          </CardContent>
+        </Card>
 
         <div className="grid grid-cols-12 gap-3 flex-1 min-h-0">
           <Card className="col-span-12 xl:col-span-7 shadow-none border bg-card flex flex-col min-h-0 overflow-hidden">
