@@ -160,6 +160,7 @@ export function CustomerSalesOverview({
   const [postpaidChartKind, setPostpaidChartKind] = useState<ChartKind>("bar");
   const [selectedPostpaidRegion, setSelectedPostpaidRegion] = useState<string | null>(null);
   const [selectedPostpaidDistrict, setSelectedPostpaidDistrict] = useState<string | null>(null);
+  const [sourceMetric, setSourceMetric] = useState<"kwh" | "customers" | "billing">("kwh");
 
   // Zeus's own metermodeltype=AMR billing records are a subset of Zeus data,
   // not a separate source — the Postpaid tab's Zeus view below always
@@ -344,6 +345,30 @@ export function CustomerSalesOverview({
       avgKwh: totalCustomers > 0 ? totalKwh / totalCustomers : 0,
     };
   }, [mmsItems, mmsNationalItems]);
+
+  // ── Data source breakdown (Zeus vs MMS) — the two underlying systems
+  // this page's data is sourced from, independent of Postpaid/Prepaid
+  // classification. Zeus here is Postpaid + Prepaid + AMR combined, since
+  // all three metermodeltype values come from the same Zeus billing feed.
+  const sourceBreakdown = useMemo(() => {
+    const zeusKwh =
+      zeusByServiceType.Postpaid.totalKwh +
+      zeusByServiceType.Prepaid.totalKwh +
+      zeusByServiceType.AMR.totalKwh;
+    const zeusCustomers =
+      zeusByServiceType.Postpaid.totalCustomers +
+      zeusByServiceType.Prepaid.totalCustomers +
+      zeusByServiceType.AMR.totalCustomers;
+    const zeusBilling =
+      zeusByServiceType.Postpaid.totalBilling +
+      zeusByServiceType.Prepaid.totalBilling +
+      zeusByServiceType.AMR.totalBilling;
+    return {
+      kwh: { zeus: zeusKwh, mms: mmsStats.totalKwh },
+      customers: { zeus: zeusCustomers, mms: mmsStats.totalCustomers },
+      billing: { zeus: zeusBilling, mms: mmsStats.totalCredit },
+    };
+  }, [zeusByServiceType, mmsStats]);
 
   // ── Category buckets (Customer Consumption IA) ──
   // Postpaid = Zeus Postpaid + Zeus AMR; Prepaid = Zeus Prepaid + MMS
@@ -570,6 +595,91 @@ export function CustomerSalesOverview({
           </CardContent>
         </Card>
       </div>
+
+      {/* ── DATA SOURCE BREAKDOWN ── */}
+      <Card>
+        <CardHeader>
+          <div className="flex items-center justify-between gap-3 flex-wrap">
+            <div>
+              <CardTitle>Data Sources</CardTitle>
+              <CardDescription>
+                Where this page&apos;s figures come from — Zeus (billing, all
+                meter types) vs MMS (prepaid vending)
+              </CardDescription>
+            </div>
+            <ToggleGroup
+              type="single"
+              value={sourceMetric}
+              onValueChange={(v) => {
+                if (v) setSourceMetric(v as typeof sourceMetric);
+              }}
+              variant="outline"
+            >
+              <ToggleGroupItem value="kwh">kWh</ToggleGroupItem>
+              <ToggleGroupItem value="customers">Customers</ToggleGroupItem>
+              <ToggleGroupItem value="billing">Billing</ToggleGroupItem>
+            </ToggleGroup>
+          </div>
+        </CardHeader>
+        <CardContent>
+          {isLoading ? (
+            <Skeleton className="h-16 w-full" />
+          ) : (
+            (() => {
+              const active = sourceBreakdown[sourceMetric];
+              const total = active.zeus + active.mms;
+              const zeusPct = total > 0 ? (active.zeus / total) * 100 : 0;
+              const mmsPct = total > 0 ? (active.mms / total) * 100 : 0;
+              const format =
+                sourceMetric === "kwh"
+                  ? formatKwh
+                  : sourceMetric === "billing"
+                    ? formatMoney
+                    : formatNumber;
+              return (
+                <>
+                  <div className="flex h-3 w-full overflow-hidden rounded-full bg-muted">
+                    <div
+                      className="bg-blue-600"
+                      style={{ width: `${zeusPct}%` }}
+                    />
+                    <div
+                      className="bg-green-600"
+                      style={{ width: `${mmsPct}%` }}
+                    />
+                  </div>
+                  <div className="grid grid-cols-2 gap-4 mt-3">
+                    <div>
+                      <div className="flex items-center gap-1.5">
+                        <span className="h-2.5 w-2.5 rounded-full bg-blue-600 shrink-0" />
+                        <span className="text-sm font-medium">Zeus</span>
+                        <span className="text-xs text-muted-foreground">
+                          {zeusPct.toFixed(1)}%
+                        </span>
+                      </div>
+                      <div className="text-xl font-bold text-blue-700 mt-0.5">
+                        {format(active.zeus)}
+                      </div>
+                    </div>
+                    <div>
+                      <div className="flex items-center gap-1.5">
+                        <span className="h-2.5 w-2.5 rounded-full bg-green-600 shrink-0" />
+                        <span className="text-sm font-medium">MMS</span>
+                        <span className="text-xs text-muted-foreground">
+                          {mmsPct.toFixed(1)}%
+                        </span>
+                      </div>
+                      <div className="text-xl font-bold text-green-700 mt-0.5">
+                        {format(active.mms)}
+                      </div>
+                    </div>
+                  </div>
+                </>
+              );
+            })()
+          )}
+        </CardContent>
+      </Card>
 
       {/* ── COMBINED COMPARISON CHART ── */}
       <Card>
