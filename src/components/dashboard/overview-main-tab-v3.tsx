@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect, useMemo } from "react";
+import { useRouter } from "next/navigation";
 import {
   Card,
   CardContent,
@@ -132,6 +133,7 @@ export function OverviewMainTabV3({
   filters = {},
   compact = false,
 }: OverviewMainTabV3Props) {
+  const router = useRouter();
   const [drillDownView, setDrillDownView] = useState<
     null | "meters" | "map" | "single-meter"
   >(null);
@@ -7898,7 +7900,10 @@ export function OverviewMainTabV3({
     return (
       <div className="h-full min-h-0 flex flex-col gap-3 overflow-hidden">
         <div className="grid grid-cols-3 gap-3 shrink-0">
-          <Card className="shadow-none border bg-card">
+          <Card
+            className="shadow-none border bg-card cursor-pointer hover:bg-muted/20 transition-colors"
+            onClick={() => router.push("/meter-category/bsp")}
+          >
             <CardContent className="py-2.5 px-4">
               <div className="flex items-center justify-between gap-2">
                 <p className="text-sm font-medium text-muted-foreground">Purchases (BSP)</p>
@@ -7912,7 +7917,10 @@ export function OverviewMainTabV3({
               </p>
             </CardContent>
           </Card>
-          <Card className="shadow-none border bg-card">
+          <Card
+            className="shadow-none border bg-card cursor-pointer hover:bg-muted/20 transition-colors"
+            onClick={() => router.push("/customer-sales")}
+          >
             <CardContent className="py-2.5 px-4">
               <p className="text-sm font-medium text-muted-foreground">Sales</p>
               <p className="text-2xl font-bold tabular-nums tracking-tight mt-0.5">
