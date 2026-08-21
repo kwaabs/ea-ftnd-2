@@ -20,7 +20,6 @@ import { useRegionalBoundaryAggregate } from "@/hooks/api/use-regional-boundary-
 import { useExpressFeederAggregate } from "@/hooks/api/use-express-feeder-api";
 import { useZeusBillingAggregate } from "@/hooks/api/use-zeus-billing-aggregate-api";
 import { useMmsCustomerSalesAggregate } from "@/hooks/api/use-mms-customer-sales-aggregate-api";
-import { useAmrConsumptionAggregate } from "@/hooks/api/use-amr-consumption-aggregate-api";
 import {
   useAnnouncements,
   createAnnouncement,
@@ -79,7 +78,7 @@ function lossSeverityStyles(hasSalesData: boolean, lossPct: number | null) {
 
 /**
  * Loss ticker — global organization first, then per-region:
- *   Global:  purchases (BSP import) − sales (Zeus + MMS + AMR)
+ *   Global:  purchases (BSP import) − sales (Zeus [Postpaid+Prepaid+AMR] + MMS)
  *   Region:  availableSupply = BSP + boundaryNet + expressNet
  *            loss            = availableSupply − sales
  *
@@ -144,13 +143,8 @@ export function RegionalSummaryMarquee({
     dateTo,
     groupBy: "region",
   });
-  const { data: amrData, isLoading: isLoadingAmr } = useAmrConsumptionAggregate({
-    dateFrom,
-    dateTo,
-  });
 
-  const isLoadingGlobal =
-    isLoadingBsp || isLoadingZeus || isLoadingMms || isLoadingAmr;
+  const isLoadingGlobal = isLoadingBsp || isLoadingZeus || isLoadingMms;
   const isLoadingRegional =
     isLoadingBoundary || isLoadingExpress || isLoadingGlobal;
 
@@ -165,11 +159,7 @@ export function RegionalSummaryMarquee({
       (sum, m) => sum + (m.sum_last_month_kwh_read ?? 0),
       0,
     );
-    const amrKwh = (amrData ?? []).reduce(
-      (sum, a) => sum + (a.total_consumption ?? 0),
-      0,
-    );
-    const sales = zeusKwh + mmsKwh + amrKwh;
+    const sales = zeusKwh + mmsKwh;
     const hasSalesData = sales > 0;
     const loss = hasSalesData && purchases > 0 ? purchases - sales : null;
     const lossPct =
@@ -178,7 +168,7 @@ export function RegionalSummaryMarquee({
         : null;
 
     return { purchases, sales, loss, lossPct, hasSalesData };
-  }, [bspData, zeusData, mmsData, amrData]);
+  }, [bspData, zeusData, mmsData]);
 
   const regionSummaries = useMemo(() => {
     const regionNames = (geometryData?.data?.regions ?? []).map((r) => r.region);
@@ -258,20 +248,12 @@ export function RegionalSummaryMarquee({
       return match?.sum_last_month_kwh_read ?? 0;
     };
 
-    const getAmrKwh = (regionName: string): number => {
-      if (!amrData) return 0;
-      const lower = regionName.toLowerCase();
-      return amrData
-        .filter((a) => (a.region || "").toLowerCase() === lower)
-        .reduce((sum, a) => sum + (a.total_consumption ?? 0), 0);
-    };
-
     return regionNames.map((region) => {
       const bspImport = getBspImport(region);
       const boundaryNet = getBoundaryNet(region);
       const expressNet = getExpressNet(region);
       const availableSupply = bspImport + boundaryNet + expressNet;
-      const sales = getZeusKwh(region) + getMmsKwh(region) + getAmrKwh(region);
+      const sales = getZeusKwh(region) + getMmsKwh(region);
       // Loss is only meaningful when sales data exists; otherwise supply − 0 is nonsense.
       const hasSalesData = sales > 0;
       const loss = hasSalesData ? availableSupply - sales : null;
@@ -282,7 +264,7 @@ export function RegionalSummaryMarquee({
 
       return { region, availableSupply, sales, loss, lossPct, hasSalesData };
     });
-  }, [geometryData, bspData, boundaryData, expressFeederData, zeusData, mmsData, amrData]);
+  }, [geometryData, bspData, boundaryData, expressFeederData, zeusData, mmsData]);
 
   const globalStyles = lossSeverityStyles(
     globalSummary.hasSalesData,
