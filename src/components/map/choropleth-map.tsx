@@ -105,26 +105,37 @@ export function ChoroplethMap() {
     // ── Customer sales lookup helpers ───────────────────────────────────────
     const normalizeZeusType = (raw?: string | null) => (raw || "").trim().toLowerCase()
 
+    // Zeus billing and MMS each maintain their own independent region
+    // column, which isn't guaranteed to be the exact same string as
+    // geometry's region name (e.g. a "Region" suffix) — an exact-match
+    // filter can silently return nothing even though the region genuinely
+    // has data. Same resolution logic as useResolvedRegionName, just usable
+    // per-row in a loop instead of once via a hook.
+    const regionNamesMatch = (pageRegion: string, sourceRegion?: string | null): boolean => {
+        if (!sourceRegion) return false
+        const a = pageRegion.trim().toLowerCase()
+        const b = sourceRegion.trim().toLowerCase()
+        return a === b || b.startsWith(a) || a.startsWith(b)
+    }
+
     // Postpaid: Zeus Postpaid + Zeus AMR billed consumption per region — AMR
     // is just another metermodeltype value within Zeus data, not a separate
     // source (see customer-sales-overview.tsx).
     const getPostpaidKwh = (regionName: string): number => {
-        const lower = regionName.toLowerCase()
         return (zeusData ?? [])
             .filter((z) => {
                 const t = normalizeZeusType(z.metermodeltype)
-                return (t === "postpaid" || t === "amr") && (z.regionname || "").toLowerCase() === lower
+                return (t === "postpaid" || t === "amr") && regionNamesMatch(regionName, z.regionname)
             })
             .reduce((sum, z) => sum + (z.sum_billconsumptionvalue ?? 0), 0)
     }
     // Prepaid: Zeus Prepaid billed consumption + MMS kWh read (last month),
     // per region.
     const getPrepaidKwh = (regionName: string): number => {
-        const lower = regionName.toLowerCase()
         const zeusPrepaid = (zeusData ?? [])
-            .filter((z) => normalizeZeusType(z.metermodeltype) === "prepaid" && (z.regionname || "").toLowerCase() === lower)
+            .filter((z) => normalizeZeusType(z.metermodeltype) === "prepaid" && regionNamesMatch(regionName, z.regionname))
             .reduce((sum, z) => sum + (z.sum_billconsumptionvalue ?? 0), 0)
-        const mmsKwh = mmsData?.find((m) => (m.region || "").toLowerCase() === lower)?.sum_last_month_kwh_read ?? 0
+        const mmsKwh = mmsData?.find((m) => regionNamesMatch(regionName, m.region))?.sum_last_month_kwh_read ?? 0
         return zeusPrepaid + mmsKwh
     }
     // Loss: total supply into the region (BSP import + regional boundary
