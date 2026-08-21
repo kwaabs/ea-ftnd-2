@@ -107,15 +107,18 @@ export function ChoroplethMap() {
 
     // Zeus billing and MMS each maintain their own independent region
     // column, which isn't guaranteed to be the exact same string as
-    // geometry's region name (e.g. a "Region" suffix) — an exact-match
-    // filter can silently return nothing even though the region genuinely
-    // has data. Same resolution logic as useResolvedRegionName, just usable
-    // per-row in a loop instead of once via a hook.
+    // geometry's region name — typically just a trailing "Region" (e.g.
+    // "Accra East" vs "Accra East Region"). Strip that specific suffix
+    // rather than doing a generic prefix match: Ghana has real regions
+    // where one name is a genuine prefix of a different region (Bono vs
+    // Bono East, Western vs Western North), so startsWith() would silently
+    // merge two distinct regions' data. Same resolution logic as
+    // useResolvedRegionName, just usable per-row in a loop instead of once
+    // via a hook.
+    const stripRegionSuffix = (s: string) => s.trim().toLowerCase().replace(/\s+region$/, "")
     const regionNamesMatch = (pageRegion: string, sourceRegion?: string | null): boolean => {
         if (!sourceRegion) return false
-        const a = pageRegion.trim().toLowerCase()
-        const b = sourceRegion.trim().toLowerCase()
-        return a === b || b.startsWith(a) || a.startsWith(b)
+        return stripRegionSuffix(pageRegion) === stripRegionSuffix(sourceRegion)
     }
 
     // Postpaid: Zeus Postpaid + Zeus AMR billed consumption per region — AMR
