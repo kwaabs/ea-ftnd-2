@@ -18,16 +18,14 @@ import { Button } from "@/components/ui/button"
 import { X, ExternalLink } from "lucide-react"
 import Link from "next/link"
 
+// Only the selection identity is kept in state — metrics are derived live
+// from current data via selectedRegionMetrics below, not frozen at click
+// time. Sales data (Zeus/MMS) can still be loading when a region is
+// clicked; deriving live means the panel updates to the real numbers once
+// it arrives instead of staying stuck at whatever was true at click time.
 interface SelectedRegion {
     region: string
     district: string
-    bsp_import: number
-    dtx_import: number
-    net_consumption: number
-    cross_boundary: number
-    postpaid_kwh: number
-    prepaid_kwh: number
-    loss_kwh: number
 }
 
 export function ChoroplethMap() {
@@ -290,6 +288,21 @@ export function ChoroplethMap() {
         return { type: "FeatureCollection" as const, features }
     }, [geometryData, bspData, dtxData, boundaryData, zeusData, mmsData, selectedMetrics])
 
+    // Derived live from current data rather than frozen at click time — see
+    // the SelectedRegion comment above.
+    const selectedRegionMetrics = useMemo(() => {
+        if (!selectedRegion) return null
+        const region = selectedRegion.region
+        const bsp_import = getBspImport(region)
+        const dtx_import = getDtxImport(region)
+        const net_consumption = getBspNet(region)
+        const cross_boundary = getBoundaryImport(region)
+        const postpaid_kwh = getPostpaidKwh(region)
+        const prepaid_kwh = getPrepaidKwh(region)
+        const loss_kwh = getLoss(region)
+        return { bsp_import, dtx_import, net_consumption, cross_boundary, postpaid_kwh, prepaid_kwh, loss_kwh }
+    }, [selectedRegion, bspData, dtxData, boundaryData, zeusData, mmsData])
+
     // Initialize map with retry mechanism
     useEffect(() => {
         if (map.current) {
@@ -462,13 +475,6 @@ export function ChoroplethMap() {
                         setSelectedRegion({
                             region: props.region,
                             district: props.district,
-                            bsp_import: Number(props.bsp_import),
-                            dtx_import: Number(props.dtx_import),
-                            net_consumption: Number(props.net_consumption),
-                            cross_boundary: Number(props.cross_boundary),
-                            postpaid_kwh: Number(props.postpaid_kwh),
-                            prepaid_kwh: Number(props.prepaid_kwh),
-                            loss_kwh: Number(props.loss_kwh),
                         })
                     }
                 })
@@ -782,7 +788,7 @@ export function ChoroplethMap() {
                 </div>
 
                 {/* Side Panel */}
-                {selectedRegion && (
+                {selectedRegion && selectedRegionMetrics && (
                     <Card className="w-[38%] h-[calc(100vh-300px)] overflow-auto animate-in slide-in-from-right duration-300">
                         <CardHeader className="flex flex-row items-start justify-between space-y-0 pb-4">
                             <div className="space-y-1">
@@ -800,7 +806,7 @@ export function ChoroplethMap() {
                                     <div className="space-y-1 p-4 rounded-lg bg-green-50 dark:bg-green-950/20 border border-green-200 dark:border-green-900">
                                         <p className="text-xs font-medium text-green-700 dark:text-green-400">BSP Import</p>
                                         <p className="text-2xl font-bold text-green-900 dark:text-green-100">
-                                            {selectedRegion.bsp_import.toLocaleString()}
+                                            {selectedRegionMetrics.bsp_import.toLocaleString()}
                                         </p>
                                         <p className="text-xs text-green-600 dark:text-green-500">kWh</p>
                                     </div>
@@ -810,7 +816,7 @@ export function ChoroplethMap() {
                                     <div className="space-y-1 p-4 rounded-lg bg-blue-50 dark:bg-blue-950/20 border border-blue-200 dark:border-blue-900">
                                         <p className="text-xs font-medium text-blue-700 dark:text-blue-400">DTX Import</p>
                                         <p className="text-2xl font-bold text-blue-900 dark:text-blue-100">
-                                            {selectedRegion.dtx_import.toLocaleString()}
+                                            {selectedRegionMetrics.dtx_import.toLocaleString()}
                                         </p>
                                         <p className="text-xs text-blue-600 dark:text-blue-500">kWh</p>
                                     </div>
@@ -820,7 +826,7 @@ export function ChoroplethMap() {
                                     <div className="space-y-1 p-4 rounded-lg bg-purple-50 dark:bg-purple-950/20 border border-purple-200 dark:border-purple-900">
                                         <p className="text-xs font-medium text-purple-700 dark:text-purple-400">Net Consumption</p>
                                         <p className="text-2xl font-bold text-purple-900 dark:text-purple-100">
-                                            {selectedRegion.net_consumption.toLocaleString()}
+                                            {selectedRegionMetrics.net_consumption.toLocaleString()}
                                         </p>
                                         <p className="text-xs text-purple-600 dark:text-purple-500">kWh</p>
                                     </div>
@@ -830,61 +836,81 @@ export function ChoroplethMap() {
                                     <div className="space-y-1 p-4 rounded-lg bg-orange-50 dark:bg-orange-950/20 border border-orange-200 dark:border-orange-900">
                                         <p className="text-xs font-medium text-orange-700 dark:text-orange-400">Cross-Boundary</p>
                                         <p className="text-2xl font-bold text-orange-900 dark:text-orange-100">
-                                            {selectedRegion.cross_boundary.toLocaleString()}
+                                            {selectedRegionMetrics.cross_boundary.toLocaleString()}
                                         </p>
                                         <p className="text-xs text-orange-600 dark:text-orange-500">kWh</p>
                                     </div>
                                 )}
 
-                                {selectedMetrics.postpaid && (
+                                {selectedMetrics.postpaid && (isLoadingSales ? (
+                                    <div className="space-y-1 p-4 rounded-lg bg-blue-50 dark:bg-blue-950/20 border border-blue-200 dark:border-blue-900 flex items-center gap-2">
+                                        <div className="h-3.5 w-3.5 border-2 border-blue-600 border-t-transparent rounded-full animate-spin shrink-0" />
+                                        <p className="text-xs text-blue-700 dark:text-blue-400">Loading Postpaid sales…</p>
+                                    </div>
+                                ) : (
                                     <div className="space-y-1 p-4 rounded-lg bg-blue-50 dark:bg-blue-950/20 border border-blue-200 dark:border-blue-900">
                                         <p className="text-xs font-medium text-blue-700 dark:text-blue-400">Postpaid Sales</p>
                                         <p className="text-2xl font-bold text-blue-900 dark:text-blue-100">
-                                            {selectedRegion.postpaid_kwh.toLocaleString()}
+                                            {selectedRegionMetrics.postpaid_kwh.toLocaleString()}
                                         </p>
                                         <p className="text-xs text-blue-600 dark:text-blue-500">kWh billed (Zeus + AMR)</p>
                                     </div>
-                                )}
+                                ))}
 
-                                {selectedMetrics.prepaid && (
+                                {selectedMetrics.prepaid && (isLoadingSales ? (
+                                    <div className="space-y-1 p-4 rounded-lg bg-emerald-50 dark:bg-emerald-950/20 border border-emerald-200 dark:border-emerald-900 flex items-center gap-2">
+                                        <div className="h-3.5 w-3.5 border-2 border-emerald-600 border-t-transparent rounded-full animate-spin shrink-0" />
+                                        <p className="text-xs text-emerald-700 dark:text-emerald-400">Loading Prepaid sales…</p>
+                                    </div>
+                                ) : (
                                     <div className="space-y-1 p-4 rounded-lg bg-emerald-50 dark:bg-emerald-950/20 border border-emerald-200 dark:border-emerald-900">
                                         <p className="text-xs font-medium text-emerald-700 dark:text-emerald-400">Prepaid Sales</p>
                                         <p className="text-2xl font-bold text-emerald-900 dark:text-emerald-100">
-                                            {selectedRegion.prepaid_kwh.toLocaleString()}
+                                            {selectedRegionMetrics.prepaid_kwh.toLocaleString()}
                                         </p>
                                         <p className="text-xs text-emerald-600 dark:text-emerald-500">kWh (Zeus + MMS)</p>
                                     </div>
-                                )}
+                                ))}
 
-                                {selectedMetrics.loss && (() => {
-                                    const supply = selectedRegion.bsp_import + selectedRegion.cross_boundary
-                                    const sales = selectedRegion.postpaid_kwh + selectedRegion.prepaid_kwh
+                                {selectedMetrics.loss && (isLoadingSales ? (
+                                    <div className="space-y-1 p-4 rounded-lg bg-red-50 dark:bg-red-950/20 border border-red-200 dark:border-red-900 flex items-center gap-2">
+                                        <div className="h-3.5 w-3.5 border-2 border-red-600 border-t-transparent rounded-full animate-spin shrink-0" />
+                                        <p className="text-xs text-red-700 dark:text-red-400">Loading sales data…</p>
+                                    </div>
+                                ) : (() => {
+                                    const supply = selectedRegionMetrics.bsp_import + selectedRegionMetrics.cross_boundary
+                                    const sales = selectedRegionMetrics.postpaid_kwh + selectedRegionMetrics.prepaid_kwh
                                     const noSalesData = sales === 0
                                     return (
                                         <div className="space-y-1 p-4 rounded-lg bg-red-50 dark:bg-red-950/20 border border-red-200 dark:border-red-900">
                                             <p className="text-xs font-medium text-red-700 dark:text-red-400">Loss</p>
                                             <p className="text-2xl font-bold text-red-900 dark:text-red-100">
-                                                {selectedRegion.loss_kwh.toLocaleString()}
+                                                {selectedRegionMetrics.loss_kwh.toLocaleString()}
                                             </p>
                                             <p className="text-xs text-red-600 dark:text-red-500">
                                                 {noSalesData
                                                     ? "kWh — no sales data for this period, see breakdown below"
                                                     : supply > 0
-                                                        ? `${((selectedRegion.loss_kwh / supply) * 100).toFixed(1)}% of supply`
+                                                        ? `${((selectedRegionMetrics.loss_kwh / supply) * 100).toFixed(1)}% of supply`
                                                         : "kWh (Supply − Postpaid − Prepaid)"}
                                             </p>
                                         </div>
                                     )
-                                })()}
+                                })())}
                             </div>
 
                             {/* Loss Breakdown */}
-                            {selectedMetrics.loss && (() => {
-                                const bsp = selectedRegion.bsp_import
-                                const boundary = selectedRegion.cross_boundary
+                            {selectedMetrics.loss && (isLoadingSales ? (
+                                <div className="pt-4 border-t flex items-center gap-2 text-sm text-muted-foreground">
+                                    <div className="h-3.5 w-3.5 border-2 border-primary border-t-transparent rounded-full animate-spin shrink-0" />
+                                    Loading sales data for the breakdown…
+                                </div>
+                            ) : (() => {
+                                const bsp = selectedRegionMetrics.bsp_import
+                                const boundary = selectedRegionMetrics.cross_boundary
                                 const supply = bsp + boundary
-                                const sales = selectedRegion.postpaid_kwh + selectedRegion.prepaid_kwh
-                                const loss = selectedRegion.loss_kwh
+                                const sales = selectedRegionMetrics.postpaid_kwh + selectedRegionMetrics.prepaid_kwh
+                                const loss = selectedRegionMetrics.loss_kwh
                                 const lossPct = supply > 0 ? (loss / supply) * 100 : null
                                 // Both sales categories at exactly zero almost always means no
                                 // sales data exists for the selected date range in this region —
@@ -906,11 +932,11 @@ export function ChoroplethMap() {
                                             </div>
                                             <div className="flex justify-between pl-3">
                                                 <span className="text-muted-foreground">− Postpaid Sales</span>
-                                                <span className="tabular-nums">{selectedRegion.postpaid_kwh.toLocaleString()} kWh</span>
+                                                <span className="tabular-nums">{selectedRegionMetrics.postpaid_kwh.toLocaleString()} kWh</span>
                                             </div>
                                             <div className="flex justify-between pl-3">
                                                 <span className="text-muted-foreground">− Prepaid Sales</span>
-                                                <span className="tabular-nums">{selectedRegion.prepaid_kwh.toLocaleString()} kWh</span>
+                                                <span className="tabular-nums">{selectedRegionMetrics.prepaid_kwh.toLocaleString()} kWh</span>
                                             </div>
                                             <div className="flex justify-between pt-1.5 border-t font-semibold">
                                                 <span className={loss >= 0 ? "text-red-700 dark:text-red-400" : "text-blue-700 dark:text-blue-400"}>
@@ -966,7 +992,7 @@ export function ChoroplethMap() {
                                         )}
                                     </div>
                                 )
-                            })()}
+                            })())}
 
                             {/* Region Infrastructure Statistics */}
                             <div className="space-y-3 pt-4 border-t">
@@ -1013,16 +1039,16 @@ export function ChoroplethMap() {
                                     <div className="flex justify-between text-sm">
                                         <span className="text-muted-foreground">Total Import:</span>
                                         <span className="font-medium">
-                                            {(selectedRegion.bsp_import + selectedRegion.dtx_import).toLocaleString()} kWh
+                                            {(selectedRegionMetrics.bsp_import + selectedRegionMetrics.dtx_import).toLocaleString()} kWh
                                         </span>
                                     </div>
                                     <div className="flex justify-between text-sm">
                                         <span className="text-muted-foreground">Net Flow:</span>
                                         <span className="font-medium">
                                             {(
-                                                selectedRegion.bsp_import +
-                                                selectedRegion.dtx_import -
-                                                selectedRegion.net_consumption
+                                                selectedRegionMetrics.bsp_import +
+                                                selectedRegionMetrics.dtx_import -
+                                                selectedRegionMetrics.net_consumption
                                             ).toLocaleString()}{" "}
                                             kWh
                                         </span>
@@ -1030,10 +1056,10 @@ export function ChoroplethMap() {
                                     <div className="flex justify-between text-sm">
                                         <span className="text-muted-foreground">Cross-Boundary Net:</span>
                                         <span
-                                            className={`font-medium ${selectedRegion.cross_boundary >= 0 ? "text-green-600" : "text-red-600"}`}
+                                            className={`font-medium ${selectedRegionMetrics.cross_boundary >= 0 ? "text-green-600" : "text-red-600"}`}
                                         >
-                                            {selectedRegion.cross_boundary >= 0 ? "+" : ""}
-                                            {selectedRegion.cross_boundary.toLocaleString()} kWh
+                                            {selectedRegionMetrics.cross_boundary >= 0 ? "+" : ""}
+                                            {selectedRegionMetrics.cross_boundary.toLocaleString()} kWh
                                         </span>
                                     </div>
                                 </div>
