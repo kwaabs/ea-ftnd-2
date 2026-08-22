@@ -29,8 +29,10 @@ import {
   AlertDialogTrigger,
 } from "@/components/ui/alert-dialog"
 import { TablePagination } from "@/components/ui/table-pagination"
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Loader2, Pencil, Plus, Search, Trash2 } from "lucide-react"
 import { useMeters } from "@/hooks/api/use-meter-api"
+import { ManageExpressFeedersView } from "@/components/admin/manage-express-feeders-view"
 import { useFilterOptionsWithAvailability } from "@/hooks/api/use-filter-options"
 import {
   createMeter,
@@ -124,6 +126,23 @@ function textField(
 }
 
 export function ManageMetersView() {
+  return (
+    <Tabs defaultValue="meters" className="space-y-6">
+      <TabsList>
+        <TabsTrigger value="meters">Meters</TabsTrigger>
+        <TabsTrigger value="express-feeders">Express Feeders</TabsTrigger>
+      </TabsList>
+      <TabsContent value="meters">
+        <MetersAdminTable />
+      </TabsContent>
+      <TabsContent value="express-feeders">
+        <ManageExpressFeedersView />
+      </TabsContent>
+    </Tabs>
+  )
+}
+
+function MetersAdminTable() {
   const queryClient = useQueryClient()
 
   const [page, setPage] = useState(1)
