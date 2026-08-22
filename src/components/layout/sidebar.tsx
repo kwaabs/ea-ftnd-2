@@ -14,6 +14,7 @@ import { useFilterOptionsWithAvailability } from "@/hooks/api/use-filter-options
 import { LayoutDashboard, Map, BarChart3, Globe, Users, ChevronRight, ChevronLeft, Settings, LogOut, User, MessageSquare } from "lucide-react"
 import { useCommentsSheetStore } from "@/stores/comments-sheet-store"
 import { logoutSession } from "@/lib/auth-session"
+import { NOTIFY_EMAILS } from "@/lib/notify-config"
 
 interface SidebarSubItem {
     id: string
@@ -231,7 +232,16 @@ export function Sidebar() {
             icon: BarChart3,
             href: "/analytics",
         },
-
+        ...(NOTIFY_EMAILS.includes(user?.email || user?.username || "")
+            ? [
+                {
+                    id: "manage-meters",
+                    label: "Manage Meters",
+                    icon: Settings,
+                    href: "/admin/meters",
+                },
+            ]
+            : []),
     ]
 
     return(
