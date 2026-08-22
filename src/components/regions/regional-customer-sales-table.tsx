@@ -9,6 +9,7 @@ import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { useZeusBillingDetail } from "@/hooks/api/use-zeus-billing-detail-api"
+import { useAmrConsumptionDaily } from "@/hooks/api/use-amr-consumption-daily-api"
 import { ArrowUpDown, ChevronLeft, ChevronRight, Search } from "lucide-react"
 import { ExportButton } from "@/components/ui/export-button"
 
@@ -27,6 +28,23 @@ interface RegionalCustomerSalesTableProps {
 // zeus_sales has no single sortable bill-date field, only split year/month.
 type SortField = "customerName" | "accountCode" | "servicePointCode" | "accountType" | "billConsumptionValue" | "debtAmount" | "billingPeriod"
 type SortOrder = "asc" | "desc"
+
+// Common shape both Zeus billing records and AMR daily readings get
+// normalized into, so the table can sort/filter/search across both. AMR has
+// no billing-period, debt, or bill-status concept — those stay null and
+// render as "—". `source` drives the AMR badge next to the customer name.
+interface UnifiedRecord {
+  source: "zeus" | "amr"
+  customerName: string
+  accountCode: string
+  servicePointCode: string
+  accountType: string
+  billConsumptionValue: number
+  debtAmount: number | null
+  billingMonth: number | null
+  billingYear: number | null
+  billStatus: string | null
+}
 
 function formatNumber(value: number | null | undefined): string {
   if (value === null || value === undefined) return "—"
@@ -49,7 +67,7 @@ function formatBillingPeriod(month: number | null | undefined, year: number | nu
   return name ? `${name} ${year}` : `${month}/${year}`
 }
 
-function billingPeriodValue(record: { billingYear?: number; billingMonth?: number }): number {
+function billingPeriodValue(record: { billingYear?: number | null; billingMonth?: number | null }): number {
   return (record.billingYear || 0) * 100 + (record.billingMonth || 0)
 }
 
@@ -65,9 +83,13 @@ function SortButton({
   children: React.ReactNode
 }) {
   return (
+    // inline-flex, not flex: a block-level flex container ignores the
+    // TableHead's text-right/text-left — it just sits at the inline-start
+    // of the cell regardless, which misaligned the header from its
+    // right-aligned column data (Account/SP/kWh/Debt) below it.
     <button
       onClick={() => onSort(field)}
-      className="flex items-center gap-1 hover:text-foreground cursor-pointer"
+      className="inline-flex items-center gap-1 hover:text-foreground cursor-pointer"
     >
       {children}
       {activeField === field && <ArrowUpDown className="h-3 w-3" />}
@@ -97,25 +119,93 @@ export function RegionalCustomerSalesTable({ region, district, dateRange, meterM
     limit: 1000,
   })
 
+  // AMR customers belong on the Postpaid tab too (they're postpaid-billed
+  // SLT/NSLT meters, same as postpaid-hub-view's own "AMR" tab), tagged with
+  // a badge rather than split into a separate table. Only fetched for the
+  // Postpaid-locked instance — Radix Tabs keeps both the Postpaid and
+  // Prepaid RegionalCustomerSalesTable mounted at once, so without this
+  // gate the Prepaid instance would fetch AMR data it never uses.
+  const isPostpaid = meterModelType === "Postpaid"
+  const { data: amrData, isLoading: amrLoading } = useAmrConsumptionDaily({
+    dateFrom: dateRange.start,
+    dateTo: dateRange.end,
+    region,
+    district,
+    systemName: "import_kwh",
+    page: 1,
+    limit: 3000,
+    enabled: isPostpaid,
+  })
+
+  const zeusRecords = useMemo<UnifiedRecord[]>(
+    () =>
+      (data?.data || []).map((r) => ({
+        source: "zeus",
+        customerName: r.customerName,
+        accountCode: r.accountCode,
+        servicePointCode: r.servicePointCode,
+        accountType: r.accountType,
+        billConsumptionValue: r.billConsumptionValue,
+        debtAmount: r.debtAmount,
+        billingMonth: r.billingMonth,
+        billingYear: r.billingYear,
+        billStatus: r.billStatus,
+      })),
+    [data],
+  )
+
+  // AMR has no billing-period grouping — sum each customer's daily readings
+  // across the whole date range into one row, matching how a Zeus row
+  // represents one customer for one billing period.
+  const amrRecords = useMemo<UnifiedRecord[]>(() => {
+    if (!isPostpaid) return []
+    const groups = new Map<string, UnifiedRecord>()
+    for (const r of amrData?.data || []) {
+      const key = `${r.account_no || ""}__${r.spn || r.meter_number || ""}`
+      let g = groups.get(key)
+      if (!g) {
+        g = {
+          source: "amr",
+          customerName: r.customer_name,
+          accountCode: r.account_no,
+          servicePointCode: r.spn || r.meter_number,
+          accountType: r.account_type,
+          billConsumptionValue: 0,
+          debtAmount: null,
+          billingMonth: null,
+          billingYear: null,
+          billStatus: null,
+        }
+        groups.set(key, g)
+      }
+      g.billConsumptionValue += r.consumed_energy || 0
+    }
+    return Array.from(groups.values())
+  }, [amrData, isPostpaid])
+
+  const allRecords = useMemo<UnifiedRecord[]>(
+    () => [...zeusRecords, ...amrRecords],
+    [zeusRecords, amrRecords],
+  )
+
   const billStatusOptions = useMemo(() => {
     const values = new Set<string>()
-    ;(data?.data || []).forEach((r) => {
+    allRecords.forEach((r) => {
       if (r.billStatus?.trim()) values.add(r.billStatus.trim())
     })
     return [...values].sort((a, b) => a.localeCompare(b))
-  }, [data])
+  }, [allRecords])
 
   const accountTypeOptions = useMemo(() => {
     const values = new Set<string>()
-    ;(data?.data || []).forEach((r) => {
+    allRecords.forEach((r) => {
       if (r.accountType?.trim()) values.add(r.accountType.trim())
     })
     return [...values].sort((a, b) => a.localeCompare(b))
-  }, [data])
+  }, [allRecords])
 
   const filteredData = useMemo(() => {
-    const records = data?.data || []
-    return records.filter((r) => {
+    return allRecords.filter((r) => {
       const searchLower = searchTerm.toLowerCase()
       const matchesSearch =
         (r.customerName?.toLowerCase() || "").includes(searchLower) ||
@@ -127,7 +217,7 @@ export function RegionalCustomerSalesTable({ region, district, dateRange, meterM
         accountTypeFilter === ALL_ACCOUNT_TYPES || r.accountType === accountTypeFilter
       return matchesSearch && matchesBillStatus && matchesAccountType
     })
-  }, [data, searchTerm, billStatusFilter, accountTypeFilter])
+  }, [allRecords, searchTerm, billStatusFilter, accountTypeFilter])
 
   const sortedData = useMemo(() => {
     const sorted = [...filteredData].sort((a, b) => {
@@ -169,7 +259,7 @@ export function RegionalCustomerSalesTable({ region, district, dateRange, meterM
     }
   }
 
-  if (isLoading) {
+  if (isLoading || (isPostpaid && amrLoading)) {
     return (
       <Card>
         <CardContent className="pt-6">
@@ -190,6 +280,7 @@ export function RegionalCustomerSalesTable({ region, district, dateRange, meterM
           <div className="flex items-center gap-2">
             <ExportButton
               data={sortedData.map((r) => ({
+                data_source: r.source === "amr" ? "AMR" : "Zeus",
                 customer_name: r.customerName,
                 account_code: r.accountCode,
                 service_point: r.servicePointCode,
@@ -287,7 +378,17 @@ export function RegionalCustomerSalesTable({ region, district, dateRange, meterM
               {paginatedData.length > 0 ? (
                 paginatedData.map((record, idx) => (
                   <TableRow key={idx} className="hover:bg-muted/50">
-                    <TableCell className="py-2 font-medium truncate">{record.customerName || "—"}</TableCell>
+                    <TableCell className="py-2 font-medium truncate">
+                      {record.customerName || "—"}
+                      {record.source === "amr" && (
+                        <Badge
+                          variant="outline"
+                          className="ml-1.5 text-[10px] border-orange-300 text-orange-700 bg-orange-50"
+                        >
+                          AMR
+                        </Badge>
+                      )}
+                    </TableCell>
                     <TableCell className="text-right py-2">
                       <Link
                         href={`/customer-sales/account/${encodeURIComponent(record.accountCode)}?dateFrom=${dateRange.start}&dateTo=${dateRange.end}`}
@@ -309,15 +410,19 @@ export function RegionalCustomerSalesTable({ region, district, dateRange, meterM
                       {formatKwhRaw(record.billConsumptionValue)}
                     </TableCell>
                     <TableCell className="text-right py-2 tabular-nums">
-                      <span
-                        className={
-                          record.debtAmount != null && record.debtAmount > 0
-                            ? "text-red-600 font-medium"
-                            : "text-green-600 font-medium"
-                        }
-                      >
-                        ₵{formatNumber(record.debtAmount)}
-                      </span>
+                      {record.debtAmount == null ? (
+                        <span className="text-muted-foreground">—</span>
+                      ) : (
+                        <span
+                          className={
+                            record.debtAmount > 0
+                              ? "text-red-600 font-medium"
+                              : "text-green-600 font-medium"
+                          }
+                        >
+                          ₵{formatNumber(record.debtAmount)}
+                        </span>
+                      )}
                     </TableCell>
                     <TableCell className="py-2 text-muted-foreground whitespace-nowrap">
                       {formatBillingPeriod(record.billingMonth, record.billingYear)}
