@@ -16,6 +16,7 @@ interface AmrConsumptionDailyParams {
   systemName?: "import_kwh" | "export_kwh";
   page?: number;
   limit?: number;
+  enabled?: boolean;
 }
 
 export function useAmrConsumptionDaily(params: AmrConsumptionDailyParams) {
@@ -54,6 +55,7 @@ export function useAmrConsumptionDaily(params: AmrConsumptionDailyParams) {
         body.data || { data: [], total: 0, page: 1, limit: 100, total_pages: 0 }
       );
     },
+    enabled: params.enabled !== false,
     staleTime: 5 * 60 * 1000,
     refetchOnMount: false,
   });
