@@ -7,6 +7,7 @@ import { Textarea } from "@/components/ui/textarea"
 import { Avatar, AvatarFallback } from "@/components/ui/avatar"
 import { Badge } from "@/components/ui/badge"
 import { Separator } from "@/components/ui/separator"
+import { Sheet, SheetContent, SheetTitle } from "@/components/ui/sheet"
 import { useUserStore } from "@/stores/user-store"
 import {
     useAllFeedback,
@@ -232,19 +233,21 @@ function CommentsSheetInner({ onClose }: { onClose: () => void }) {
     }
 
     return (
-        <>
-            {/* Backdrop */}
-            <div
-                className="fixed inset-0 z-40 bg-black/40 backdrop-blur-sm"
-                onClick={onClose}
-            />
-
-            {/* Sheet panel */}
-            <div className="fixed right-0 top-0 z-50 flex h-dvh w-[480px] max-w-full flex-col overflow-hidden border-l bg-background shadow-2xl">
+        <Sheet open onOpenChange={(o) => { if (!o) onClose() }}>
+            {/* Radix Dialog underneath locks background scroll while open — the
+                previous hand-rolled backdrop (a plain onClick div, no scroll
+                lock) let wheel/trackpad scrolling fall through to the page
+                behind whenever the comment list itself had no overflow to
+                consume it. */}
+            <SheetContent
+                side="right"
+                showCloseButton={false}
+                className="w-[480px] max-w-full data-[side=right]:sm:max-w-[480px] gap-0 p-0 flex flex-col overflow-hidden"
+            >
                 {/* Header */}
                 <div className="flex items-center justify-between px-5 py-4 border-b shrink-0">
                     <div>
-                        <h2 className="text-base font-semibold">Comments</h2>
+                        <SheetTitle className="text-base font-semibold">Comments</SheetTitle>
                         <p className="text-xs text-muted-foreground mt-0.5">{topLevel.length} total &middot; {feedback.length} including replies</p>
                     </div>
                     <Button variant="ghost" size="icon" className="h-8 w-8" onClick={onClose}>
@@ -359,8 +362,8 @@ function CommentsSheetInner({ onClose }: { onClose: () => void }) {
                     </div>
                     <p className="text-[10px] text-muted-foreground mt-1.5">Press Ctrl+Enter to submit</p>
                 </div>
-            </div>
-        </>
+            </SheetContent>
+        </Sheet>
     )
 }
 
