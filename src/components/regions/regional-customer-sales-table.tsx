@@ -13,6 +13,7 @@ import { ArrowUpDown, ChevronLeft, ChevronRight, Search } from "lucide-react"
 import { ExportButton } from "@/components/ui/export-button"
 
 const ALL_BILL_STATUS = "all"
+const ALL_ACCOUNT_TYPES = "all"
 
 interface RegionalCustomerSalesTableProps {
   region?: string
@@ -24,7 +25,7 @@ interface RegionalCustomerSalesTableProps {
 
 // "billingPeriod" is a virtual sort key (billingYear*100 + billingMonth) —
 // zeus_sales has no single sortable bill-date field, only split year/month.
-type SortField = "customerName" | "accountCode" | "servicePointCode" | "billConsumptionValue" | "debtAmount" | "billingPeriod"
+type SortField = "customerName" | "accountCode" | "servicePointCode" | "accountType" | "billConsumptionValue" | "debtAmount" | "billingPeriod"
 type SortOrder = "asc" | "desc"
 
 function formatNumber(value: number | null | undefined): string {
@@ -52,13 +53,39 @@ function billingPeriodValue(record: { billingYear?: number; billingMonth?: numbe
   return (record.billingYear || 0) * 100 + (record.billingMonth || 0)
 }
 
+function SortButton({
+  field,
+  activeField,
+  onSort,
+  children,
+}: {
+  field: SortField
+  activeField: SortField
+  onSort: (field: SortField) => void
+  children: React.ReactNode
+}) {
+  return (
+    <button
+      onClick={() => onSort(field)}
+      className="flex items-center gap-1 hover:text-foreground cursor-pointer"
+    >
+      {children}
+      {activeField === field && <ArrowUpDown className="h-3 w-3" />}
+    </button>
+  )
+}
+
 export function RegionalCustomerSalesTable({ region, district, dateRange, meterModelType }: RegionalCustomerSalesTableProps) {
   const [page, setPage] = useState(1)
   const pageSize = 20
   const [searchTerm, setSearchTerm] = useState("")
   const [billStatusFilter, setBillStatusFilter] = useState(ALL_BILL_STATUS)
-  const [sortField, setSortField] = useState<SortField>("billConsumptionValue")
-  const [sortOrder, setSortOrder] = useState<SortOrder>("desc")
+  const [accountTypeFilter, setAccountTypeFilter] = useState(ALL_ACCOUNT_TYPES)
+  // Default to alphabetical by customer — a Postpaid/Prepaid account can have
+  // several service points, and sorting by kWh scattered a customer's rows
+  // across the whole table instead of keeping them together.
+  const [sortField, setSortField] = useState<SortField>("customerName")
+  const [sortOrder, setSortOrder] = useState<SortOrder>("asc")
 
   const { data, isLoading } = useZeusBillingDetail({
     dateFrom: dateRange.start,
@@ -78,6 +105,14 @@ export function RegionalCustomerSalesTable({ region, district, dateRange, meterM
     return [...values].sort((a, b) => a.localeCompare(b))
   }, [data])
 
+  const accountTypeOptions = useMemo(() => {
+    const values = new Set<string>()
+    ;(data?.data || []).forEach((r) => {
+      if (r.accountType?.trim()) values.add(r.accountType.trim())
+    })
+    return [...values].sort((a, b) => a.localeCompare(b))
+  }, [data])
+
   const filteredData = useMemo(() => {
     const records = data?.data || []
     return records.filter((r) => {
@@ -88,9 +123,11 @@ export function RegionalCustomerSalesTable({ region, district, dateRange, meterM
         (r.servicePointCode?.toLowerCase() || "").includes(searchLower)
       const matchesBillStatus =
         billStatusFilter === ALL_BILL_STATUS || r.billStatus === billStatusFilter
-      return matchesSearch && matchesBillStatus
+      const matchesAccountType =
+        accountTypeFilter === ALL_ACCOUNT_TYPES || r.accountType === accountTypeFilter
+      return matchesSearch && matchesBillStatus && matchesAccountType
     })
-  }, [data, searchTerm, billStatusFilter])
+  }, [data, searchTerm, billStatusFilter, accountTypeFilter])
 
   const sortedData = useMemo(() => {
     const sorted = [...filteredData].sort((a, b) => {
@@ -100,8 +137,8 @@ export function RegionalCustomerSalesTable({ region, district, dateRange, meterM
         return sortOrder === "asc" ? aVal - bVal : bVal - aVal
       }
 
-      let aVal: string | number = a[sortField] ?? 0
-      let bVal: string | number = b[sortField] ?? 0
+      const aVal: string | number = a[sortField] ?? 0
+      const bVal: string | number = b[sortField] ?? 0
 
       if (typeof aVal === "string" || typeof bVal === "string") {
         return sortOrder === "asc"
@@ -132,16 +169,6 @@ export function RegionalCustomerSalesTable({ region, district, dateRange, meterM
     }
   }
 
-  const SortButton = ({ field, children }: { field: SortField; children: React.ReactNode }) => (
-    <button
-      onClick={() => handleSort(field)}
-      className="flex items-center gap-1 hover:text-foreground cursor-pointer"
-    >
-      {children}
-      {sortField === field && <ArrowUpDown className="h-3 w-3" />}
-    </button>
-  )
-
   if (isLoading) {
     return (
       <Card>
@@ -166,6 +193,7 @@ export function RegionalCustomerSalesTable({ region, district, dateRange, meterM
                 customer_name: r.customerName,
                 account_code: r.accountCode,
                 service_point: r.servicePointCode,
+                account_type: r.accountType,
                 bill_consumption_kwh: r.billConsumptionValue,
                 debt_amount: r.debtAmount,
                 billing_period: formatBillingPeriod(r.billingMonth, r.billingYear),
@@ -185,6 +213,25 @@ export function RegionalCustomerSalesTable({ region, district, dateRange, meterM
               <SelectContent>
                 <SelectItem value={ALL_BILL_STATUS}>All bill statuses</SelectItem>
                 {billStatusOptions.map((name) => (
+                  <SelectItem key={name} value={name}>
+                    {name}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            <Select
+              value={accountTypeFilter}
+              onValueChange={(v) => {
+                setAccountTypeFilter(v)
+                setPage(1)
+              }}
+            >
+              <SelectTrigger className="w-[160px]">
+                <SelectValue placeholder="Account type" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value={ALL_ACCOUNT_TYPES}>All account types</SelectItem>
+                {accountTypeOptions.map((name) => (
                   <SelectItem key={name} value={name}>
                     {name}
                   </SelectItem>
@@ -213,23 +260,25 @@ export function RegionalCustomerSalesTable({ region, district, dateRange, meterM
             <TableHeader>
               <TableRow>
                 <TableHead className="py-2">
-                  <SortButton field="customerName">Customer Name</SortButton>
+                  <SortButton field="customerName" activeField={sortField} onSort={handleSort}>Customer Name</SortButton>
                 </TableHead>
                 <TableHead className="text-right py-2">
-                  <SortButton field="accountCode">Account</SortButton>
+                  <SortButton field="accountCode" activeField={sortField} onSort={handleSort}>Account</SortButton>
                 </TableHead>
                 <TableHead className="text-right py-2">
-                  <SortButton field="servicePointCode">SP</SortButton>
-                </TableHead>
-                <TableHead className="py-2">Type</TableHead>
-                <TableHead className="text-right bg-blue-50 py-2">
-                  <SortButton field="billConsumptionValue">kWh</SortButton>
-                </TableHead>
-                <TableHead className="text-right py-2">
-                  <SortButton field="debtAmount">Debt</SortButton>
+                  <SortButton field="servicePointCode" activeField={sortField} onSort={handleSort}>SP</SortButton>
                 </TableHead>
                 <TableHead className="py-2">
-                  <SortButton field="billingPeriod">Period</SortButton>
+                  <SortButton field="accountType" activeField={sortField} onSort={handleSort}>Account Type</SortButton>
+                </TableHead>
+                <TableHead className="text-right bg-blue-50 py-2">
+                  <SortButton field="billConsumptionValue" activeField={sortField} onSort={handleSort}>kWh</SortButton>
+                </TableHead>
+                <TableHead className="text-right py-2">
+                  <SortButton field="debtAmount" activeField={sortField} onSort={handleSort}>Debt</SortButton>
+                </TableHead>
+                <TableHead className="py-2">
+                  <SortButton field="billingPeriod" activeField={sortField} onSort={handleSort}>Period</SortButton>
                 </TableHead>
                 <TableHead className="py-2">Status</TableHead>
               </TableRow>
@@ -255,7 +304,7 @@ export function RegionalCustomerSalesTable({ region, district, dateRange, meterM
                         {record.servicePointCode || "—"}
                       </Link>
                     </TableCell>
-                    <TableCell className="py-2">{record.meterModelType || "—"}</TableCell>
+                    <TableCell className="py-2">{record.accountType || "—"}</TableCell>
                     <TableCell className="text-right bg-blue-50/50 py-2 font-semibold text-blue-700 tabular-nums">
                       {formatKwhRaw(record.billConsumptionValue)}
                     </TableCell>
