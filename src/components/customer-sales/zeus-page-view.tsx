@@ -1,13 +1,10 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import Link from "next/link";
 import {
   AreaChartIcon,
-  ArrowUpRight,
   BarChart3,
   DollarSign,
-  Scale,
   Users,
   Zap,
 } from "lucide-react";
@@ -221,25 +218,10 @@ export function ZeusPageView({
       (s, r) => s + (r.sum_billamount || 0),
       0,
     );
-    const totalDebt = regionAgg.reduce(
-      (s, r) => s + (r.sum_debtamount || 0),
-      0,
-    );
-    const totalDue = regionAgg.reduce(
-      (s, r) => s + (r.sum_amountdue || 0),
-      0,
-    );
-    const totalOutstanding = regionAgg.reduce(
-      (s, r) => s + (r.sum_outstandingamount || 0),
-      0,
-    );
     return {
       totalKwh,
       totalCustomers,
       totalBilling,
-      totalDebt,
-      totalDue,
-      totalOutstanding,
       avgKwh: totalCustomers > 0 ? totalKwh / totalCustomers : 0,
     };
   }, [regionAgg]);
@@ -365,54 +347,6 @@ export function ZeusPageView({
             ) : (
               <p className="text-2xl font-bold text-blue-700 tabular-nums">
                 {formatMoney(stats.totalBilling)}
-              </p>
-            )}
-          </CardContent>
-        </Card>
-        <Link href="/customer-sales/debt">
-          <Card className="h-full transition-colors hover:border-sky-400 hover:bg-sky-50/40">
-            <CardContent className="pt-5">
-              <p className="text-xs text-muted-foreground mb-1 flex items-center justify-between gap-1">
-                <span className="flex items-center gap-1">
-                  <Scale className="h-3.5 w-3.5" /> Debt
-                </span>
-                <ArrowUpRight className="h-3.5 w-3.5 text-sky-600" />
-              </p>
-              {regionLoading ? (
-                <Skeleton className="h-8 w-28" />
-              ) : (
-                <p className="text-2xl font-bold text-sky-700 tabular-nums">
-                  {formatMoney(stats.totalDebt)}
-                </p>
-              )}
-              <p className="text-xs text-sky-700 mt-1">View debt insights →</p>
-            </CardContent>
-          </Card>
-        </Link>
-        <Card>
-          <CardContent className="pt-5">
-            <p className="text-xs text-muted-foreground mb-1 flex items-center gap-1">
-              <Scale className="h-3.5 w-3.5" /> Amount due
-            </p>
-            {regionLoading ? (
-              <Skeleton className="h-8 w-28" />
-            ) : (
-              <p className="text-2xl font-bold text-amber-700 tabular-nums">
-                {formatMoney(stats.totalDue)}
-              </p>
-            )}
-          </CardContent>
-        </Card>
-        <Card>
-          <CardContent className="pt-5">
-            <p className="text-xs text-muted-foreground mb-1 flex items-center gap-1">
-              <Scale className="h-3.5 w-3.5" /> Outstanding
-            </p>
-            {regionLoading ? (
-              <Skeleton className="h-8 w-28" />
-            ) : (
-              <p className="text-2xl font-bold text-rose-700 tabular-nums">
-                {formatMoney(stats.totalOutstanding)}
               </p>
             )}
           </CardContent>
@@ -628,17 +562,8 @@ export function ZeusPageView({
                         <th className="text-right py-2 px-4 font-medium text-muted-foreground">
                           Customers
                         </th>
-                        <th className="text-right py-2 px-4 font-medium text-muted-foreground">
+                        <th className="text-right py-2 pl-4 font-medium text-muted-foreground">
                           Billing
-                        </th>
-                        <th className="text-right py-2 px-4 font-medium text-sky-700">
-                          Debt
-                        </th>
-                        <th className="text-right py-2 px-4 font-medium text-amber-700">
-                          Due
-                        </th>
-                        <th className="text-right py-2 pl-4 font-medium text-rose-700">
-                          Outstanding
                         </th>
                       </tr>
                     </thead>
@@ -678,17 +603,8 @@ export function ZeusPageView({
                               <td className="py-2.5 px-4 text-right tabular-nums">
                                 {formatNumber(item.customer_count)}
                               </td>
-                              <td className="py-2.5 px-4 text-right text-blue-700 tabular-nums">
+                              <td className="py-2.5 pl-4 text-right text-blue-700 tabular-nums">
                                 {formatMoney(item.sum_billamount)}
-                              </td>
-                              <td className="py-2.5 px-4 text-right text-sky-700 tabular-nums">
-                                {formatMoney(item.sum_debtamount)}
-                              </td>
-                              <td className="py-2.5 px-4 text-right text-amber-700 tabular-nums">
-                                {formatMoney(item.sum_amountdue)}
-                              </td>
-                              <td className="py-2.5 pl-4 text-right text-rose-700 tabular-nums">
-                                {formatMoney(item.sum_outstandingamount)}
                               </td>
                             </tr>
                           );
@@ -706,17 +622,8 @@ export function ZeusPageView({
                         <td className="py-2.5 px-4 text-right font-semibold tabular-nums">
                           {formatNumber(stats.totalCustomers)}
                         </td>
-                        <td className="py-2.5 px-4 text-right font-semibold text-blue-700 tabular-nums">
+                        <td className="py-2.5 pl-4 text-right font-semibold text-blue-700 tabular-nums">
                           {formatMoney(stats.totalBilling)}
-                        </td>
-                        <td className="py-2.5 px-4 text-right font-semibold text-sky-700 tabular-nums">
-                          {formatMoney(stats.totalDebt)}
-                        </td>
-                        <td className="py-2.5 px-4 text-right font-semibold text-amber-700 tabular-nums">
-                          {formatMoney(stats.totalDue)}
-                        </td>
-                        <td className="py-2.5 pl-4 text-right font-semibold text-rose-700 tabular-nums">
-                          {formatMoney(stats.totalOutstanding)}
                         </td>
                       </tr>
                     </tfoot>
@@ -763,17 +670,8 @@ export function ZeusPageView({
                         <th className="text-right py-2 px-4 font-medium text-muted-foreground">
                           Customers
                         </th>
-                        <th className="text-right py-2 px-4 font-medium text-muted-foreground">
+                        <th className="text-right py-2 pl-4 font-medium text-muted-foreground">
                           Billing
-                        </th>
-                        <th className="text-right py-2 px-4 font-medium text-sky-700">
-                          Debt
-                        </th>
-                        <th className="text-right py-2 px-4 font-medium text-amber-700">
-                          Due
-                        </th>
-                        <th className="text-right py-2 pl-4 font-medium text-rose-700">
-                          Outstanding
                         </th>
                       </tr>
                     </thead>
@@ -798,17 +696,8 @@ export function ZeusPageView({
                             <td className="py-2.5 px-4 text-right tabular-nums">
                               {formatNumber(item.customer_count)}
                             </td>
-                            <td className="py-2.5 px-4 text-right text-blue-700 tabular-nums">
+                            <td className="py-2.5 pl-4 text-right text-blue-700 tabular-nums">
                               {formatMoney(item.sum_billamount)}
-                            </td>
-                            <td className="py-2.5 px-4 text-right text-sky-700 tabular-nums">
-                              {formatMoney(item.sum_debtamount)}
-                            </td>
-                            <td className="py-2.5 px-4 text-right text-amber-700 tabular-nums">
-                              {formatMoney(item.sum_amountdue)}
-                            </td>
-                            <td className="py-2.5 pl-4 text-right text-rose-700 tabular-nums">
-                              {formatMoney(item.sum_outstandingamount)}
                             </td>
                           </tr>
                         ))}
@@ -849,17 +738,8 @@ export function ZeusPageView({
                         <th className="text-right py-2 px-4 font-medium text-muted-foreground">
                           Customers
                         </th>
-                        <th className="text-right py-2 px-4 font-medium text-muted-foreground">
+                        <th className="text-right py-2 pl-4 font-medium text-muted-foreground">
                           Billing
-                        </th>
-                        <th className="text-right py-2 px-4 font-medium text-sky-700">
-                          Debt
-                        </th>
-                        <th className="text-right py-2 px-4 font-medium text-amber-700">
-                          Due
-                        </th>
-                        <th className="text-right py-2 pl-4 font-medium text-rose-700">
-                          Outstanding
                         </th>
                       </tr>
                     </thead>
@@ -884,17 +764,8 @@ export function ZeusPageView({
                             <td className="py-2.5 px-4 text-right tabular-nums">
                               {formatNumber(item.customer_count)}
                             </td>
-                            <td className="py-2.5 px-4 text-right text-blue-700 tabular-nums">
+                            <td className="py-2.5 pl-4 text-right text-blue-700 tabular-nums">
                               {formatMoney(item.sum_billamount)}
-                            </td>
-                            <td className="py-2.5 px-4 text-right text-sky-700 tabular-nums">
-                              {formatMoney(item.sum_debtamount)}
-                            </td>
-                            <td className="py-2.5 px-4 text-right text-amber-700 tabular-nums">
-                              {formatMoney(item.sum_amountdue)}
-                            </td>
-                            <td className="py-2.5 pl-4 text-right text-rose-700 tabular-nums">
-                              {formatMoney(item.sum_outstandingamount)}
                             </td>
                           </tr>
                         ))}
@@ -935,17 +806,8 @@ export function ZeusPageView({
                         <th className="text-right py-2 px-4 font-medium text-muted-foreground">
                           Customers
                         </th>
-                        <th className="text-right py-2 px-4 font-medium text-muted-foreground">
+                        <th className="text-right py-2 pl-4 font-medium text-muted-foreground">
                           Billing
-                        </th>
-                        <th className="text-right py-2 px-4 font-medium text-sky-700">
-                          Debt
-                        </th>
-                        <th className="text-right py-2 px-4 font-medium text-amber-700">
-                          Due
-                        </th>
-                        <th className="text-right py-2 pl-4 font-medium text-rose-700">
-                          Outstanding
                         </th>
                       </tr>
                     </thead>
@@ -970,17 +832,8 @@ export function ZeusPageView({
                             <td className="py-2.5 px-4 text-right tabular-nums">
                               {formatNumber(item.customer_count)}
                             </td>
-                            <td className="py-2.5 px-4 text-right text-blue-700 tabular-nums">
+                            <td className="py-2.5 pl-4 text-right text-blue-700 tabular-nums">
                               {formatMoney(item.sum_billamount)}
-                            </td>
-                            <td className="py-2.5 px-4 text-right text-sky-700 tabular-nums">
-                              {formatMoney(item.sum_debtamount)}
-                            </td>
-                            <td className="py-2.5 px-4 text-right text-amber-700 tabular-nums">
-                              {formatMoney(item.sum_amountdue)}
-                            </td>
-                            <td className="py-2.5 pl-4 text-right text-rose-700 tabular-nums">
-                              {formatMoney(item.sum_outstandingamount)}
                             </td>
                           </tr>
                         ))}
