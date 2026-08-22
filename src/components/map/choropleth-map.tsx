@@ -164,7 +164,6 @@ export function ChoroplethMap() {
 
         const meters = meterStats.data.data
         const totalMeters = meterStats.data.meta?.total ?? meters.length
-        const uniqueStations = new Set(meters.map((m) => m.station)).size
         const meterTypeCount: Record<string, number> = {}
 
         meters.forEach((meter) => {
@@ -173,7 +172,6 @@ export function ChoroplethMap() {
 
         return {
             totalMeters,
-            totalStations: uniqueStations,
             meterTypes: meterTypeCount,
             // meters.length can be less than totalMeters if a region ever
             // exceeds the fetch limit above — the type/station breakdown
@@ -1005,16 +1003,6 @@ export function ChoroplethMap() {
                                                 this region has more meters than the fetch limit.
                                             </p>
                                         )}
-                                        <div className="grid grid-cols-2 gap-3">
-                                            <div className="p-3 rounded-lg bg-muted/50 border">
-                                                <p className="text-xs text-muted-foreground mb-1">Total Meters</p>
-                                                <p className="text-2xl font-bold">{regionStats.totalMeters.toLocaleString()}</p>
-                                            </div>
-                                            <div className="p-3 rounded-lg bg-muted/50 border">
-                                                <p className="text-xs text-muted-foreground mb-1">Stations</p>
-                                                <p className="text-2xl font-bold">{regionStats.totalStations.toLocaleString()}</p>
-                                            </div>
-                                        </div>
                                         <div className="space-y-2">
                                             <p className="text-xs font-medium text-muted-foreground">Meters by Type</p>
                                             <div className="grid grid-cols-2 gap-2">
