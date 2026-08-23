@@ -399,17 +399,25 @@ export function ManageExpressFeedersView() {
                             {feeder.sap_version || "—"}
                           </td>
                           <td className="py-2.5 px-4 border-l-2 border-blue-200 dark:border-blue-900">
-                            <p className="font-medium text-blue-900 dark:text-blue-100">
-                              {feeder.sending_meter_number}
-                            </p>
+                            {feeder.sending_meter_number ? (
+                              <p className="font-medium text-blue-900 dark:text-blue-100">
+                                {feeder.sending_meter_number}
+                              </p>
+                            ) : (
+                              <p className="font-medium text-red-600 dark:text-red-500">No meter</p>
+                            )}
                             <p className="text-xs text-muted-foreground">
                               {[feeder.sending_station, feeder.sending_region].filter(Boolean).join(" — ") || "—"}
                             </p>
                           </td>
                           <td className="py-2.5 px-4 border-l-2 border-emerald-200 dark:border-emerald-900">
-                            <p className="font-medium text-emerald-900 dark:text-emerald-100">
-                              {feeder.receiving_meter_number}
-                            </p>
+                            {feeder.receiving_meter_number ? (
+                              <p className="font-medium text-emerald-900 dark:text-emerald-100">
+                                {feeder.receiving_meter_number}
+                              </p>
+                            ) : (
+                              <p className="font-medium text-red-600 dark:text-red-500">No meter</p>
+                            )}
                             <p className="text-xs text-muted-foreground">
                               {[feeder.receiving_station, feeder.receiving_region].filter(Boolean).join(" — ") || "—"}
                             </p>
