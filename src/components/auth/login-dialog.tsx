@@ -277,24 +277,35 @@ export function LoginDialog() {
       </div>
 
       {/* ── Right — light panel ── */}
-      <div className="flex w-[420px] flex-col items-center justify-end pb-16 gap-6 bg-slate-50 px-12 py-10">
-        <div className="flex h-14 w-14 items-center justify-center rounded-xl bg-[#0f2d57]">
-          <LineChart className="h-7 w-7 text-white" />
+      <div className="flex w-[420px] flex-col items-center bg-slate-50 px-12 py-10">
+        <div className="mt-4 flex items-center justify-center rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
+          {/* eslint-disable-next-line @next/next/no-img-element -- static local asset, no next/image config needed for this one spot */}
+          <img
+            src="/images/ecg-logo.jpg"
+            alt="Electricity Company of Ghana"
+            className="h-32 w-32 rounded-xl object-contain"
+          />
         </div>
-        <p className="text-center text-lg font-medium leading-snug text-slate-900">
-          Energy insights at your fingertips
-        </p>
-        <div className="h-px w-8 bg-slate-300" />
-        <p className="text-center text-sm leading-relaxed text-slate-600">
-          Monitor consumption, track meters, and analyze distribution across all regions.
-        </p>
-        <div className="flex w-full items-center gap-2 rounded-lg border border-slate-200 bg-white px-3 py-2.5">
-          <ShieldCheck className="h-4 w-4 text-[#0f2d57]" />
-          <span className="text-xs font-medium text-slate-700">Secured with Microsoft Entra ID</span>
-        </div>
-        <div className="flex w-full items-center gap-2 rounded-lg border border-slate-200 bg-white px-3 py-2.5">
-          <Users className="h-4 w-4 text-[#0f2d57]" />
-          <span className="text-xs font-medium text-slate-700">Organization accounts only</span>
+
+        <div className="mt-auto flex flex-col items-center gap-6 pb-16">
+          <div className="flex h-14 w-14 items-center justify-center rounded-xl bg-[#0f2d57]">
+            <LineChart className="h-7 w-7 text-white" />
+          </div>
+          <p className="text-center text-lg font-medium leading-snug text-slate-900">
+            Energy insights at your fingertips
+          </p>
+          <div className="h-px w-8 bg-slate-300" />
+          <p className="text-center text-sm leading-relaxed text-slate-600">
+            Monitor consumption, track meters, and analyze distribution across all regions.
+          </p>
+          <div className="flex w-full items-center gap-2 rounded-lg border border-slate-200 bg-white px-3 py-2.5">
+            <ShieldCheck className="h-4 w-4 text-[#0f2d57]" />
+            <span className="text-xs font-medium text-slate-700">Secured with Microsoft Entra ID</span>
+          </div>
+          <div className="flex w-full items-center gap-2 rounded-lg border border-slate-200 bg-white px-3 py-2.5">
+            <Users className="h-4 w-4 text-[#0f2d57]" />
+            <span className="text-xs font-medium text-slate-700">Organization accounts only</span>
+          </div>
         </div>
       </div>
 
