@@ -9,7 +9,6 @@ import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { useZeusBillingDetail } from "@/hooks/api/use-zeus-billing-detail-api"
-import { useAmrConsumptionDaily } from "@/hooks/api/use-amr-consumption-daily-api"
 import { ArrowUpDown, ChevronLeft, ChevronRight, Search } from "lucide-react"
 import { ExportButton } from "@/components/ui/export-button"
 
@@ -29,12 +28,14 @@ interface RegionalCustomerSalesTableProps {
 type SortField = "customerName" | "accountCode" | "servicePointCode" | "accountType" | "billConsumptionValue" | "debtAmount" | "billingPeriod"
 type SortOrder = "asc" | "desc"
 
-// Common shape both Zeus billing records and AMR daily readings get
-// normalized into, so the table can sort/filter/search across both. AMR has
-// no billing-period, debt, or bill-status concept — those stay null and
-// render as "—". `source` drives the AMR badge next to the customer name.
+// Common shape both zeus_sales sources get normalized into, so the table
+// can sort/filter/search across both. "zeus-amr" is the same zeus_sales
+// table as "zeus", just metermodeltype = 'AMR' instead of 'Postpaid' —
+// mirrors amr-page-view.tsx's own CustomerSalesDetail serviceType="AMR".
+// (There's also a separate, deprecated app.amr_customer_records daily-
+// reading pipeline — intentionally not used here.)
 interface UnifiedRecord {
-  source: "zeus" | "amr"
+  source: "zeus" | "zeus-amr"
   customerName: string
   accountCode: string
   servicePointCode: string
@@ -126,14 +127,17 @@ export function RegionalCustomerSalesTable({ region, district, dateRange, meterM
   // Prepaid RegionalCustomerSalesTable mounted at once, so without this
   // gate the Prepaid instance would fetch AMR data it never uses.
   const isPostpaid = meterModelType === "Postpaid"
-  const { data: amrData, isLoading: amrLoading } = useAmrConsumptionDaily({
+
+  // "Zeus AMR" — same zeus_sales table as the Postpaid rows above, just
+  // metermodeltype = 'AMR' instead of 'Postpaid'. Real debt/period/status.
+  const { data: zeusAmrData, isLoading: zeusAmrLoading } = useZeusBillingDetail({
     dateFrom: dateRange.start,
     dateTo: dateRange.end,
     region,
     district,
-    systemName: "import_kwh",
+    meterModelType: "AMR",
     page: 1,
-    limit: 3000,
+    limit: 1000,
     enabled: isPostpaid,
   })
 
@@ -154,38 +158,26 @@ export function RegionalCustomerSalesTable({ region, district, dateRange, meterM
     [data],
   )
 
-  // AMR has no billing-period grouping — sum each customer's daily readings
-  // across the whole date range into one row, matching how a Zeus row
-  // represents one customer for one billing period.
-  const amrRecords = useMemo<UnifiedRecord[]>(() => {
-    if (!isPostpaid) return []
-    const groups = new Map<string, UnifiedRecord>()
-    for (const r of amrData?.data || []) {
-      const key = `${r.account_no || ""}__${r.spn || r.meter_number || ""}`
-      let g = groups.get(key)
-      if (!g) {
-        g = {
-          source: "amr",
-          customerName: r.customer_name,
-          accountCode: r.account_no,
-          servicePointCode: r.spn || r.meter_number,
-          accountType: r.account_type,
-          billConsumptionValue: 0,
-          debtAmount: null,
-          billingMonth: null,
-          billingYear: null,
-          billStatus: null,
-        }
-        groups.set(key, g)
-      }
-      g.billConsumptionValue += r.consumed_energy || 0
-    }
-    return Array.from(groups.values())
-  }, [amrData, isPostpaid])
+  const zeusAmrRecords = useMemo<UnifiedRecord[]>(
+    () =>
+      (isPostpaid ? zeusAmrData?.data || [] : []).map((r) => ({
+        source: "zeus-amr",
+        customerName: r.customerName,
+        accountCode: r.accountCode,
+        servicePointCode: r.servicePointCode,
+        accountType: r.accountType,
+        billConsumptionValue: r.billConsumptionValue,
+        debtAmount: r.debtAmount,
+        billingMonth: r.billingMonth,
+        billingYear: r.billingYear,
+        billStatus: r.billStatus,
+      })),
+    [zeusAmrData, isPostpaid],
+  )
 
   const allRecords = useMemo<UnifiedRecord[]>(
-    () => [...zeusRecords, ...amrRecords],
-    [zeusRecords, amrRecords],
+    () => [...zeusRecords, ...zeusAmrRecords],
+    [zeusRecords, zeusAmrRecords],
   )
 
   const billStatusOptions = useMemo(() => {
@@ -259,7 +251,7 @@ export function RegionalCustomerSalesTable({ region, district, dateRange, meterM
     }
   }
 
-  if (isLoading || (isPostpaid && amrLoading)) {
+  if (isLoading || (isPostpaid && zeusAmrLoading)) {
     return (
       <Card>
         <CardContent className="pt-6">
@@ -280,7 +272,7 @@ export function RegionalCustomerSalesTable({ region, district, dateRange, meterM
           <div className="flex items-center gap-2">
             <ExportButton
               data={sortedData.map((r) => ({
-                data_source: r.source === "amr" ? "AMR" : "Zeus",
+                data_source: r.source === "zeus-amr" ? "AMR" : "Zeus",
                 customer_name: r.customerName,
                 account_code: r.accountCode,
                 service_point: r.servicePointCode,
@@ -380,7 +372,7 @@ export function RegionalCustomerSalesTable({ region, district, dateRange, meterM
                   <TableRow key={idx} className="hover:bg-muted/50">
                     <TableCell className="py-2 font-medium truncate">
                       {record.customerName || "—"}
-                      {record.source === "amr" && (
+                      {record.source === "zeus-amr" && (
                         <Badge
                           variant="outline"
                           className="ml-1.5 text-[10px] border-orange-300 text-orange-700 bg-orange-50"
