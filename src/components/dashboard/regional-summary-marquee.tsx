@@ -26,7 +26,7 @@ import {
   deleteAnnouncement,
 } from "@/hooks/api/use-announcements-api";
 import { useUserStore } from "@/stores/user-store";
-import { NOTIFY_EMAILS } from "@/lib/notify-config";
+import { useIsNotifyEmail } from "@/hooks/api/use-notify-email-api";
 
 /** Alternate sales figures vs announcements so the ticker stays readable. */
 const MARQUEE_PHASE_MS = 2 * 60 * 1000;
@@ -83,8 +83,8 @@ function lossSeverityStyles(hasSalesData: boolean, lossPct: number | null) {
  *            loss            = availableSupply − sales
  *
  * Also scrolls shared announcements on a separate 2-minute phase so figures
- * and announcements are not mixed. Posting/removing is limited to emails in
- * NOTIFY_EMAILS (enforced on the API as well).
+ * and announcements are not mixed. Posting/removing is limited to emails on
+ * the backend's app.notify_emails allowlist (enforced on the API as well).
  */
 export function RegionalSummaryMarquee({
   dateRange,
@@ -95,7 +95,7 @@ export function RegionalSummaryMarquee({
 
   const { user } = useUserStore();
   const userEmail = (user?.email || user?.username || "").toLowerCase();
-  const canManageAnnouncements = NOTIFY_EMAILS.map((e) => e.toLowerCase()).includes(userEmail);
+  const { isAllowed: canManageAnnouncements } = useIsNotifyEmail();
 
   const [composeOpen, setComposeOpen] = useState(false);
   const [draft, setDraft] = useState("");

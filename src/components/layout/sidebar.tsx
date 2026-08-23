@@ -14,7 +14,7 @@ import { useFilterOptionsWithAvailability } from "@/hooks/api/use-filter-options
 import { LayoutDashboard, Map, BarChart3, Globe, Users, ChevronRight, ChevronLeft, Settings, LogOut, User, MessageSquare } from "lucide-react"
 import { useCommentsSheetStore } from "@/stores/comments-sheet-store"
 import { logoutSession } from "@/lib/auth-session"
-import { NOTIFY_EMAILS } from "@/lib/notify-config"
+import { useIsNotifyEmail } from "@/hooks/api/use-notify-email-api"
 
 interface SidebarSubItem {
     id: string
@@ -43,6 +43,7 @@ interface MenuItem {
 export function Sidebar() {
     const { isCollapsed, toggleCollapsed, openMenus, toggleMenu } = useSidebarStore()
     const { user } = useUserStore()
+    const { isAllowed: canManageMeters } = useIsNotifyEmail()
     const pathname = usePathname()
     const router = useRouter()
     const openCommentsSheet = useCommentsSheetStore(s => s.open)
@@ -232,7 +233,7 @@ export function Sidebar() {
             icon: BarChart3,
             href: "/analytics",
         },
-        ...(NOTIFY_EMAILS.includes(user?.email || user?.username || "")
+        ...(canManageMeters
             ? [
                 {
                     id: "manage-meters",

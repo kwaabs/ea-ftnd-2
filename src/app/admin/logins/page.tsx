@@ -1,12 +1,12 @@
 "use client"
 
 import { useMemo } from "react"
+import { Loader2 } from "lucide-react"
 import { AppLayout } from "@/components/layout/app-layout"
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { Skeleton } from "@/components/ui/skeleton"
-import { useUserStore } from "@/stores/user-store"
-import { NOTIFY_EMAILS } from "@/lib/notify-config"
+import { useIsNotifyEmail } from "@/hooks/api/use-notify-email-api"
 import { useLoginStats } from "@/hooks/api/use-login-stats-api"
 import {
     ResponsiveContainer,
@@ -245,13 +245,15 @@ function LoginStatsInner() {
 }
 
 export default function LoginStatsPage() {
-    const { user } = useUserStore()
-    const userEmail = user?.email || user?.username || ""
-    const isAllowed = NOTIFY_EMAILS.includes(userEmail)
+    const { isAllowed, isLoading } = useIsNotifyEmail()
 
     return (
         <AppLayout>
-            {isAllowed ? (
+            {isLoading ? (
+                <div className="flex justify-center py-24">
+                    <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
+                </div>
+            ) : isAllowed ? (
                 <LoginStatsInner />
             ) : (
                 <div className="flex flex-col items-center justify-center py-24 text-center">
