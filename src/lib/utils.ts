@@ -5,6 +5,31 @@ export function cn(...inputs: ClassValue[]) {
   return twMerge(clsx(inputs))
 }
 
+/**
+ * fetch() with a hard timeout — plain fetch() has none, so a request that
+ * never resolves server-side (a stuck/slow query, a dropped connection)
+ * just hangs forever with no error and no way for a caller to show a
+ * retry UI. Aborts and throws after `timeoutMs` instead.
+ */
+export async function fetchWithTimeout(
+  url: string,
+  timeoutMs = 30000,
+  init?: RequestInit,
+): Promise<Response> {
+  const controller = new AbortController()
+  const timer = setTimeout(() => controller.abort(), timeoutMs)
+  try {
+    return await fetch(url, { ...init, signal: controller.signal })
+  } catch (err) {
+    if (err instanceof DOMException && err.name === "AbortError") {
+      throw new Error(`Request timed out after ${Math.round(timeoutMs / 1000)}s`)
+    }
+    throw err
+  } finally {
+    clearTimeout(timer)
+  }
+}
+
 export function formatNumber(num: number | string | undefined | null, decimals?: number): string {
   if (num === undefined || num === null || num === "") return "0"
 
