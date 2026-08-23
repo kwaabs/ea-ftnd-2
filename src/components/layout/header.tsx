@@ -9,7 +9,7 @@ import { useUserStore } from "@/stores/user-store"
 import { HeaderFilterDropdown } from "@/components/layout/header-filter-dropdown"
 import { Breadcrumbs } from "./breadcrumbs"
 import { NotificationBell } from "@/components/comments/notification-bell"
-import { NOTIFY_EMAILS } from "@/lib/notify-config"
+import { useIsNotifyEmail } from "@/hooks/api/use-notify-email-api"
 
 function getYesterday() {
     const d = new Date()
@@ -31,7 +31,7 @@ export function Header() {
     const { filters, setFilters } = useAppStore()
     const { user } = useUserStore()
     const userEmail = user?.email || user?.username || ""
-    const canSeeNotifications = NOTIFY_EMAILS.includes(userEmail)
+    const { isAllowed: canSeeNotifications } = useIsNotifyEmail()
 
     const yesterday = getYesterday()
 
