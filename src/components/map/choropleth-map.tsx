@@ -121,15 +121,22 @@ export function ChoroplethMap() {
 
     // Postpaid: Zeus Postpaid + Zeus AMR billed consumption per region — AMR
     // is just another metermodeltype value within Zeus data, not a separate
-    // source (see customer-sales-overview.tsx).
-    const getPostpaidKwh = (regionName: string): number => {
+    // source (see customer-sales-overview.tsx). Split into the two
+    // sub-totals as well as the combined figure, so the region panel can
+    // show the Postpaid/AMR breakdown without changing the headline number
+    // used everywhere else (choropleth coloring, ranges, loss calc).
+    const getPostpaidZeusKwh = (regionName: string): number => {
         return (zeusData ?? [])
-            .filter((z) => {
-                const t = normalizeZeusType(z.metermodeltype)
-                return (t === "postpaid" || t === "amr") && regionNamesMatch(regionName, z.regionname)
-            })
+            .filter((z) => normalizeZeusType(z.metermodeltype) === "postpaid" && regionNamesMatch(regionName, z.regionname))
             .reduce((sum, z) => sum + (z.sum_billconsumptionvalue ?? 0), 0)
     }
+    const getPostpaidAmrKwh = (regionName: string): number => {
+        return (zeusData ?? [])
+            .filter((z) => normalizeZeusType(z.metermodeltype) === "amr" && regionNamesMatch(regionName, z.regionname))
+            .reduce((sum, z) => sum + (z.sum_billconsumptionvalue ?? 0), 0)
+    }
+    const getPostpaidKwh = (regionName: string): number =>
+        getPostpaidZeusKwh(regionName) + getPostpaidAmrKwh(regionName)
     // Prepaid: Zeus Prepaid billed consumption + MMS kWh read (last month),
     // per region.
     const getPrepaidKwh = (regionName: string): number => {
@@ -295,10 +302,12 @@ export function ChoroplethMap() {
         const dtx_import = getDtxImport(region)
         const net_consumption = getBspNet(region)
         const cross_boundary = getBoundaryImport(region)
-        const postpaid_kwh = getPostpaidKwh(region)
+        const postpaid_zeus_kwh = getPostpaidZeusKwh(region)
+        const postpaid_amr_kwh = getPostpaidAmrKwh(region)
+        const postpaid_kwh = postpaid_zeus_kwh + postpaid_amr_kwh
         const prepaid_kwh = getPrepaidKwh(region)
         const loss_kwh = getLoss(region)
-        return { bsp_import, dtx_import, net_consumption, cross_boundary, postpaid_kwh, prepaid_kwh, loss_kwh }
+        return { bsp_import, dtx_import, net_consumption, cross_boundary, postpaid_kwh, postpaid_zeus_kwh, postpaid_amr_kwh, prepaid_kwh, loss_kwh }
     }, [selectedRegion, bspData, dtxData, boundaryData, zeusData, mmsData])
 
     // Initialize map with retry mechanism
@@ -852,6 +861,10 @@ export function ChoroplethMap() {
                                             {selectedRegionMetrics.postpaid_kwh.toLocaleString()}
                                         </p>
                                         <p className="text-xs text-blue-600 dark:text-blue-500">kWh billed (Zeus + AMR)</p>
+                                        <div className="flex items-center justify-between pt-1 mt-1 border-t border-blue-200 dark:border-blue-900 text-[11px] text-blue-700/80 dark:text-blue-400/80">
+                                            <span>Zeus {selectedRegionMetrics.postpaid_zeus_kwh.toLocaleString()} kWh</span>
+                                            <span>AMR {selectedRegionMetrics.postpaid_amr_kwh.toLocaleString()} kWh</span>
+                                        </div>
                                     </div>
                                 ))}
 
