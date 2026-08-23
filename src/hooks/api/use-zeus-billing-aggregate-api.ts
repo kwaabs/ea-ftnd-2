@@ -3,6 +3,7 @@ import type {
   ZeusBillingAggregateItem,
   ZeusBillingAggregateResponse,
 } from "@/types/api"
+import { fetchWithTimeout } from "@/lib/utils"
 
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8780"
 
@@ -82,7 +83,11 @@ export function useZeusBillingAggregate(params: ZeusBillingAggregateParams) {
       params.enabled !== false && Boolean(params.dateFrom && params.dateTo),
     queryFn: async () => {
       const url = `${API_BASE_URL}/api/v1/meters/consumption/zeus-billing/aggregate?${queryString.toString()}`
-      const response = await fetch(url)
+      // app.zeus_sales is an 18M-row table with no pre-aggregated summary —
+      // an unfiltered/multi-dimension groupBy (e.g. the map's all-regions
+      // fetch) can run long. A hard timeout keeps this from hanging forever
+      // with no error and no way for callers to surface a retry UI.
+      const response = await fetchWithTimeout(url, 30000)
 
       if (!response.ok) {
         throw new Error(
@@ -95,5 +100,6 @@ export function useZeusBillingAggregate(params: ZeusBillingAggregateParams) {
     },
     staleTime: 5 * 60 * 1000,
     refetchOnMount: true,
+    retry: 1,
   })
 }
