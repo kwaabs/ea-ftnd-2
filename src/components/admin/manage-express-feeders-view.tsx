@@ -373,10 +373,10 @@ export function ManageExpressFeedersView() {
                       <th className="text-left py-2 px-4 font-medium text-muted-foreground">
                         SAP version
                       </th>
-                      <th className="text-left py-2 px-4 font-medium text-muted-foreground">
+                      <th className="text-left py-2 px-4 font-medium text-blue-700 dark:text-blue-400 border-l-2 border-blue-300 dark:border-blue-800">
                         Sending
                       </th>
-                      <th className="text-left py-2 px-4 font-medium text-muted-foreground">
+                      <th className="text-left py-2 px-4 font-medium text-emerald-700 dark:text-emerald-400 border-l-2 border-emerald-300 dark:border-emerald-800">
                         Receiving
                       </th>
                       <th className="text-right py-2 pl-4 font-medium text-muted-foreground">
@@ -398,13 +398,21 @@ export function ManageExpressFeedersView() {
                           <td className="py-2.5 px-4 text-muted-foreground">
                             {feeder.sap_version || "—"}
                           </td>
-                          <td className="py-2.5 px-4 text-muted-foreground">
-                            {feeder.sending_meter_number}
-                            {feeder.sending_station ? ` — ${feeder.sending_station}` : ""}
+                          <td className="py-2.5 px-4 border-l-2 border-blue-200 dark:border-blue-900">
+                            <p className="font-medium text-blue-900 dark:text-blue-100">
+                              {feeder.sending_meter_number}
+                            </p>
+                            <p className="text-xs text-muted-foreground">
+                              {[feeder.sending_station, feeder.sending_region].filter(Boolean).join(" — ") || "—"}
+                            </p>
                           </td>
-                          <td className="py-2.5 px-4 text-muted-foreground">
-                            {feeder.receiving_meter_number}
-                            {feeder.receiving_station ? ` — ${feeder.receiving_station}` : ""}
+                          <td className="py-2.5 px-4 border-l-2 border-emerald-200 dark:border-emerald-900">
+                            <p className="font-medium text-emerald-900 dark:text-emerald-100">
+                              {feeder.receiving_meter_number}
+                            </p>
+                            <p className="text-xs text-muted-foreground">
+                              {[feeder.receiving_station, feeder.receiving_region].filter(Boolean).join(" — ") || "—"}
+                            </p>
                           </td>
                           <td className="py-2.5 pl-4">
                             <div className="flex items-center justify-end gap-1">
