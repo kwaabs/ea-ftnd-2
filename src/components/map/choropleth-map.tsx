@@ -942,8 +942,12 @@ export function ChoroplethMap() {
                                                 <span className="font-medium tabular-nums">{boundary.toLocaleString()} kWh</span>
                                             </div>
                                             <div className="flex justify-between pl-3">
-                                                <span className="text-muted-foreground">− Postpaid Sales</span>
-                                                <span className="tabular-nums">{selectedRegionMetrics.postpaid_kwh.toLocaleString()} kWh</span>
+                                                <span className="text-muted-foreground">− Postpaid (Zeus)</span>
+                                                <span className="tabular-nums">{selectedRegionMetrics.postpaid_zeus_kwh.toLocaleString()} kWh</span>
+                                            </div>
+                                            <div className="flex justify-between pl-3">
+                                                <span className="text-muted-foreground">− Postpaid (AMR)</span>
+                                                <span className="tabular-nums">{selectedRegionMetrics.postpaid_amr_kwh.toLocaleString()} kWh</span>
                                             </div>
                                             <div className="flex justify-between pl-3">
                                                 <span className="text-muted-foreground">− Prepaid Sales</span>
