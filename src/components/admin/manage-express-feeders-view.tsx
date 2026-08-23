@@ -4,6 +4,7 @@ import { useState } from "react"
 import { useQueryClient } from "@tanstack/react-query"
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
+import { Badge } from "@/components/ui/badge"
 import { Input } from "@/components/ui/input"
 import { Skeleton } from "@/components/ui/skeleton"
 import {
@@ -77,6 +78,17 @@ function feederToForm(f: ExpressFeederAdminRecord): ExpressFeederAdminInput {
 }
 
 const PAGE_SIZE = 20
+
+// A feeder is cross-region when its sending and receiving meters sit in two
+// different regions — flagged with a badge since that's an unusual/notable
+// pairing (most feeders link a sending and receiving meter within the same
+// region). Requires both regions to be known: an unset region on either end
+// isn't evidence of a cross-region link.
+function isCrossRegion(feeder: Pick<ExpressFeederAdminRecord, "sending_region" | "receiving_region">): boolean {
+  const sending = feeder.sending_region?.trim().toLowerCase()
+  const receiving = feeder.receiving_region?.trim().toLowerCase()
+  return Boolean(sending && receiving && sending !== receiving)
+}
 
 function textField(
   value: string | null | undefined,
@@ -394,7 +406,20 @@ export function ManageExpressFeedersView() {
                     ) : (
                       feeders.map((feeder) => (
                         <tr key={feeder.id} className="border-b last:border-0 hover:bg-muted/40">
-                          <td className="py-2.5 pr-4 font-medium">{feeder.feeder_name}</td>
+                          <td className="py-2.5 pr-4 font-medium">
+                            <div className="flex items-center gap-1.5">
+                              <span>{feeder.feeder_name}</span>
+                              {isCrossRegion(feeder) && (
+                                <Badge
+                                  variant="outline"
+                                  className="text-[10px] font-medium border-amber-300 text-amber-700 bg-amber-50 dark:border-amber-800 dark:text-amber-400 dark:bg-amber-950/30"
+                                  title={`Sending region "${feeder.sending_region}" differs from receiving region "${feeder.receiving_region}"`}
+                                >
+                                  Cross-Region
+                                </Badge>
+                              )}
+                            </div>
+                          </td>
                           <td className="py-2.5 px-4 text-muted-foreground">
                             {feeder.sap_version || "—"}
                           </td>
