@@ -62,6 +62,9 @@ export function useMmsCustomerSalesAggregate(
     },
     staleTime: 5 * 60 * 1000,
     refetchOnMount: true,
-    retry: 1,
+    // Retry indefinitely (with React Query's default exponential backoff,
+    // capped at 30s) rather than surfacing an error — a stuck/slow query
+    // just keeps retrying quietly until it succeeds.
+    retry: true,
   });
 }

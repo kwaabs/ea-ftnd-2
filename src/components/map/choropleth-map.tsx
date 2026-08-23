@@ -15,7 +15,7 @@ import { formatApiDate } from "@/lib/utils"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Checkbox } from "@/components/ui/checkbox"
 import { Button } from "@/components/ui/button"
-import { X, ExternalLink, AlertTriangle, RefreshCw } from "lucide-react"
+import { X, ExternalLink } from "lucide-react"
 import Link from "next/link"
 
 // Only the selection identity is kept in state — metrics are derived live
@@ -26,31 +26,6 @@ import Link from "next/link"
 interface SelectedRegion {
     region: string
     district: string
-}
-
-// Shown in place of the Postpaid/Prepaid/Loss cards when the sales fetch
-// times out or fails — app.zeus_sales has no pre-aggregated summary table,
-// so an unfiltered/multi-dimension aggregate (like this map's all-regions
-// query) can run long; without a client-side timeout this used to just
-// hang on a spinner forever with no way to recover short of a page reload.
-function SalesLoadError({ message, onRetry }: { message: string; onRetry: () => void }) {
-    return (
-        <div className="space-y-1.5 p-4 rounded-lg bg-amber-50 dark:bg-amber-950/20 border border-amber-200 dark:border-amber-900">
-            <p className="text-xs font-medium text-amber-800 dark:text-amber-400 flex items-center gap-1.5">
-                <AlertTriangle className="h-3.5 w-3.5 shrink-0" />
-                Couldn&apos;t load sales data
-            </p>
-            <p className="text-xs text-amber-700/80 dark:text-amber-400/70">{message}</p>
-            <button
-                type="button"
-                onClick={onRetry}
-                className="inline-flex items-center gap-1.5 text-xs font-medium text-amber-800 dark:text-amber-400 hover:underline"
-            >
-                <RefreshCw className="h-3 w-3" />
-                Retry
-            </button>
-        </div>
-    )
 }
 
 export function ChoroplethMap() {
@@ -86,26 +61,23 @@ export function ChoroplethMap() {
     // same convention used everywhere else in the app (region/district
     // detail, customer sales overview, dashboard). Zeus is grouped by both
     // region and meter type so Postpaid vs Prepaid can be split out below.
-    const { data: zeusData, isLoading: isLoadingZeus, isError: isErrorZeus, error: zeusError, refetch: refetchZeus } = useZeusBillingAggregate({
+    const { data: zeusData, isLoading: isLoadingZeus } = useZeusBillingAggregate({
         dateFrom,
         dateTo,
         groupBy: ["metermodeltype", "regionname"],
     })
-    const { data: mmsData, isLoading: isLoadingMms, isError: isErrorMms, error: mmsError, refetch: refetchMms } = useMmsCustomerSalesAggregate({
+    const { data: mmsData, isLoading: isLoadingMms } = useMmsCustomerSalesAggregate({
         dateFrom,
         dateTo,
         groupBy: "region",
     })
 
     const isLoadingEnergy = isLoadingBsp || isLoadingDtx || isLoadingBoundary
+    // Retries indefinitely under the hood (see the two hooks above) rather
+    // than surfacing a retry button — a slow/stuck fetch just keeps this
+    // true until it finally succeeds, and the real data pops in whenever
+    // that happens.
     const isLoadingSales = isLoadingZeus || isLoadingMms
-    const isErrorSales = isErrorZeus || isErrorMms
-    const salesError = zeusError || mmsError
-    const salesErrorMessage = salesError instanceof Error ? salesError.message : "Please try again."
-    const retrySales = () => {
-        if (isErrorZeus) refetchZeus()
-        if (isErrorMms) refetchMms()
-    }
 
     // ── Per-type region lookup helpers ──────────────────────────────────────
     // BSP: byRegion[].region is lowercased, value is supplyKwh / netSupplyKwh
@@ -886,8 +858,6 @@ export function ChoroplethMap() {
                                         <div className="h-3.5 w-3.5 border-2 border-blue-600 border-t-transparent rounded-full animate-spin shrink-0" />
                                         <p className="text-xs text-blue-700 dark:text-blue-400">Loading Postpaid sales…</p>
                                     </div>
-                                ) : isErrorSales ? (
-                                    <SalesLoadError message={salesErrorMessage} onRetry={retrySales} />
                                 ) : (
                                     <div className="space-y-1 p-4 rounded-lg bg-blue-50 dark:bg-blue-950/20 border border-blue-200 dark:border-blue-900">
                                         <p className="text-xs font-medium text-blue-700 dark:text-blue-400">Postpaid Sales</p>
@@ -907,8 +877,6 @@ export function ChoroplethMap() {
                                         <div className="h-3.5 w-3.5 border-2 border-emerald-600 border-t-transparent rounded-full animate-spin shrink-0" />
                                         <p className="text-xs text-emerald-700 dark:text-emerald-400">Loading Prepaid sales…</p>
                                     </div>
-                                ) : isErrorSales ? (
-                                    <SalesLoadError message={salesErrorMessage} onRetry={retrySales} />
                                 ) : (
                                     <div className="space-y-1 p-4 rounded-lg bg-emerald-50 dark:bg-emerald-950/20 border border-emerald-200 dark:border-emerald-900">
                                         <p className="text-xs font-medium text-emerald-700 dark:text-emerald-400">Prepaid Sales</p>
@@ -924,8 +892,6 @@ export function ChoroplethMap() {
                                         <div className="h-3.5 w-3.5 border-2 border-red-600 border-t-transparent rounded-full animate-spin shrink-0" />
                                         <p className="text-xs text-red-700 dark:text-red-400">Loading sales data…</p>
                                     </div>
-                                ) : isErrorSales ? (
-                                    <SalesLoadError message={salesErrorMessage} onRetry={retrySales} />
                                 ) : (() => {
                                     const supply = selectedRegionMetrics.bsp_import + selectedRegionMetrics.cross_boundary
                                     const sales = selectedRegionMetrics.postpaid_kwh + selectedRegionMetrics.prepaid_kwh
@@ -953,10 +919,6 @@ export function ChoroplethMap() {
                                 <div className="pt-4 border-t flex items-center gap-2 text-sm text-muted-foreground">
                                     <div className="h-3.5 w-3.5 border-2 border-primary border-t-transparent rounded-full animate-spin shrink-0" />
                                     Loading sales data for the breakdown…
-                                </div>
-                            ) : isErrorSales ? (
-                                <div className="pt-4 border-t">
-                                    <SalesLoadError message={salesErrorMessage} onRetry={retrySales} />
                                 </div>
                             ) : (() => {
                                 const bsp = selectedRegionMetrics.bsp_import
