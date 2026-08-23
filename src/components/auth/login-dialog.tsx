@@ -121,21 +121,89 @@
 
 "use client"
 
-import { useState } from "react"
+import { useEffect, useRef, useState } from "react"
 import { useMutation } from "@tanstack/react-query"
 import { useMsal } from "@azure/msal-react"
 import { loginRequest } from "@/lib/msal-config"
 import { saveAuthReturnUrl } from "@/lib/auth-return-url"
 import { Button } from "@/components/ui/button"
+import { Input } from "@/components/ui/input"
 import { Zap, LineChart, ShieldCheck, Users, Loader2 } from "lucide-react"
-import { useUserStore } from "@/stores/user-store"
+import { useUserStore, type User } from "@/stores/user-store"
 
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8780"
+
+// Typed anywhere on this page (not into a field — the listener stops once
+// the form is revealed) to reveal the break-glass local-login form below.
+// This is NOT the security boundary — it only keeps the fallback path from
+// being presented to every visitor by default. The actual protection is
+// the break-glass account's own password plus the backend's audit log of
+// every local login (AuthService.recordLoginEvent, provider "local").
+const BREAK_GLASS_TRIGGER = "breakglass"
+
+interface LocalLoginResponse {
+  access_token: string
+  refresh_token: string
+  access_expires_at: string
+  user: { id: string; email: string; name: string; provider: string; roles: string[] | null }
+}
 
 export function LoginDialog() {
   const { isAuthenticated, login, hasHydrated } = useUserStore()
   const { instance } = useMsal()
   const [error, setError] = useState<string | null>(null)
+
+  const [showBreakGlass, setShowBreakGlass] = useState(false)
+  const typedBufferRef = useRef("")
+  const [breakGlassEmail, setBreakGlassEmail] = useState("")
+  const [breakGlassPassword, setBreakGlassPassword] = useState("")
+  const [breakGlassError, setBreakGlassError] = useState<string | null>(null)
+
+  useEffect(() => {
+    if (showBreakGlass) return
+    const handler = (e: KeyboardEvent) => {
+      if (e.key.length !== 1) return
+      typedBufferRef.current = (typedBufferRef.current + e.key.toLowerCase()).slice(
+        -BREAK_GLASS_TRIGGER.length,
+      )
+      if (typedBufferRef.current === BREAK_GLASS_TRIGGER) {
+        setShowBreakGlass(true)
+      }
+    }
+    window.addEventListener("keydown", handler)
+    return () => window.removeEventListener("keydown", handler)
+  }, [showBreakGlass])
+
+  const localLoginMutation = useMutation({
+    mutationFn: async (): Promise<LocalLoginResponse> => {
+      const response = await fetch(`${API_BASE_URL}/api/v1/auth/login`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        credentials: "include",
+        body: JSON.stringify({
+          email: breakGlassEmail,
+          password: breakGlassPassword,
+          device_info: navigator.userAgent,
+        }),
+      })
+      if (!response.ok) {
+        throw new Error("Invalid credentials")
+      }
+      return response.json()
+    },
+    onSuccess: (data) => {
+      const expiresAt = new Date(data.access_expires_at).getTime()
+      const user: User = {
+        id: data.user.id,
+        email: data.user.email,
+        name: data.user.name,
+        provider: data.user.provider,
+        roles: data.user.roles,
+      }
+      login(user, data.access_token, expiresAt, data.refresh_token)
+    },
+    onError: (err: Error) => setBreakGlassError(err.message),
+  })
 
   const loginMutation = useMutation({
     mutationFn: async () => {
@@ -272,6 +340,56 @@ export function LoginDialog() {
           <p className="text-center text-xs text-slate-400">
             Contact your administrator if you don't have access.
           </p>
+
+          {showBreakGlass && (
+            <div className="mt-6 space-y-3 border-t border-slate-200 pt-6">
+              <p className="text-xs font-medium text-slate-500">Emergency local sign-in</p>
+
+              {breakGlassError && (
+                <div className="rounded-md bg-red-50 px-3 py-2 text-xs text-red-600">
+                  {breakGlassError}
+                </div>
+              )}
+
+              <div className="space-y-1">
+                <label className="text-xs text-slate-500">Email</label>
+                <Input
+                  type="email"
+                  value={breakGlassEmail}
+                  onChange={(e) => setBreakGlassEmail(e.target.value)}
+                  disabled={localLoginMutation.isPending}
+                  autoComplete="username"
+                />
+              </div>
+              <div className="space-y-1">
+                <label className="text-xs text-slate-500">Password</label>
+                <Input
+                  type="password"
+                  value={breakGlassPassword}
+                  onChange={(e) => setBreakGlassPassword(e.target.value)}
+                  disabled={localLoginMutation.isPending}
+                  autoComplete="current-password"
+                />
+              </div>
+
+              <Button
+                variant="outline"
+                className="w-full"
+                onClick={() => {
+                  setBreakGlassError(null)
+                  localLoginMutation.mutate()
+                }}
+                disabled={
+                  localLoginMutation.isPending || !breakGlassEmail || !breakGlassPassword
+                }
+              >
+                {localLoginMutation.isPending && (
+                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                )}
+                Sign in
+              </Button>
+            </div>
+          )}
         </div>
 
       </div>
