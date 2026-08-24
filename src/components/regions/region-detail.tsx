@@ -3978,10 +3978,15 @@ export function RegionDetail({ region }: RegionDetailProps) {
 
   // Fetch customer consumption for this region — split by Zeus meterModelType
   // (Postpaid / Prepaid only; AMR billing rows are excluded from this page).
+  // Uses zeusRegion (resolved against Zeus's own regionname list, same as
+  // RegionDetailMarquee below), not the raw regionProperCase — Zeus's
+  // region column doesn't always match the page's URL-derived region name
+  // exactly (e.g. "Tema" vs "Tema Region"), so filtering on the unresolved
+  // name silently returns zero matching rows instead of erroring.
   const customerConsAggResult = useZeusBillingAggregate({
     dateFrom: dateRange.start,
     dateTo: dateRange.end,
-    region: regionProperCase,
+    region: zeusRegion,
     groupBy: "metermodeltype",
     meterModelType: "Postpaid,Prepaid",
   });
@@ -4000,9 +4005,9 @@ export function RegionDetail({ region }: RegionDetailProps) {
     if (!mmsRegionData || !Array.isArray(mmsRegionData)) return [];
     return mmsRegionData.filter(
       (item: any) =>
-        (item.region || "").toLowerCase() === regionProperCase.toLowerCase(),
+        (item.region || "").toLowerCase() === mmsRegion.toLowerCase(),
     );
-  }, [mmsRegionData, regionProperCase]);
+  }, [mmsRegionData, mmsRegion]);
 
   const customerSalesLoading =
     customerConsAggResult.isLoading || mmsSalesLoading;
