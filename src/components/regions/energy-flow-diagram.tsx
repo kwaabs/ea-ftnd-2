@@ -72,7 +72,6 @@ interface FeederLike {
 interface EnergyFlowDiagramProps {
     region: string;
     energyFlow: EnergyFlowShape;
-    netPosition: string;
     bspByStation: Map<string, { import: number; export: number; meters: Set<string> }>;
     dtxByDistrict: Map<string, { consumption: number; meters: Set<string> }>;
     boundaryImports: BoundaryPartner[];
@@ -130,7 +129,6 @@ const LINKS: LinkDef[] = [
 export function EnergyFlowDiagram({
     region,
     energyFlow,
-    netPosition,
     bspByStation,
     dtxByDistrict,
     boundaryImports,
@@ -313,7 +311,7 @@ export function EnergyFlowDiagram({
         bsp: { id: "bsp", title: "BSP Import", value: energyFlow.bspImport, color: "emerald", sub: `${bspByStation.size} stations`, rows: bspRows },
         bnd: { id: "bnd", title: "Boundary Import", value: energyFlow.boundaryImport, color: "blue", sub: `${boundaryImports.length} partners`, rows: boundaryImportRows },
         exp: { id: "exp", title: "Express Inbound", value: energyFlow.expressFeederInbound, color: "purple", sub: `${expressInbound.length} feeders`, rows: expressInRows },
-        pool: { id: "pool", title: "Available Supply", value: energyFlow.availableSupply, color: "slate", sub: netPosition, rows: [], big: true },
+        pool: { id: "pool", title: "Available Supply", value: energyFlow.availableSupply, color: "slate", rows: [], big: true },
         dtx: { id: "dtx", title: "DTX Distribution", value: energyFlow.dtxConsumption, color: "slate", sub: `${dtxByDistrict.size} districts`, rows: dtxRows },
         bexp: { id: "bexp", title: "Boundary Export", value: energyFlow.boundaryExport, color: "blue", sub: "out of region", rows: boundaryExportRows, leaves: true },
         xexp: { id: "xexp", title: "Express Export", value: energyFlow.expressFeederExport, color: "purple", sub: "out of region", rows: expressOutRows, leaves: true },
@@ -556,7 +554,7 @@ export function EnergyFlowDiagram({
                                     {valueLabel}
                                 </div>
                                 <div className="text-[11px] text-muted-foreground mt-0.5">
-                                    kWh · {node.sub}
+                                    kWh{node.sub ? ` · ${node.sub}` : ""}
                                 </div>
                             </>
                         )}

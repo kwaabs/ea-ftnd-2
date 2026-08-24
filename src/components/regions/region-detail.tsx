@@ -5334,18 +5334,6 @@ export function RegionDetail({ region }: RegionDetailProps) {
             {format(parseISO(dateRange.end), "MMM d, yyyy")}
           </p>
         </div>
-        <Badge
-          variant={
-            analytics.netPosition === "Net Importer"
-              ? "default"
-              : analytics.netPosition === "Net Exporter"
-                ? "secondary"
-                : "outline"
-          }
-          className="text-lg px-4 py-2"
-        >
-          {analytics.netPosition}
-        </Badge>
       </div>
 
       <RegionDetailMarquee
@@ -6156,7 +6144,6 @@ export function RegionDetail({ region }: RegionDetailProps) {
             <EnergyFlowDiagram
               region={toProperCase(region)}
               energyFlow={energyFlow}
-              netPosition={analytics.netPosition}
               bspByStation={bspMetrics.byStation}
               dtxByDistrict={dtxMetrics.byDistrict}
               boundaryImports={boundaryMetrics.imports}
