@@ -3,8 +3,18 @@
 import { useMemo } from "react"
 
 /** Case/whitespace-insensitive, and ignores a trailing "Region" word. */
-function normalizeRegionName(name: string): string {
+export function normalizeRegionName(name: string): string {
   return name.trim().toLowerCase().replace(/\s+region$/, "")
+}
+
+/**
+ * Short display form of a region name — same trailing-"Region" strip as
+ * normalizeRegionName, but case-preserving (for showing to a user, not for
+ * matching). "Accra East Region" and "Accra East" both display as
+ * "Accra East".
+ */
+export function shortRegionLabel(name: string): string {
+  return name.trim().replace(/\s+region$/i, "")
 }
 
 /**
