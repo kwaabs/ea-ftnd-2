@@ -8,6 +8,16 @@ export function normalizeRegionName(name: string): string {
 }
 
 /**
+ * Short display form of a region name — same trailing-"Region" strip as
+ * normalizeRegionName, but case-preserving (for showing to a user, not for
+ * matching). "Accra East Region" and "Accra East" both display as
+ * "Accra East".
+ */
+export function shortRegionLabel(name: string): string {
+  return name.trim().replace(/\s+region$/i, "")
+}
+
+/**
  * The region-detail page's `region` comes from meter-infrastructure data
  * (BSP/DTX/boundary/geometry) via the regions list page. Zeus billing and
  * MMS each maintain their own independent regionname column, which is not

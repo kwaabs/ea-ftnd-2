@@ -16,7 +16,7 @@ import { Marquee, MarqueeItem } from "@/components/ui/marquee";
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
 import { useZeusBillingAggregate } from "@/hooks/api/use-zeus-billing-aggregate-api";
 import { useMmsCustomerSalesAggregate } from "@/hooks/api/use-mms-customer-sales-aggregate-api";
-import { normalizeRegionName } from "@/hooks/use-resolved-region-name";
+import { normalizeRegionName, shortRegionLabel } from "@/hooks/use-resolved-region-name";
 import { cn } from "@/lib/utils";
 import {
   Area,
@@ -413,16 +413,22 @@ export function CustomerSalesOverview({
   );
 
   // ── Combined chart: Postpaid vs Prepaid kWh by region ──
+  // Keyed on normalizeRegionName (not the raw string) for the same reason
+  // as the Combined table below: Zeus/AMR and MMS spell region names
+  // differently (e.g. "Accra East Region" vs "Accra East"), and an exact
+  // match would split one real region into two bars/marquee entries.
+  // Displayed via shortRegionLabel — always the suffix-free short form.
   const combinedChartData = useMemo(() => {
     const regionMap = new Map<
       string,
       { region: string; postpaid: number; prepaid: number }
     >();
-    const ensure = (r: string) => {
-      if (!regionMap.has(r)) {
-        regionMap.set(r, { region: r, postpaid: 0, prepaid: 0 });
+    const ensure = (raw: string) => {
+      const key = normalizeRegionName(raw);
+      if (!regionMap.has(key)) {
+        regionMap.set(key, { region: shortRegionLabel(raw), postpaid: 0, prepaid: 0 });
       }
-      return regionMap.get(r)!;
+      return regionMap.get(key)!;
     };
     zeusItems.forEach((i) => {
       ensure(i.regionname || "Unknown").postpaid +=
@@ -882,9 +888,10 @@ export function CustomerSalesOverview({
                           // the normalized name instead (same
                           // strip-trailing-"Region" rule as
                           // useResolvedRegionName) so all three sources
-                          // land in one row per real region — first raw
-                          // name seen (Zeus, then AMR, then MMS) is kept
-                          // as the display label.
+                          // land in one row per real region, displayed via
+                          // shortRegionLabel (always the suffix-free short
+                          // form) regardless of which source's naming
+                          // convention happened to include it.
                           const labelByKey = new Map<string, string>();
                           [
                             ...zeusItems.map((z) => z.regionname),
@@ -892,7 +899,7 @@ export function CustomerSalesOverview({
                             ...mmsItems.map((m) => m.region || "Unknown"),
                           ].forEach((raw) => {
                             const key = normalizeRegionName(raw);
-                            if (!labelByKey.has(key)) labelByKey.set(key, raw);
+                            if (!labelByKey.has(key)) labelByKey.set(key, shortRegionLabel(raw));
                           });
 
                           return Array.from(labelByKey.keys())
