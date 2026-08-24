@@ -16,6 +16,7 @@ import { Marquee, MarqueeItem } from "@/components/ui/marquee";
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
 import { useZeusBillingAggregate } from "@/hooks/api/use-zeus-billing-aggregate-api";
 import { useMmsCustomerSalesAggregate } from "@/hooks/api/use-mms-customer-sales-aggregate-api";
+import { normalizeRegionName } from "@/hooks/use-resolved-region-name";
 import { cn } from "@/lib/utils";
 import {
   Area,
@@ -869,36 +870,62 @@ export function CustomerSalesOverview({
                         </tr>
                       </thead>
                       <tbody>
-                        {Array.from(
-                          new Set([
+                        {(() => {
+                          // Zeus/AMR and MMS each maintain their own
+                          // independent region-name column, which don't
+                          // always agree exactly (typically just a
+                          // trailing "Region" — e.g. "Accra East" vs
+                          // "Accra East Region"). Keying rows on the raw
+                          // string split what's really one region into two
+                          // separate rows, one per naming convention, each
+                          // showing only that source's numbers. Group by
+                          // the normalized name instead (same
+                          // strip-trailing-"Region" rule as
+                          // useResolvedRegionName) so all three sources
+                          // land in one row per real region — first raw
+                          // name seen (Zeus, then AMR, then MMS) is kept
+                          // as the display label.
+                          const labelByKey = new Map<string, string>();
+                          [
                             ...zeusItems.map((z) => z.regionname),
-                            ...mmsItems.map((m) => m.region || "Unknown"),
                             ...zeusAmrItems.map((a) => a.regionname),
-                          ]),
-                        )
-                          .sort()
-                          .map((region, idx) => {
-                            const zeusData = zeusItems.find(
-                              (z) => z.regionname === region,
-                            ) || {
-                              sum_billconsumptionvalue: 0,
-                              customer_count: 0,
-                              sum_billamount: 0,
-                            };
-                            const mmsData = mmsItems.find(
-                              (m) => m.region === region,
-                            ) || {
-                              sum_last_month_kwh_read: 0,
-                              customer_count: 0,
-                              sum_last_month_credit_read: 0,
-                            };
-                            const amrData = zeusAmrItems.find(
-                              (a) => a.regionname === region,
-                            ) || {
-                              sum_billconsumptionvalue: 0,
-                              customer_count: 0,
-                              sum_billamount: 0,
-                            };
+                            ...mmsItems.map((m) => m.region || "Unknown"),
+                          ].forEach((raw) => {
+                            const key = normalizeRegionName(raw);
+                            if (!labelByKey.has(key)) labelByKey.set(key, raw);
+                          });
+
+                          return Array.from(labelByKey.keys())
+                            .sort((a, b) =>
+                              (labelByKey.get(a) || "").localeCompare(
+                                labelByKey.get(b) || "",
+                              ),
+                            )
+                            .map((key, idx) => {
+                              const region = labelByKey.get(key) as string;
+                              const zeusData = zeusItems.find(
+                                (z) => normalizeRegionName(z.regionname) === key,
+                              ) || {
+                                sum_billconsumptionvalue: 0,
+                                customer_count: 0,
+                                sum_billamount: 0,
+                              };
+                              const mmsData = mmsItems.find(
+                                (m) =>
+                                  normalizeRegionName(m.region || "Unknown") ===
+                                  key,
+                              ) || {
+                                sum_last_month_kwh_read: 0,
+                                customer_count: 0,
+                                sum_last_month_credit_read: 0,
+                              };
+                              const amrData = zeusAmrItems.find(
+                                (a) => normalizeRegionName(a.regionname) === key,
+                              ) || {
+                                sum_billconsumptionvalue: 0,
+                                customer_count: 0,
+                                sum_billamount: 0,
+                              };
                             const totalKwh =
                               (zeusData.sum_billconsumptionvalue || 0) +
                               (mmsData.sum_last_month_kwh_read || 0) +
@@ -965,7 +992,8 @@ export function CustomerSalesOverview({
                                 </td>
                               </tr>
                             );
-                          })}
+                            });
+                        })()}
                       </tbody>
                       <tfoot>
                         <tr className="border-t bg-muted/30">

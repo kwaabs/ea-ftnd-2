@@ -3,7 +3,7 @@
 import { useMemo } from "react"
 
 /** Case/whitespace-insensitive, and ignores a trailing "Region" word. */
-function normalizeRegionName(name: string): string {
+export function normalizeRegionName(name: string): string {
   return name.trim().toLowerCase().replace(/\s+region$/, "")
 }
 
