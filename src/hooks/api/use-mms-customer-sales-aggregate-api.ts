@@ -50,7 +50,11 @@ export function useMmsCustomerSalesAggregate(
     queryFn: async () => {
       const url = `${API_BASE_URL}/api/v1/meters/consumption/mms-customer-sales/aggregate?${queryString.toString()}`;
 
-      const response = await fetchWithTimeout(url, 30000);
+      // Same map-caller cost profile and timeout rationale as
+      // use-zeus-billing-aggregate-api.ts (see its comment) — 100s stays
+      // under the backend's 2-minute WriteTimeout while giving real
+      // headroom over observed real-world runtimes on this endpoint.
+      const response = await fetchWithTimeout(url, 100000);
       if (!response.ok) {
         throw new Error(
           `Failed to fetch MMS customer sales aggregate: ${response.status}`,

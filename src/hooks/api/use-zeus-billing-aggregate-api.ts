@@ -85,9 +85,19 @@ export function useZeusBillingAggregate(params: ZeusBillingAggregateParams) {
       const url = `${API_BASE_URL}/api/v1/meters/consumption/zeus-billing/aggregate?${queryString.toString()}`
       // app.zeus_sales is an 18M-row table with no pre-aggregated summary —
       // an unfiltered/multi-dimension groupBy (e.g. the map's all-regions
-      // fetch) can run long. A hard timeout keeps this from hanging forever
-      // with no error and no way for callers to surface a retry UI.
-      const response = await fetchWithTimeout(url, 30000)
+      // fetch) can run long (observed ~41s for the distinct-customer-count
+      // subquery on a single month, even with the covering index in
+      // sql/indexes_zeus_sales_map_aggregate.sql). The timeout needs to
+      // stay comfortably above that real runtime — a shorter timeout
+      // doesn't distinguish "slow" from "hung," it just aborts every run
+      // of this query before it can finish, which is worse than no
+      // timeout at all: React Query's retry: true then fires the same
+      // expensive query again immediately, forever, never letting one
+      // attempt complete. 100s stays under the backend's own 2-minute
+      // WriteTimeout (cmd/server/main.go) while giving real headroom over
+      // the observed ~41s, so this now only fires for a genuinely hung
+      // request rather than a merely slow one.
+      const response = await fetchWithTimeout(url, 100000)
 
       if (!response.ok) {
         throw new Error(
