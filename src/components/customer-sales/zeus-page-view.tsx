@@ -19,6 +19,7 @@ import {
   CartesianGrid,
   Cell,
   LabelList,
+  Legend,
   ResponsiveContainer,
   Tooltip,
   XAxis,
@@ -36,6 +37,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
 import { useZeusBillingAggregate } from "@/hooks/api/use-zeus-billing-aggregate-api";
 import { CustomerSalesDetail } from "@/components/customer-sales/customer-sales-detail";
+import { normalizeRegionName } from "@/hooks/use-resolved-region-name";
 import { cn } from "@/lib/utils";
 
 interface DateRange {
@@ -78,16 +80,12 @@ const ZEUS_SERVICE_META: Record<
   },
 };
 
-const ZEUS_COLORS = [
-  "#1d4ed8",
-  "#2563eb",
-  "#3b82f6",
-  "#60a5fa",
-  "#93c5fd",
-  "#1e40af",
-  "#1e3a8a",
-  "#bfdbfe",
-];
+/** Fill colors for the region chart's stacked series, matching each tab's own accent. */
+const SERIES_COLOR: Record<ZeusServiceType, string> = {
+  Postpaid: "#1d4ed8",
+  Prepaid: "#059669",
+  AMR: "#ea580c",
+};
 
 function formatKwhRaw(value: number | null | undefined) {
   if (value === null || value === undefined) return "0 kWh";
@@ -119,12 +117,15 @@ type ChartKind = "bar" | "area";
 
 interface RegionChartRow {
   regionname: string;
-  sum_billconsumptionvalue: number;
-  customer_count: number;
-  sum_billamount: number;
+  /** Billed kWh for the tab's own meter type (Postpaid or Prepaid). */
+  currentKwh: number;
+  /** Billed kWh for Zeus AMR in the same region, stacked alongside currentKwh. */
+  amrKwh: number;
+  totalKwh: number;
+  customerCount: number;
 }
 
-/** Renders both the consumption and customer-count figures above a single bar/area point. */
+/** Renders both the total consumption and total customer-count figures above a stacked bar/area point. */
 function DualValueLabel(
   props: { data: RegionChartRow[] } & Record<string, unknown>,
 ) {
@@ -138,10 +139,10 @@ function DualValueLabel(
   return (
     <g>
       <text x={cx} y={y - 20} textAnchor="middle" className="fill-blue-700 text-[11px] font-semibold">
-        {formatKwh(row.sum_billconsumptionvalue)}
+        {formatKwh(row.totalKwh)}
       </text>
       <text x={cx} y={y - 7} textAnchor="middle" className="fill-purple-700 text-[10px] font-medium">
-        {formatNumber(row.customer_count)} cust.
+        {formatNumber(row.customerCount)} cust.
       </text>
     </g>
   );
@@ -208,6 +209,22 @@ export function ZeusPageView({
       meterModelType: serviceType,
     });
 
+  // Deliberate, single-chart exception to the meter-type-isolation rule
+  // above: the "by region" chart stacks the tab's own figures against Zeus
+  // AMR so a region's total footprint (and how much of it is AMR-metered)
+  // is visible at a glance. Only fetched for Postpaid/Prepaid — on the AMR
+  // tab itself there's nothing else to stack against.
+  const { data: amrRegionAgg = [] } = useZeusBillingAggregate({
+    dateFrom: dateRange.start,
+    dateTo: dateRange.end,
+    groupBy: "regionname",
+    region,
+    district,
+    meterModelType: "AMR",
+    enabled: serviceType !== "AMR",
+  });
+  const hasAmrSeries = serviceType !== "AMR";
+
   const stats = useMemo(() => {
     const totalKwh = regionAgg.reduce(
       (s, r) => s + (r.sum_billconsumptionvalue || 0),
@@ -248,23 +265,34 @@ export function ZeusPageView({
     };
   }, [regionAgg]);
 
-  const byConsumption = useMemo(
-    () =>
-      [...regionAgg]
-        .sort(
-          (a, b) =>
-            (b.sum_billconsumptionvalue || 0) -
-            (a.sum_billconsumptionvalue || 0),
-        )
-        .slice(0, 12)
-        .map((r) => ({
-          regionname: r.regionname || "Unknown",
-          sum_billconsumptionvalue: r.sum_billconsumptionvalue || 0,
-          customer_count: r.customer_count || 0,
-          sum_billamount: r.sum_billamount || 0,
-        })),
-    [regionAgg],
-  );
+  const byConsumption = useMemo<RegionChartRow[]>(() => {
+    const amrByRegion = new Map<string, { kwh: number; customers: number }>();
+    for (const r of amrRegionAgg) {
+      const key = normalizeRegionName(r.regionname || "");
+      const prev = amrByRegion.get(key) || { kwh: 0, customers: 0 };
+      amrByRegion.set(key, {
+        kwh: prev.kwh + (r.sum_billconsumptionvalue || 0),
+        customers: prev.customers + (r.customer_count || 0),
+      });
+    }
+
+    return [...regionAgg]
+      .map((r) => {
+        const regionname = r.regionname || "Unknown";
+        const amr = amrByRegion.get(normalizeRegionName(regionname));
+        const currentKwh = r.sum_billconsumptionvalue || 0;
+        const amrKwh = amr?.kwh || 0;
+        return {
+          regionname,
+          currentKwh,
+          amrKwh,
+          totalKwh: currentKwh + amrKwh,
+          customerCount: (r.customer_count || 0) + (amr?.customers || 0),
+        };
+      })
+      .sort((a, b) => b.totalKwh - a.totalKwh)
+      .slice(0, 12);
+  }, [regionAgg, amrRegionAgg]);
 
   const selectRegion = (value: string | null) => {
     setSelectedRegion((prev) => (prev === value ? null : value));
@@ -433,8 +461,9 @@ export function ZeusPageView({
           <div>
             <CardTitle>Consumption &amp; customers by region</CardTitle>
             <CardDescription>
-              Billed kWh and {serviceMeta.label.toLowerCase()} accounts per region — Zeus{" "}
-              {serviceMeta.label}
+              {hasAmrSeries
+                ? `Billed kWh per region, stacked by meter type — Zeus ${serviceMeta.label} vs AMR`
+                : `Billed kWh and ${serviceMeta.label.toLowerCase()} accounts per region — Zeus ${serviceMeta.label}`}
             </CardDescription>
           </div>
           <ToggleGroup
@@ -486,36 +515,65 @@ export function ZeusPageView({
                     tick={{ fontSize: 11 }}
                   />
                   <Tooltip
-                    formatter={(v: number, name: string) =>
-                      name === "customer_count"
-                        ? [formatNumber(v), "Customers"]
-                        : [formatKwhRaw(v), "Consumption"]
-                    }
+                    formatter={(v: number, name: string) => [formatKwhRaw(v), name]}
                   />
+                  {hasAmrSeries && (
+                    <Legend verticalAlign="top" height={28} wrapperStyle={{ fontSize: 11 }} />
+                  )}
                   <Bar
-                    dataKey="sum_billconsumptionvalue"
-                    radius={[6, 6, 0, 0]}
+                    dataKey="currentKwh"
+                    name={serviceMeta.label}
+                    stackId="region"
+                    radius={hasAmrSeries ? [0, 0, 0, 0] : [6, 6, 0, 0]}
                     cursor="pointer"
                     isAnimationActive={false}
                     onClick={(data: { regionname?: string }) => {
                       if (data?.regionname) selectRegion(data.regionname);
                     }}
                   >
-                    <LabelList
-                      dataKey="sum_billconsumptionvalue"
-                      content={(props) => <DualValueLabel {...props} data={byConsumption} />}
-                    />
-                    {byConsumption.map((row, i) => (
+                    {!hasAmrSeries && (
+                      <LabelList
+                        dataKey="currentKwh"
+                        content={(props) => <DualValueLabel {...props} data={byConsumption} />}
+                      />
+                    )}
+                    {byConsumption.map((row) => (
                       <Cell
                         key={row.regionname}
-                        fill={
-                          selectedRegion === row.regionname
-                            ? "#1e3a8a"
-                            : ZEUS_COLORS[i % ZEUS_COLORS.length]
+                        fill={SERIES_COLOR[serviceType]}
+                        fillOpacity={
+                          !selectedRegion || selectedRegion === row.regionname ? 1 : 0.35
                         }
                       />
                     ))}
                   </Bar>
+                  {hasAmrSeries && (
+                    <Bar
+                      dataKey="amrKwh"
+                      name="AMR"
+                      stackId="region"
+                      radius={[6, 6, 0, 0]}
+                      cursor="pointer"
+                      isAnimationActive={false}
+                      onClick={(data: { regionname?: string }) => {
+                        if (data?.regionname) selectRegion(data.regionname);
+                      }}
+                    >
+                      <LabelList
+                        dataKey="amrKwh"
+                        content={(props) => <DualValueLabel {...props} data={byConsumption} />}
+                      />
+                      {byConsumption.map((row) => (
+                        <Cell
+                          key={row.regionname}
+                          fill={SERIES_COLOR.AMR}
+                          fillOpacity={
+                            !selectedRegion || selectedRegion === row.regionname ? 1 : 0.35
+                          }
+                        />
+                      ))}
+                    </Bar>
+                  )}
                 </BarChart>
               ) : (
                 <AreaChart
@@ -541,27 +599,49 @@ export function ZeusPageView({
                     tick={{ fontSize: 11 }}
                   />
                   <Tooltip
-                    formatter={(v: number, name: string) =>
-                      name === "customer_count"
-                        ? [formatNumber(v), "Customers"]
-                        : [formatKwhRaw(v), "Consumption"]
-                    }
+                    formatter={(v: number, name: string) => [formatKwhRaw(v), name]}
                   />
+                  {hasAmrSeries && (
+                    <Legend verticalAlign="top" height={28} wrapperStyle={{ fontSize: 11 }} />
+                  )}
                   <Area
                     type="monotone"
-                    dataKey="sum_billconsumptionvalue"
-                    stroke="#1d4ed8"
-                    fill="#1d4ed8"
-                    fillOpacity={0.25}
+                    dataKey="currentKwh"
+                    name={serviceMeta.label}
+                    stackId="region"
+                    stroke={SERIES_COLOR[serviceType]}
+                    fill={SERIES_COLOR[serviceType]}
+                    fillOpacity={0.35}
                     strokeWidth={2}
-                    dot={{ r: 3, fill: "#1d4ed8" }}
+                    dot={{ r: 3, fill: SERIES_COLOR[serviceType] }}
                     isAnimationActive={false}
                   >
-                    <LabelList
-                      dataKey="sum_billconsumptionvalue"
-                      content={(props) => <DualValueLabel {...props} data={byConsumption} />}
-                    />
+                    {!hasAmrSeries && (
+                      <LabelList
+                        dataKey="currentKwh"
+                        content={(props) => <DualValueLabel {...props} data={byConsumption} />}
+                      />
+                    )}
                   </Area>
+                  {hasAmrSeries && (
+                    <Area
+                      type="monotone"
+                      dataKey="amrKwh"
+                      name="AMR"
+                      stackId="region"
+                      stroke={SERIES_COLOR.AMR}
+                      fill={SERIES_COLOR.AMR}
+                      fillOpacity={0.35}
+                      strokeWidth={2}
+                      dot={{ r: 3, fill: SERIES_COLOR.AMR }}
+                      isAnimationActive={false}
+                    >
+                      <LabelList
+                        dataKey="amrKwh"
+                        content={(props) => <DualValueLabel {...props} data={byConsumption} />}
+                      />
+                    </Area>
+                  )}
                 </AreaChart>
               )}
             </ResponsiveContainer>
