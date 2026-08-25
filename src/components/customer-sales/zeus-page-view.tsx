@@ -524,6 +524,7 @@ export function ZeusPageView({
                     dataKey="currentKwh"
                     name={serviceMeta.label}
                     stackId="region"
+                    fill={SERIES_COLOR[serviceType]}
                     radius={hasAmrSeries ? [0, 0, 0, 0] : [6, 6, 0, 0]}
                     cursor="pointer"
                     isAnimationActive={false}
@@ -552,6 +553,7 @@ export function ZeusPageView({
                       dataKey="amrKwh"
                       name="AMR"
                       stackId="region"
+                      fill={SERIES_COLOR.AMR}
                       radius={[6, 6, 0, 0]}
                       cursor="pointer"
                       isAnimationActive={false}
