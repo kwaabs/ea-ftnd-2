@@ -4300,8 +4300,11 @@ export function RegionDetail({ region }: RegionDetailProps) {
   // Regional energy accounting uses the directional meter readings:
   //   inbound  → receivingMeter.importKwh  (energy entering this region)
   //   outbound → sendingMeter.exportKwh    (energy leaving this region)
-  // Internal feeders (both ends here) contribute to both sides so EXPRESS_FEEDER
-  // meters always appear on the flow diagram; net impact is only meter imbalance.
+  // Internal feeders (both ends here) never cross the region boundary, so
+  // they count toward neither inbound nor outbound — a same-region-to-
+  // same-region transfer isn't energy "entering" or "leaving" the region.
+  // They still appear in `all` (the full connected-feeders list), just not
+  // in the diagram's Inbound/Export panels or their kWh totals.
   const expressFeederMetrics = useMemo(() => {
     if (!expressFeederData?.feederBreakdown) {
       return {
@@ -4341,8 +4344,8 @@ export function RegionDetail({ region }: RegionDetailProps) {
     const inbound = all.filter((f) => f.direction === "inbound");
     const outbound = all.filter((f) => f.direction === "outbound");
     const internal = all.filter((f) => f.direction === "internal");
-    const diagramInbound = [...inbound, ...internal];
-    const diagramOutbound = [...outbound, ...internal];
+    const diagramInbound = inbound;
+    const diagramOutbound = outbound;
 
     return {
       all,
