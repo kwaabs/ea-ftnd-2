@@ -37,7 +37,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
 import { useZeusBillingAggregate } from "@/hooks/api/use-zeus-billing-aggregate-api";
 import { CustomerSalesDetail } from "@/components/customer-sales/customer-sales-detail";
-import { normalizeRegionName } from "@/hooks/use-resolved-region-name";
+import { normalizeRegionName, shortRegionLabel } from "@/hooks/use-resolved-region-name";
 import { cn } from "@/lib/utils";
 
 interface DateRange {
@@ -316,7 +316,7 @@ export function ZeusPageView({
             {selectedRegion ? (
               <span className={serviceMeta.accent}>
                 {" "}
-                · filtered by {selectedRegion}
+                · filtered by {shortRegionLabel(selectedRegion)}
               </span>
             ) : null}
           </p>
@@ -347,7 +347,7 @@ export function ZeusPageView({
 
       {embedded && selectedRegion ? (
         <p className={`text-sm ${serviceMeta.accent}`}>
-          Filtered by {selectedRegion}
+          Filtered by {shortRegionLabel(selectedRegion)}
         </p>
       ) : null}
 
@@ -499,6 +499,7 @@ export function ZeusPageView({
                   <CartesianGrid strokeDasharray="3 3" vertical={false} />
                   <XAxis
                     dataKey="regionname"
+                    tickFormatter={(v: string) => shortRegionLabel(v)}
                     angle={-35}
                     textAnchor="end"
                     tick={{ fontSize: 11 }}
@@ -516,6 +517,7 @@ export function ZeusPageView({
                   />
                   <Tooltip
                     formatter={(v: number, name: string) => [formatKwhRaw(v), name]}
+                    labelFormatter={(label: string) => shortRegionLabel(label)}
                   />
                   {hasAmrSeries && (
                     <Legend verticalAlign="top" height={28} wrapperStyle={{ fontSize: 11 }} />
@@ -585,6 +587,7 @@ export function ZeusPageView({
                   <CartesianGrid strokeDasharray="3 3" vertical={false} />
                   <XAxis
                     dataKey="regionname"
+                    tickFormatter={(v: string) => shortRegionLabel(v)}
                     angle={-35}
                     textAnchor="end"
                     tick={{ fontSize: 11 }}
@@ -602,6 +605,7 @@ export function ZeusPageView({
                   />
                   <Tooltip
                     formatter={(v: number, name: string) => [formatKwhRaw(v), name]}
+                    labelFormatter={(label: string) => shortRegionLabel(label)}
                   />
                   {hasAmrSeries && (
                     <Legend verticalAlign="top" height={28} wrapperStyle={{ fontSize: 11 }} />
@@ -766,7 +770,7 @@ export function ZeusPageView({
                               onClick={() => selectRegion(name)}
                             >
                               <td className="py-2.5 pr-4 font-medium">
-                                {name}
+                                {shortRegionLabel(name)}
                               </td>
                               <td className="py-2.5 px-4 text-right font-semibold text-blue-700 tabular-nums">
                                 {formatKwhRaw(item.sum_billconsumptionvalue)}
@@ -850,7 +854,7 @@ export function ZeusPageView({
               <CardTitle>District breakdown</CardTitle>
               <CardDescription>
                 {effectiveRegion
-                  ? `Districts in ${effectiveRegion}`
+                  ? `Districts in ${shortRegionLabel(effectiveRegion)}`
                   : "Select a region above to see district breakdown"}
               </CardDescription>
             </CardHeader>
@@ -864,7 +868,7 @@ export function ZeusPageView({
                 <Skeleton className="h-48 w-full" />
               ) : districtAgg.length === 0 ? (
                 <p className="text-sm text-muted-foreground py-8 text-center">
-                  No district data for {effectiveRegion}.
+                  No district data for {shortRegionLabel(effectiveRegion)}.
                 </p>
               ) : (
                 <div className="overflow-x-auto">
