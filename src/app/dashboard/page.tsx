@@ -141,15 +141,6 @@ export default function DashboardPage() {
   return (
     <AppLayout>
       <div className="h-full min-h-0 flex flex-col gap-2.5 overflow-hidden">
-        <div className="shrink-0 min-w-0">
-          <h2 className="text-xl font-semibold tracking-tight text-foreground leading-tight">
-            Dashboard Overview
-          </h2>
-          <p className="text-muted-foreground text-xs truncate">
-            Consumption, sales, losses, and meter health at a glance
-          </p>
-        </div>
-
         <div className="shrink-0">
           <RegionalSummaryMarquee dateRange={dateRange} compact />
         </div>
