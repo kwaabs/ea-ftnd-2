@@ -11,6 +11,7 @@ import { Skeleton } from "@/components/ui/skeleton"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { useZeusBillingDetail } from "@/hooks/api/use-zeus-billing-detail-api"
 import { useZeusBillingAggregate } from "@/hooks/api/use-zeus-billing-aggregate-api"
+import { shortRegionLabel } from "@/hooks/use-resolved-region-name"
 import { ArrowUpDown, ChevronLeft, ChevronRight, ExternalLink, Search, Zap } from "lucide-react"
 
 // Backend sort keys (internal/zeusbilling detailSortCols) — "outstandingamount"
@@ -256,7 +257,7 @@ export function CustomerSalesDetail({
     }
 
     const filterSummary = [
-        filterRegion !== ALL ? filterRegion : null,
+        filterRegion !== ALL ? shortRegionLabel(filterRegion) : null,
         filterDistrict !== ALL ? filterDistrict : null,
         filterAccountType !== ALL ? filterAccountType : null,
         filterBillStatus !== ALL ? filterBillStatus : null,
@@ -318,7 +319,7 @@ export function CustomerSalesDetail({
                                 <SelectItem value={ALL}>All regions</SelectItem>
                                 {regionOptions.map((name) => (
                                     <SelectItem key={name} value={name}>
-                                        {name}
+                                        {shortRegionLabel(name)}
                                     </SelectItem>
                                 ))}
                             </SelectContent>
@@ -495,7 +496,7 @@ export function CustomerSalesDetail({
                                                     </Link>
                                                 ) : "—"}
                                             </TableCell>
-                                            <TableCell className="text-xs text-muted-foreground">{c.regionName || "—"}</TableCell>
+                                            <TableCell className="text-xs text-muted-foreground">{c.regionName ? shortRegionLabel(c.regionName) : "—"}</TableCell>
                                             <TableCell className="text-xs text-muted-foreground">{c.districtName || "—"}</TableCell>
                                             <TableCell>
                                                 <Badge variant="outline" className="text-xs font-normal">{c.meterModelType || "—"}</Badge>

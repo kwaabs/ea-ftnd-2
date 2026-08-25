@@ -45,6 +45,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { AmrCustomerSalesDetail } from "@/components/customer-sales/amr-customer-sales-detail";
 import { CustomerSalesDetail } from "@/components/customer-sales/customer-sales-detail";
 import { useZeusBillingAggregate } from "@/hooks/api/use-zeus-billing-aggregate-api";
+import { shortRegionLabel } from "@/hooks/use-resolved-region-name";
 import {
   useAmrStatusDetails,
   useAmrStatusSummary,
@@ -775,6 +776,7 @@ export function AmrPageView({
                         ) : (
                           <XAxis
                             dataKey="regionname"
+                            tickFormatter={(v: string) => shortRegionLabel(v)}
                             angle={-35}
                             textAnchor="end"
                             tick={{ fontSize: 10 }}
@@ -785,6 +787,7 @@ export function AmrPageView({
                           <YAxis
                             type="category"
                             dataKey="regionname"
+                            tickFormatter={(v: string) => shortRegionLabel(v)}
                             tick={{ fontSize: 11 }}
                             width={110}
                           />
@@ -799,6 +802,7 @@ export function AmrPageView({
                             AMR_CHART_METRICS[amrMetric].format(v),
                             AMR_CHART_METRICS[amrMetric].tooltipLabel,
                           ]}
+                          labelFormatter={(label: string) => shortRegionLabel(label)}
                         />
                         <Bar
                           dataKey={amrMetric}
