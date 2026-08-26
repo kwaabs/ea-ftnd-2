@@ -83,11 +83,19 @@ function formatMoney(value: number | null | undefined) {
   })}`
 }
 
-// Zeus Prepaid and MMS never cover the same region in the same period
-// (confirmed against production data: zero region overlap, zero matching
-// account numbers) — so summing their kWh/customer figures per region is a
-// real addition, not a double-count risk. See prepaid-hub-view git history
-// for the diagnostic query this was verified with.
+// CORRECTION (see git history): an earlier version of this comment claimed
+// Zeus Prepaid and MMS never share a region — that was wrong, an artifact
+// of comparing region strings without stripping the "Region"/"District"
+// suffix mismatch (the recurring bug this whole codebase has elsewhere).
+// Properly normalized, they substantially overlap: 249,091 Zeus Prepaid
+// meters matched an MMS meter_number, 75% of those also sharing a
+// district — real duplication, confirmed against production data, not
+// coincidence. Business rule (confirmed with the user): where the two are
+// blended, MMS takes precedence on any meter it already has; Zeus Prepaid
+// fills in only what MMS doesn't have. The region/district aggregate
+// queries below pass excludeMmsDuplicates: true to apply this — see that
+// flag's doc comment in use-zeus-billing-aggregate-api.ts and
+// sql/zeus_prepaid_mms_precedence.sql (ea-bknd-3) for the mechanism.
 // Kept visually distinct from each other (blue vs green) rather than two
 // close shades of green — a same-hue pairing here reads as identical in a
 // small legend swatch, same failure mode as the Postpaid chart's AMR stack.
@@ -165,6 +173,10 @@ export function PrepaidHubView() {
       region,
       district,
       meterModelType: "Prepaid",
+      // This is the blended figure (summed with mmsRegionAgg below) — MMS
+      // takes precedence on any meter it already has. See the flag's doc
+      // comment for the confirmed rule and its scope.
+      excludeMmsDuplicates: true,
     })
 
   const { data: mmsRegionAgg = [], isLoading: mmsRegionLoading } =
@@ -217,6 +229,8 @@ export function PrepaidHubView() {
       district,
       meterModelType: "Prepaid",
       enabled: Boolean(rawEffectiveRegion),
+      // Same blended-figure scope as the region query above.
+      excludeMmsDuplicates: true,
     })
 
   const { data: mmsDistrictAgg = [], isLoading: mmsDistrictLoading } =
@@ -359,8 +373,8 @@ export function PrepaidHubView() {
           Prepaid
         </h2>
         <p className="text-muted-foreground mt-1">
-          Zeus prepaid accounts and MMS prepaid meters, blended — the two
-          never cover the same region, so their figures add up cleanly
+          Zeus prepaid accounts and MMS prepaid meters, blended — MMS takes
+          precedence on any meter it already has, so nothing is counted twice
           {selectedRegion ? (
             <span className="text-emerald-700">
               {" "}

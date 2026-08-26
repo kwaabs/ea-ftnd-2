@@ -35,6 +35,18 @@ interface ZeusBillingAggregateParams {
   billingYear?: string
   billingMonth?: string
   groupBy?: ZeusBillingGroupBy | ZeusBillingGroupBy[]
+  /**
+   * Confirmed against production data: Zeus Prepaid and MMS substantially
+   * overlap (249,091 meter_number matches, 75% also sharing a district —
+   * real duplication, not coincidence). Business rule: where the two are
+   * blended into one combined figure, a meter MMS already has is counted
+   * from MMS, not from Zeus. ONLY set this true from a view that actually
+   * blends Zeus Prepaid with MMS (the Prepaid hub page, the customer-sales
+   * overview's Combined chart/table) — every other caller wants Zeus's own
+   * complete, untouched book of record. See
+   * sql/zeus_prepaid_mms_precedence.sql in ea-bknd-3.
+   */
+  excludeMmsDuplicates?: boolean
   enabled?: boolean
 }
 
@@ -61,6 +73,7 @@ export function useZeusBillingAggregate(params: ZeusBillingAggregateParams) {
     const joined = groups.filter(Boolean).join(",")
     if (joined) queryString.append("groupBy", joined)
   }
+  if (params.excludeMmsDuplicates) queryString.append("excludeMmsDuplicates", "true")
 
   return useQuery<ZeusBillingAggregateItem[]>({
     queryKey: [
@@ -78,6 +91,7 @@ export function useZeusBillingAggregate(params: ZeusBillingAggregateParams) {
       params.billingYear,
       params.billingMonth,
       params.groupBy,
+      params.excludeMmsDuplicates,
     ],
     enabled:
       params.enabled !== false && Boolean(params.dateFrom && params.dateTo),

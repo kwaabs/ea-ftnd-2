@@ -180,6 +180,27 @@ export function CustomerSalesOverview({
       ...params,
       groupBy: ["metermodeltype"],
     });
+  // Deduped Zeus Prepaid totals — MMS takes precedence on any meter it
+  // already has (confirmed against production data: 249,091 Zeus Prepaid
+  // meters matched an MMS meter_number by meter_number, 75% of those also
+  // sharing a district — real duplication, not coincidence). Two SEPARATE
+  // fetches from zeusData/zeusNationalData above, not a shared one: those
+  // feed zeusByServiceType.Prepaid, which the standalone "Zeus Prepaid kWh"
+  // card (below) must show as Zeus's own complete, untouched total — only
+  // the blended Prepaid-category totals (prepaidKwh/prepaidCustomers) and
+  // combinedChartData's per-region Prepaid figure use these.
+  const { data: zeusPrepaidDedupedNationalData } = useZeusBillingAggregate({
+    ...params,
+    groupBy: ["metermodeltype"],
+    meterModelType: "Prepaid",
+    excludeMmsDuplicates: true,
+  });
+  const { data: zeusPrepaidDedupedRegionData } = useZeusBillingAggregate({
+    ...params,
+    groupBy: "regionname",
+    meterModelType: "Prepaid",
+    excludeMmsDuplicates: true,
+  });
   const { data: mmsData, isLoading: mmsLoading } = useMmsCustomerSalesAggregate(
     {
       ...params,
@@ -229,11 +250,6 @@ export function CustomerSalesOverview({
   // Zeus Postpaid / Prepaid partitions
   const zeusItems = useMemo(
     () => zeusRaw.filter((i) => normalizeZeusType(i.metermodeltype) === "Postpaid"),
-    [zeusRaw],
-  );
-
-  const zeusPrepaidItems = useMemo(
-    () => zeusRaw.filter((i) => normalizeZeusType(i.metermodeltype) === "Prepaid"),
     [zeusRaw],
   );
 
@@ -372,22 +388,29 @@ export function CustomerSalesOverview({
   }, [zeusByServiceType, mmsStats]);
 
   // ── Category buckets (Customer Consumption IA) ──
-  // Postpaid = Zeus Postpaid + Zeus AMR; Prepaid = Zeus Prepaid + MMS
+  // Postpaid = Zeus Postpaid + Zeus AMR; Prepaid = Zeus Prepaid + MMS,
+  // MMS taking precedence on any meter it already has — see
+  // zeusPrepaidDedupedNationalData's comment above for why this reads
+  // deduped totals rather than zeusByServiceType.Prepaid directly.
+  const zeusPrepaidDedupedNational = (zeusPrepaidDedupedNationalData || [])[0] || {
+    sum_billconsumptionvalue: 0,
+    customer_count: 0,
+  };
   const postpaidKwh =
     zeusByServiceType.Postpaid.totalKwh + zeusByServiceType.AMR.totalKwh;
   const prepaidKwh =
-    zeusByServiceType.Prepaid.totalKwh + mmsStats.totalKwh;
+    (zeusPrepaidDedupedNational.sum_billconsumptionvalue || 0) + mmsStats.totalKwh;
   const combinedKwh = postpaidKwh + prepaidKwh;
   const combinedCustomers =
     zeusByServiceType.Postpaid.totalCustomers +
     zeusByServiceType.AMR.totalCustomers +
-    zeusByServiceType.Prepaid.totalCustomers +
+    (zeusPrepaidDedupedNational.customer_count || 0) +
     mmsStats.totalCustomers;
   const postpaidCustomers =
     zeusByServiceType.Postpaid.totalCustomers +
     zeusByServiceType.AMR.totalCustomers;
   const prepaidCustomers =
-    zeusByServiceType.Prepaid.totalCustomers + mmsStats.totalCustomers;
+    (zeusPrepaidDedupedNational.customer_count || 0) + mmsStats.totalCustomers;
 
   // Keep zeusStats as Postpaid for legacy chart sections that expect it
   const zeusStats = {
@@ -438,7 +461,10 @@ export function CustomerSalesOverview({
       ensure(i.regionname || "Unknown").postpaid +=
         i.sum_billconsumptionvalue || 0;
     });
-    zeusPrepaidItems.forEach((i) => {
+    // MMS-deduped Zeus Prepaid — see the note on zeusPrepaidDedupedRegionData
+    // above for why this is a separate fetch rather than zeusItems-style
+    // client-side filtering of the shared zeusData query.
+    (zeusPrepaidDedupedRegionData || []).forEach((i) => {
       ensure(i.regionname || "Unknown").prepaid +=
         i.sum_billconsumptionvalue || 0;
     });
@@ -448,7 +474,7 @@ export function CustomerSalesOverview({
     return [...regionMap.values()].sort(
       (a, b) => b.postpaid + b.prepaid - (a.postpaid + a.prepaid),
     );
-  }, [zeusItems, zeusAmrItems, zeusPrepaidItems, mmsItems]);
+  }, [zeusItems, zeusAmrItems, zeusPrepaidDedupedRegionData, mmsItems]);
 
   const isLoading =
     zeusLoading || zeusNationalLoading || mmsLoading || mmsNationalLoading;
