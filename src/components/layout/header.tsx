@@ -2,6 +2,7 @@
 import Link from "next/link"
 import { Filter, Calendar, BarChart3 } from "lucide-react"
 import { useState, useEffect, Suspense, useMemo } from "react"
+import { usePathname } from "next/navigation"
 import { Button } from "@/components/ui/button"
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
 import { useAppStore } from "@/stores/app-store"
@@ -28,6 +29,11 @@ function formatMeterType(text: string) {
 
 export function Header() {
     const [isFilterOpen, setIsFilterOpen] = useState(false)
+    const pathname = usePathname()
+    // Login activity has its own fixed "last 30 days" range from the API
+    // response (see admin/logins/page.tsx) — the global filter date range
+    // doesn't apply to it and would be misleading here.
+    const showDateRange = !pathname?.startsWith("/admin/logins")
     const { filters, setFilters } = useAppStore()
     const { user } = useUserStore()
     const userEmail = user?.email || user?.username || ""
@@ -119,15 +125,17 @@ export function Header() {
                         </div>
                     )}
 
-                    <div
-                        className="flex items-center gap-2 px-3 py-1.5 rounded-md text-sm"
-                        style={{ backgroundColor: "hsl(0, 100%, 97%)" }}
-                    >
-                        <Calendar className="h-4 w-4 text-rose-600"/>
-                        <span className="font-semibold whitespace-nowrap text-rose-900">
-                            {fromDate} <span className="mx-1">to</span> {displayEnd}
-                        </span>
-                    </div>
+                    {showDateRange && (
+                        <div
+                            className="flex items-center gap-2 px-3 py-1.5 rounded-md text-sm"
+                            style={{ backgroundColor: "hsl(0, 100%, 97%)" }}
+                        >
+                            <Calendar className="h-4 w-4 text-rose-600"/>
+                            <span className="font-semibold whitespace-nowrap text-rose-900">
+                                {fromDate} <span className="mx-1">to</span> {displayEnd}
+                            </span>
+                        </div>
+                    )}
 
                     {canSeeNotifications && (
                         <Link href="/admin/logins">
