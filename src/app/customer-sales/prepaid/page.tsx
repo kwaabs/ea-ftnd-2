@@ -1,11 +1,20 @@
 "use client"
 
-import { Suspense } from "react"
+import { Suspense, useEffect } from "react"
 import { AppLayout } from "@/components/layout/app-layout"
 import { PrepaidHubView } from "@/components/customer-sales/prepaid-hub-view"
 import { Skeleton } from "@/components/ui/skeleton"
+import { useAppStore } from "@/stores/app-store"
 
 export default function PrepaidCustomerSalesPage() {
+  const { clearNonDateFilters } = useAppStore()
+
+  // Region/district/etc. filters set on another page shouldn't carry over
+  // here — only the date range should persist.
+  useEffect(() => {
+    clearNonDateFilters()
+  }, [clearNonDateFilters])
+
   return (
     <AppLayout>
       <Suspense

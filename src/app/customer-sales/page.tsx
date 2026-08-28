@@ -1,5 +1,6 @@
 "use client";
 
+import { useEffect } from "react";
 import Link from "next/link";
 import { AppLayout } from "@/components/layout/app-layout";
 import { useAppStore } from "@/stores/app-store";
@@ -7,7 +8,13 @@ import { CustomerSalesOverview } from "@/components/customer-sales/customer-sale
 import { ArrowRight } from "lucide-react";
 
 export default function CustomerSalesPage() {
-  const { filters: globalFilters } = useAppStore();
+  const { filters: globalFilters, clearNonDateFilters } = useAppStore();
+
+  // Region/district/etc. filters set on another page shouldn't carry over
+  // here — only the date range should persist.
+  useEffect(() => {
+    clearNonDateFilters();
+  }, [clearNonDateFilters]);
 
   const formatDateToString = (
     date: Date | string | undefined,
