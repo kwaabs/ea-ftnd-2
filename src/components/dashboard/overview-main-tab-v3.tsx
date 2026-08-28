@@ -7944,7 +7944,7 @@ export function OverviewMainTabV3({
                     variant="outline"
                     className="text-[10px] gap-1 border-blue-300 text-blue-700"
                   >
-                    Zeus Postpaid {formatSalesKwh(energySalesBreakdown.zeusPostpaidKwh)}
+                    Non AMR Postpaid {formatSalesKwh(energySalesBreakdown.zeusPostpaidKwh)}
                   </Badge>
                   <Badge
                     variant="outline"
@@ -7956,7 +7956,7 @@ export function OverviewMainTabV3({
                     variant="outline"
                     className="text-[10px] gap-1 border-indigo-300 text-indigo-700"
                   >
-                    Zeus AMR {formatSalesKwh(energySalesBreakdown.zeusAmrKwh)}
+                    AMR {formatSalesKwh(energySalesBreakdown.zeusAmrKwh)}
                   </Badge>
                   <Badge
                     variant="outline"
@@ -8308,7 +8308,7 @@ export function OverviewMainTabV3({
                   variant="outline"
                   className="text-[10px] gap-1 border-blue-300 text-blue-700"
                 >
-                  Zeus Postpaid {formatSalesKwh(energySalesBreakdown.zeusPostpaidKwh)}
+                  Non AMR Postpaid {formatSalesKwh(energySalesBreakdown.zeusPostpaidKwh)}
                 </Badge>
                 <Badge
                   variant="outline"
@@ -8320,7 +8320,7 @@ export function OverviewMainTabV3({
                   variant="outline"
                   className="text-[10px] gap-1 border-indigo-300 text-indigo-700"
                 >
-                  Zeus AMR {formatSalesKwh(energySalesBreakdown.zeusAmrKwh)}
+                  AMR {formatSalesKwh(energySalesBreakdown.zeusAmrKwh)}
                 </Badge>
                 <Badge
                   variant="outline"
