@@ -342,6 +342,7 @@ export function OverviewMainTabV3({
       groupBy: "region",
       dateFrom: dateRange.start,
       dateTo: dateRange.end,
+      region: customerSalesParams.region,
     });
 
   const energyPurchases = useMemo(() => {
