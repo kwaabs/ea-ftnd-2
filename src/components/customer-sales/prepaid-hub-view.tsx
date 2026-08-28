@@ -38,6 +38,7 @@ import { useZeusBillingAggregate } from "@/hooks/api/use-zeus-billing-aggregate-
 import { useMmsCustomerSalesAggregate } from "@/hooks/api/use-mms-customer-sales-aggregate-api"
 import { CustomerSalesDetail } from "@/components/customer-sales/customer-sales-detail"
 import { MmsCustomerSalesDetail } from "@/components/customer-sales/mms-customer-sales-detail"
+import { BotConsumptionView } from "@/components/customer-sales/bot-consumption-view"
 import {
   normalizeRegionName,
   shortRegionLabel,
@@ -372,17 +373,25 @@ export function PrepaidHubView() {
         <h2 className="text-3xl font-semibold tracking-tight text-foreground">
           Prepaid
         </h2>
-        <p className="text-muted-foreground mt-1">
-          Zeus prepaid accounts and MMS prepaid meters, blended — MMS takes
-          precedence on any meter it already has, so nothing is counted twice
-          {selectedRegion ? (
-            <span className="text-emerald-700">
-              {" "}
-              · filtered by {shortRegionLabel(selectedRegion)}
-            </span>
-          ) : null}
-        </p>
       </div>
+
+      <Tabs defaultValue="overview">
+        <TabsList className="grid w-full max-w-md grid-cols-2">
+          <TabsTrigger value="overview">Overview</TabsTrigger>
+          <TabsTrigger value="legacy-meters">Legacy Meters</TabsTrigger>
+        </TabsList>
+
+        <TabsContent value="overview" className="mt-4 space-y-6">
+      <p className="text-muted-foreground">
+        Zeus prepaid accounts and MMS prepaid meters, blended — MMS takes
+        precedence on any meter it already has, so nothing is counted twice
+        {selectedRegion ? (
+          <span className="text-emerald-700">
+            {" "}
+            · filtered by {shortRegionLabel(selectedRegion)}
+          </span>
+        ) : null}
+      </p>
 
       {/* KPIs */}
       <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
@@ -995,6 +1004,19 @@ export function PrepaidHubView() {
           district={district}
         />
       </div>
+        </TabsContent>
+
+        <TabsContent value="legacy-meters" className="mt-4">
+          <Tabs defaultValue="bot">
+            <TabsList className="grid w-full max-w-md grid-cols-1">
+              <TabsTrigger value="bot">BOT</TabsTrigger>
+            </TabsList>
+            <TabsContent value="bot" className="mt-4">
+              <BotConsumptionView dateRange={dateRange} />
+            </TabsContent>
+          </Tabs>
+        </TabsContent>
+      </Tabs>
     </div>
   )
 }

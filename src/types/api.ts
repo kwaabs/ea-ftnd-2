@@ -474,6 +474,43 @@ export interface MmsCustomerSalesDetailResponse {
 }
 
 // ─────────────────────────────────────────────────
+// Bot Consumption Types (legacy meters — app.bot_consumption)
+// ─────────────────────────────────────────────────
+
+export interface BotConsumptionAggregateItem {
+  region?: string | null
+  district?: string | null
+  tariff?: string | null
+  bill_month?: string | null
+  customer_count: number
+  sum_kwh: number
+}
+
+export interface BotConsumptionAggregateResponse {
+  data: BotConsumptionAggregateItem[]
+  total: number
+}
+
+export interface BotConsumptionDetail {
+  customer_name: string
+  meter_number: string
+  geo_code: string
+  kwh: number
+  tariff: string
+  bill_month: string
+  district: string
+  region: string
+}
+
+export interface BotConsumptionDetailResponse {
+  data: BotConsumptionDetail[]
+  total: number
+  page: number
+  limit: number
+  total_pages: number
+}
+
+// ─────────────────────────────────────────────────
 // AMR Consumption Types (Automated Meter Reading)
 // ─────────────────────────────────────────────────
 
