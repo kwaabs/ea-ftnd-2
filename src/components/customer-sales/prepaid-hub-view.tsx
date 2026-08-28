@@ -5,6 +5,7 @@ import {
   AreaChartIcon,
   BarChart3,
   BatteryCharging,
+  Clock,
   Scale,
   Users,
   Wallet,
@@ -1008,11 +1009,21 @@ export function PrepaidHubView() {
 
         <TabsContent value="legacy-meters" className="mt-4">
           <Tabs defaultValue="bot">
-            <TabsList className="grid w-full max-w-md grid-cols-1">
+            <TabsList className="grid w-full max-w-md grid-cols-2">
               <TabsTrigger value="bot">BOT</TabsTrigger>
+              <TabsTrigger value="bxc">BXC</TabsTrigger>
             </TabsList>
             <TabsContent value="bot" className="mt-4">
               <BotConsumptionView dateRange={dateRange} />
+            </TabsContent>
+            <TabsContent value="bxc" className="mt-4">
+              <Card>
+                <CardContent className="py-16 flex flex-col items-center justify-center text-center gap-2">
+                  <Clock className="h-8 w-8 text-muted-foreground" />
+                  <h3 className="text-lg font-semibold text-foreground">BXC</h3>
+                  <p className="text-sm text-muted-foreground">Coming soon</p>
+                </CardContent>
+              </Card>
             </TabsContent>
           </Tabs>
         </TabsContent>
