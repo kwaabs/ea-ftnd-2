@@ -511,6 +511,43 @@ export interface BotConsumptionDetailResponse {
 }
 
 // ─────────────────────────────────────────────────
+// Bxc Consumption Types (legacy meters — app.bxc_consumption)
+// ─────────────────────────────────────────────────
+
+export interface BxcConsumptionAggregateItem {
+  region?: string | null
+  district?: string | null
+  tariff?: string | null
+  bill_month?: string | null
+  customer_count: number
+  sum_kwh: number
+}
+
+export interface BxcConsumptionAggregateResponse {
+  data: BxcConsumptionAggregateItem[]
+  total: number
+}
+
+export interface BxcConsumptionDetail {
+  customer_name: string
+  meter_number: string
+  geo_code: string
+  kwh: number
+  tariff: string
+  bill_month: string
+  district: string
+  region: string
+}
+
+export interface BxcConsumptionDetailResponse {
+  data: BxcConsumptionDetail[]
+  total: number
+  page: number
+  limit: number
+  total_pages: number
+}
+
+// ─────────────────────────────────────────────────
 // AMR Consumption Types (Automated Meter Reading)
 // ─────────────────────────────────────────────────
 
