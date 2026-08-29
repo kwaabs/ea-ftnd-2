@@ -983,28 +983,38 @@ export function PrepaidHubView() {
         </Card>
       </div>
 
-      {/* Detail records — kept as two sections rather than one interleaved
-          table: Zeus (324K prepaid accounts) and MMS (1.29M meters) are too
-          large to merge-sort client-side, and their row schemas don't line
-          up (billing/debt vs prepaid credit/balance). Each section is
-          still tagged by source so nothing needs a tab click to find. */}
-      <div>
-        <h3 className="text-sm font-semibold text-emerald-700 mb-2">Zeus Prepaid — customer records</h3>
-        <CustomerSalesDetail
-          dateRange={dateRange}
-          region={effectiveZeusRegion}
-          district={district}
-          serviceType="Prepaid"
-        />
-      </div>
-      <div>
-        <h3 className="text-sm font-semibold text-green-700 mb-2">MMS — customer records</h3>
-        <MmsCustomerSalesDetail
-          dateRange={dateRange}
-          region={effectiveMmsRegion}
-          district={district}
-        />
-      </div>
+      {/* Detail records — Zeus (324K prepaid accounts) and MMS (1.29M
+          meters) are too large to merge-sort client-side, and their row
+          schemas don't line up (billing/debt vs prepaid credit/balance),
+          so they stay as two separate tables rather than one interleaved
+          one. Sub-tabbed instead of stacked, and both capped to the same
+          500px scrollable height (customer-sales-detail.tsx's convention)
+          so switching between them doesn't jump the page around. */}
+      <Tabs defaultValue="zeus-detail">
+        <TabsList className="grid w-full max-w-md grid-cols-2">
+          <TabsTrigger value="zeus-detail" className="data-[state=active]:text-emerald-700">
+            Zeus Prepaid
+          </TabsTrigger>
+          <TabsTrigger value="mms-detail" className="data-[state=active]:text-green-700">
+            MMS
+          </TabsTrigger>
+        </TabsList>
+        <TabsContent value="zeus-detail" className="mt-4">
+          <CustomerSalesDetail
+            dateRange={dateRange}
+            region={effectiveZeusRegion}
+            district={district}
+            serviceType="Prepaid"
+          />
+        </TabsContent>
+        <TabsContent value="mms-detail" className="mt-4">
+          <MmsCustomerSalesDetail
+            dateRange={dateRange}
+            region={effectiveMmsRegion}
+            district={district}
+          />
+        </TabsContent>
+      </Tabs>
         </TabsContent>
 
         <TabsContent value="legacy-meters" className="mt-4">
