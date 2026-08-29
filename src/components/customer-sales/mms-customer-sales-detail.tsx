@@ -188,9 +188,9 @@ export function MmsCustomerSalesDetail({ dateRange, region, district }: MmsCusto
         </div>
 
         <div className="border rounded-lg overflow-hidden">
-          <div className="overflow-x-auto">
+          <div className="overflow-x-auto max-h-[500px] overflow-y-auto">
             <Table>
-              <TableHeader>
+              <TableHeader className="sticky top-0 z-10 bg-background">
                 <TableRow className="bg-muted/40">
                   <TableHead className="w-[180px]">
                     <SortButton field="customer_name">Customer</SortButton>
