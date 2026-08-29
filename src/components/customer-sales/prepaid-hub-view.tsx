@@ -5,7 +5,6 @@ import {
   AreaChartIcon,
   BarChart3,
   BatteryCharging,
-  Clock,
   Scale,
   Users,
   Wallet,
@@ -40,6 +39,7 @@ import { useMmsCustomerSalesAggregate } from "@/hooks/api/use-mms-customer-sales
 import { CustomerSalesDetail } from "@/components/customer-sales/customer-sales-detail"
 import { MmsCustomerSalesDetail } from "@/components/customer-sales/mms-customer-sales-detail"
 import { BotConsumptionView } from "@/components/customer-sales/bot-consumption-view"
+import { BxcConsumptionView } from "@/components/customer-sales/bxc-consumption-view"
 import {
   normalizeRegionName,
   shortRegionLabel,
@@ -1027,13 +1027,7 @@ export function PrepaidHubView() {
               <BotConsumptionView dateRange={dateRange} />
             </TabsContent>
             <TabsContent value="bxc" className="mt-4">
-              <Card>
-                <CardContent className="py-16 flex flex-col items-center justify-center text-center gap-2">
-                  <Clock className="h-8 w-8 text-muted-foreground" />
-                  <h3 className="text-lg font-semibold text-foreground">BXC</h3>
-                  <p className="text-sm text-muted-foreground">Coming soon</p>
-                </CardContent>
-              </Card>
+              <BxcConsumptionView dateRange={dateRange} />
             </TabsContent>
           </Tabs>
         </TabsContent>
