@@ -375,18 +375,16 @@ export function OverviewMainTabV3({
       (prepaidSalesSummary?.by_source?.bot?.kwh ?? 0) +
       (prepaidSalesSummary?.by_source?.bxc?.kwh ?? 0);
 
-    const total = zeusPostpaidKwh + zeusAmrKwh + zeusPrepaidKwh + mmsKwh + legacyKwh;
+    const prepaidKwh = zeusPrepaidKwh + mmsKwh + legacyKwh;
+    const total = zeusPostpaidKwh + zeusAmrKwh + prepaidKwh;
     if (total === 0) {
       return null;
     }
 
     return {
       zeusPostpaidKwh,
-      zeusPrepaidKwh,
       zeusAmrKwh,
-      zeusKwh: zeusPostpaidKwh + zeusAmrKwh,
-      mmsKwh,
-      legacyKwh,
+      prepaidKwh,
       total,
     };
   }, [prepaidSalesSummary, postpaidSalesSummary]);
@@ -7935,30 +7933,16 @@ export function OverviewMainTabV3({
                   </Badge>
                   <Badge
                     variant="outline"
-                    className="text-[10px] gap-1 border-cyan-300 text-cyan-700"
-                  >
-                    Zeus Prepaid {formatSalesKwh(energySalesBreakdown.zeusPrepaidKwh)}
-                  </Badge>
-                  <Badge
-                    variant="outline"
                     className="text-[10px] gap-1 border-indigo-300 text-indigo-700"
                   >
-                    AMR {formatSalesKwh(energySalesBreakdown.zeusAmrKwh)}
+                    AMR Postpaid {formatSalesKwh(energySalesBreakdown.zeusAmrKwh)}
                   </Badge>
                   <Badge
                     variant="outline"
-                    className="text-[10px] gap-1 border-green-300 text-green-700"
+                    className="text-[10px] gap-1 border-emerald-300 text-emerald-700"
                   >
-                    MMS {formatSalesKwh(energySalesBreakdown.mmsKwh)}
+                    Prepaid {formatSalesKwh(energySalesBreakdown.prepaidKwh)}
                   </Badge>
-                  {energySalesBreakdown.legacyKwh > 0 && (
-                    <Badge
-                      variant="outline"
-                      className="text-[10px] gap-1 border-amber-300 text-amber-700"
-                    >
-                      Legacy Meters {formatSalesKwh(energySalesBreakdown.legacyKwh)}
-                    </Badge>
-                  )}
                 </div>
               )}
             </CardContent>
@@ -8307,30 +8291,16 @@ export function OverviewMainTabV3({
                 </Badge>
                 <Badge
                   variant="outline"
-                  className="text-[10px] gap-1 border-cyan-300 text-cyan-700"
-                >
-                  Zeus Prepaid {formatSalesKwh(energySalesBreakdown.zeusPrepaidKwh)}
-                </Badge>
-                <Badge
-                  variant="outline"
                   className="text-[10px] gap-1 border-indigo-300 text-indigo-700"
                 >
-                  AMR {formatSalesKwh(energySalesBreakdown.zeusAmrKwh)}
+                  AMR Postpaid {formatSalesKwh(energySalesBreakdown.zeusAmrKwh)}
                 </Badge>
                 <Badge
                   variant="outline"
-                  className="text-[10px] gap-1 border-green-300 text-green-700"
+                  className="text-[10px] gap-1 border-emerald-300 text-emerald-700"
                 >
-                  MMS {formatSalesKwh(energySalesBreakdown.mmsKwh)}
+                  Prepaid {formatSalesKwh(energySalesBreakdown.prepaidKwh)}
                 </Badge>
-                {energySalesBreakdown.legacyKwh > 0 && (
-                  <Badge
-                    variant="outline"
-                    className="text-[10px] gap-1 border-amber-300 text-amber-700"
-                  >
-                    Legacy Meters {formatSalesKwh(energySalesBreakdown.legacyKwh)}
-                  </Badge>
-                )}
               </div>
             )}
           </CardContent>
