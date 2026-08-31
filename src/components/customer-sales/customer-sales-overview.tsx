@@ -16,6 +16,8 @@ import { Marquee, MarqueeItem } from "@/components/ui/marquee";
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
 import { useZeusBillingAggregate } from "@/hooks/api/use-zeus-billing-aggregate-api";
 import { useMmsCustomerSalesAggregate } from "@/hooks/api/use-mms-customer-sales-aggregate-api";
+import { useBotConsumptionAggregate } from "@/hooks/api/use-bot-consumption-api";
+import { useBxcConsumptionAggregate } from "@/hooks/api/use-bxc-consumption-api";
 import { normalizeRegionName, shortRegionLabel } from "@/hooks/use-resolved-region-name";
 import { cn } from "@/lib/utils";
 import {
@@ -212,6 +214,20 @@ export function CustomerSalesOverview({
     useMmsCustomerSalesAggregate({
       ...params,
     });
+  // BOT and BXC (Legacy Meters, prepaid-hub-view.tsx) — confirmed genuinely
+  // unique meters against Zeus/MMS and each other (no dedup needed, unlike
+  // Zeus vs MMS above), so they're summed straight into the Prepaid
+  // category totals below. Region-grouped rather than a single national
+  // fetch since combinedChartData needs the per-region split anyway and
+  // reducing over these rows gives the national total for free.
+  const { data: botRegionData } = useBotConsumptionAggregate({
+    ...params,
+    groupBy: "region",
+  });
+  const { data: bxcRegionData } = useBxcConsumptionAggregate({
+    ...params,
+    groupBy: "region",
+  });
   // District drill-down for the Postpaid/Zeus combined chart — only fetched
   // once a region is clicked.
   const { data: postpaidDistrictData, isLoading: postpaidDistrictLoading } =
@@ -363,6 +379,23 @@ export function CustomerSalesOverview({
     };
   }, [mmsItems, mmsNationalItems]);
 
+  // ── BOT / BXC national totals — summed from the region-grouped fetches
+  // above (no separate national query needed).
+  const botTotals = useMemo(() => {
+    const items = botRegionData || [];
+    return {
+      totalKwh: items.reduce((s, i) => s + (i.sum_kwh || 0), 0),
+      totalCustomers: items.reduce((s, i) => s + (i.customer_count || 0), 0),
+    };
+  }, [botRegionData]);
+  const bxcTotals = useMemo(() => {
+    const items = bxcRegionData || [];
+    return {
+      totalKwh: items.reduce((s, i) => s + (i.sum_kwh || 0), 0),
+      totalCustomers: items.reduce((s, i) => s + (i.customer_count || 0), 0),
+    };
+  }, [bxcRegionData]);
+
   // ── Data source breakdown (Zeus vs MMS) — the two underlying systems
   // this page's data is sourced from, independent of Postpaid/Prepaid
   // classification. Zeus here is Postpaid + Prepaid + AMR combined, since
@@ -388,10 +421,13 @@ export function CustomerSalesOverview({
   }, [zeusByServiceType, mmsStats]);
 
   // ── Category buckets (Customer Consumption IA) ──
-  // Postpaid = Zeus Postpaid + Zeus AMR; Prepaid = Zeus Prepaid + MMS,
-  // MMS taking precedence on any meter it already has — see
-  // zeusPrepaidDedupedNationalData's comment above for why this reads
-  // deduped totals rather than zeusByServiceType.Prepaid directly.
+  // Postpaid = Zeus Postpaid + Zeus AMR; Prepaid = Zeus Prepaid + MMS + BOT
+  // + BXC, MMS taking precedence over Zeus on any meter it already has —
+  // see zeusPrepaidDedupedNationalData's comment above for why this reads
+  // deduped totals rather than zeusByServiceType.Prepaid directly. BOT and
+  // BXC need no precedence handling: confirmed genuinely unique meters
+  // against Zeus/MMS and each other, so they're summed straight in. PNS
+  // isn't included yet — no backend for it.
   const zeusPrepaidDedupedNational = (zeusPrepaidDedupedNationalData || [])[0] || {
     sum_billconsumptionvalue: 0,
     customer_count: 0,
@@ -399,18 +435,26 @@ export function CustomerSalesOverview({
   const postpaidKwh =
     zeusByServiceType.Postpaid.totalKwh + zeusByServiceType.AMR.totalKwh;
   const prepaidKwh =
-    (zeusPrepaidDedupedNational.sum_billconsumptionvalue || 0) + mmsStats.totalKwh;
+    (zeusPrepaidDedupedNational.sum_billconsumptionvalue || 0) +
+    mmsStats.totalKwh +
+    botTotals.totalKwh +
+    bxcTotals.totalKwh;
   const combinedKwh = postpaidKwh + prepaidKwh;
   const combinedCustomers =
     zeusByServiceType.Postpaid.totalCustomers +
     zeusByServiceType.AMR.totalCustomers +
     (zeusPrepaidDedupedNational.customer_count || 0) +
-    mmsStats.totalCustomers;
+    mmsStats.totalCustomers +
+    botTotals.totalCustomers +
+    bxcTotals.totalCustomers;
   const postpaidCustomers =
     zeusByServiceType.Postpaid.totalCustomers +
     zeusByServiceType.AMR.totalCustomers;
   const prepaidCustomers =
-    (zeusPrepaidDedupedNational.customer_count || 0) + mmsStats.totalCustomers;
+    (zeusPrepaidDedupedNational.customer_count || 0) +
+    mmsStats.totalCustomers +
+    botTotals.totalCustomers +
+    bxcTotals.totalCustomers;
 
   // Keep zeusStats as Postpaid for legacy chart sections that expect it
   const zeusStats = {
@@ -471,10 +515,19 @@ export function CustomerSalesOverview({
     mmsItems.forEach((i) => {
       ensure(i.region || "Unknown").prepaid += i.sum_last_month_kwh_read || 0;
     });
+    // BOT/BXC — confirmed genuinely unique meters against Zeus/MMS and each
+    // other, summed straight into Prepaid like MMS above (no precedence
+    // needed here, unlike the Zeus-vs-MMS dedup).
+    (botRegionData || []).forEach((i) => {
+      ensure(i.region || "Unknown").prepaid += i.sum_kwh || 0;
+    });
+    (bxcRegionData || []).forEach((i) => {
+      ensure(i.region || "Unknown").prepaid += i.sum_kwh || 0;
+    });
     return [...regionMap.values()].sort(
       (a, b) => b.postpaid + b.prepaid - (a.postpaid + a.prepaid),
     );
-  }, [zeusItems, zeusAmrItems, zeusPrepaidDedupedRegionData, mmsItems]);
+  }, [zeusItems, zeusAmrItems, zeusPrepaidDedupedRegionData, mmsItems, botRegionData, bxcRegionData]);
 
   const isLoading =
     zeusLoading || zeusNationalLoading || mmsLoading || mmsNationalLoading;
