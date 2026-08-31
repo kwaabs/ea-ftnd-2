@@ -712,3 +712,28 @@ export interface ZeusBillingAggregateResponse {
   data: ZeusBillingAggregateItem[]
   total: number
 }
+
+// Canonical cross-source Prepaid/Postpaid totals from
+// ea-bknd-3/internal/salessummary. This is the single source of truth for
+// "what is the total Prepaid (or Postpaid) figure across every source" —
+// see MIGRATION.md in ea-bknd-3 for why this exists (5+ frontend files were
+// each re-deriving this by hand and drifting out of sync as new sources
+// were added).
+export interface SalesSummarySourceStat {
+  kwh: number
+  customers: number
+}
+
+export interface SalesSummaryRow {
+  group_value: string
+  by_source: Record<string, SalesSummarySourceStat>
+  total_kwh: number
+  total_customers: number
+}
+
+export interface SalesSummary {
+  total_kwh: number
+  total_customers: number
+  by_source: Record<string, SalesSummarySourceStat>
+  rows: SalesSummaryRow[]
+}

@@ -73,8 +73,7 @@ import {
   useTopBottomConsumers,
 } from "@/hooks/api/use-consumption-api";
 import { useRegionalBoundaryDaily } from "@/hooks/api/use-regional-boundary-api";
-import { useZeusBillingAggregate } from "@/hooks/api/use-zeus-billing-aggregate-api";
-import { useMmsCustomerSalesAggregate } from "@/hooks/api/use-mms-customer-sales-aggregate-api";
+import { useSalesSummary } from "@/hooks/api/use-sales-summary-api";
 import { formatNumber } from "@/lib/utils";
 import {
   ResponsiveContainer,
@@ -329,21 +328,19 @@ export function OverviewMainTabV3({
         : undefined,
   };
 
-  const {
-    data: customerConsumptionDataArray,
-    isLoading: customerConsumptionLoading,
-  } = useZeusBillingAggregate({
-    ...customerSalesParams,
-    groupBy: ["metermodeltype"],
+  const { data: prepaidSalesSummary } = useSalesSummary({
+    category: "prepaid",
+    dateFrom: dateRange.start,
+    dateTo: dateRange.end,
+    region: customerSalesParams.region,
   });
 
-  const { data: mmsAggregateData, isLoading: mmsAggregateLoading } =
-    useMmsCustomerSalesAggregate({
-      groupBy: "region",
-      dateFrom: dateRange.start,
-      dateTo: dateRange.end,
-      region: customerSalesParams.region,
-    });
+  const { data: postpaidSalesSummary } = useSalesSummary({
+    category: "postpaid",
+    dateFrom: dateRange.start,
+    dateTo: dateRange.end,
+    region: customerSalesParams.region,
+  });
 
   const energyPurchases = useMemo(() => {
     if (!aggregateData?.rawData || aggregateData.rawData.length === 0) {
@@ -362,47 +359,37 @@ export function OverviewMainTabV3({
       );
   }, [aggregateData?.rawData]);
 
+  // Sourced from ea-bknd-3's internal/salessummary — the single canonical
+  // place that computes cross-source Prepaid/Postpaid totals (MMS takes
+  // precedence over Zeus Prepaid on any meter it already has, everything
+  // else sums directly). Replaces a hand-rolled Zeus+MMS-only computation
+  // that silently missed BOT/BXC once those sources were added.
   const energySalesBreakdown = useMemo(() => {
-    const zeusByType = { Postpaid: 0, Prepaid: 0, AMR: 0 };
-    if (customerConsumptionDataArray && customerConsumptionDataArray.length > 0) {
-      customerConsumptionDataArray.forEach((item: any) => {
-        const t = String(item.metermodeltype || "")
-          .trim()
-          .toLowerCase();
-        const kwh = item.sum_billconsumptionvalue || 0;
-        if (t === "postpaid") zeusByType.Postpaid += kwh;
-        else if (t === "prepaid") zeusByType.Prepaid += kwh;
-        else if (t === "amr") zeusByType.AMR += kwh;
-      });
-    }
+    if (!prepaidSalesSummary && !postpaidSalesSummary) return null;
 
-    const mmsKwh =
-      mmsAggregateData && mmsAggregateData.length > 0
-        ? mmsAggregateData.reduce(
-            (sum: number, item: any) =>
-              sum + (item.sum_last_month_kwh_read || 0),
-            0,
-          )
-        : 0;
+    const zeusPostpaidKwh = postpaidSalesSummary?.by_source?.zeus_postpaid?.kwh ?? 0;
+    const zeusAmrKwh = postpaidSalesSummary?.by_source?.zeus_amr?.kwh ?? 0;
+    const zeusPrepaidKwh = prepaidSalesSummary?.by_source?.zeus_prepaid?.kwh ?? 0;
+    const mmsKwh = prepaidSalesSummary?.by_source?.mms?.kwh ?? 0;
+    const legacyKwh =
+      (prepaidSalesSummary?.by_source?.bot?.kwh ?? 0) +
+      (prepaidSalesSummary?.by_source?.bxc?.kwh ?? 0);
 
-    // Postpaid = Zeus Postpaid + Zeus AMR; Prepaid = Zeus Prepaid + MMS —
-    // same convention used everywhere else (region/district detail pages,
-    // the customer-sales overview page).
-    const total =
-      zeusByType.Postpaid + zeusByType.AMR + zeusByType.Prepaid + mmsKwh;
+    const total = zeusPostpaidKwh + zeusAmrKwh + zeusPrepaidKwh + mmsKwh + legacyKwh;
     if (total === 0) {
       return null;
     }
 
     return {
-      zeusPostpaidKwh: zeusByType.Postpaid,
-      zeusPrepaidKwh: zeusByType.Prepaid,
-      zeusAmrKwh: zeusByType.AMR,
-      zeusKwh: zeusByType.Postpaid + zeusByType.AMR,
+      zeusPostpaidKwh,
+      zeusPrepaidKwh,
+      zeusAmrKwh,
+      zeusKwh: zeusPostpaidKwh + zeusAmrKwh,
       mmsKwh,
+      legacyKwh,
       total,
     };
-  }, [customerConsumptionDataArray, mmsAggregateData]);
+  }, [prepaidSalesSummary, postpaidSalesSummary]);
 
   const energySales = energySalesBreakdown?.total ?? null;
 
@@ -7964,6 +7951,14 @@ export function OverviewMainTabV3({
                   >
                     MMS {formatSalesKwh(energySalesBreakdown.mmsKwh)}
                   </Badge>
+                  {energySalesBreakdown.legacyKwh > 0 && (
+                    <Badge
+                      variant="outline"
+                      className="text-[10px] gap-1 border-amber-300 text-amber-700"
+                    >
+                      Legacy Meters {formatSalesKwh(energySalesBreakdown.legacyKwh)}
+                    </Badge>
+                  )}
                 </div>
               )}
             </CardContent>
@@ -8328,6 +8323,14 @@ export function OverviewMainTabV3({
                 >
                   MMS {formatSalesKwh(energySalesBreakdown.mmsKwh)}
                 </Badge>
+                {energySalesBreakdown.legacyKwh > 0 && (
+                  <Badge
+                    variant="outline"
+                    className="text-[10px] gap-1 border-amber-300 text-amber-700"
+                  >
+                    Legacy Meters {formatSalesKwh(energySalesBreakdown.legacyKwh)}
+                  </Badge>
+                )}
               </div>
             )}
           </CardContent>

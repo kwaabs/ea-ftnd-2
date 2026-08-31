@@ -3681,6 +3681,7 @@ import { useConsumptionAggregate } from "@/hooks/api/use-consumption-aggregate-a
 import { useRegionalBoundaryDaily } from "@/hooks/api/use-regional-boundary-api";
 import { useZeusBillingAggregate } from "@/hooks/api/use-zeus-billing-aggregate-api";
 import { useMmsCustomerSalesAggregate } from "@/hooks/api/use-mms-customer-sales-aggregate-api";
+import { useSalesSummary } from "@/hooks/api/use-sales-summary-api";
 import { useBspDaily } from "@/hooks/api/use-bsp-api";
 import { useDtxDaily, useDtxAggregate } from "@/hooks/api/use-dtx-api";
 import { useDistrictsByRegion } from "@/hooks/api/use-districts-geometry-api";
@@ -3976,45 +3977,33 @@ export function RegionDetail({ region }: RegionDetailProps) {
       dateTo: dateRange.end,
     });
 
-  // Fetch customer consumption for this region — split by Zeus meterModelType
-  // (Postpaid / Prepaid only; AMR billing rows are excluded from this page).
-  // Uses zeusRegion (resolved against Zeus's own regionname list, same as
-  // RegionDetailMarquee below), not the raw regionProperCase — Zeus's
-  // region column doesn't always match the page's URL-derived region name
-  // exactly (e.g. "Tema" vs "Tema Region"), so filtering on the unresolved
-  // name silently returns zero matching rows instead of erroring.
-  const customerConsAggResult = useZeusBillingAggregate({
-    dateFrom: dateRange.start,
-    dateTo: dateRange.end,
-    region: zeusRegion,
-    groupBy: "metermodeltype",
-    meterModelType: "Postpaid,Prepaid",
-  });
-  const customerConsumptionAggData = customerConsAggResult.data;
-
-  // Fetch MMS aggregate — grouped by region, then filter client-side for this region
-  // (the district endpoint does not support a region filter param)
-  const { data: mmsRegionData, isLoading: mmsSalesLoading } =
-    useMmsCustomerSalesAggregate({
-      groupBy: "region",
+  // Customer sales totals broken down by source — from the canonical
+  // cross-source endpoint (ea-bknd-3/internal/salessummary) rather than a
+  // hand-rolled Zeus+MMS-only merge, so BOT/BXC (and any future legacy
+  // source) are never silently missing from this page's Energy Flow
+  // diagram the way they previously were. AMR is still excluded from this
+  // page entirely, matching prior behavior. The endpoint normalizes each
+  // source's own region-naming convention server-side, so the plain
+  // page-derived regionProperCase is passed directly — no need for the
+  // separately-resolved zeusRegion/mmsRegion here.
+  const { data: prepaidSalesSummary, isLoading: prepaidSalesSummaryLoading } =
+    useSalesSummary({
+      category: "prepaid",
       dateFrom: dateRange.start,
       dateTo: dateRange.end,
+      region: regionProperCase,
+    });
+  const { data: postpaidSalesSummary, isLoading: postpaidSalesSummaryLoading } =
+    useSalesSummary({
+      category: "postpaid",
+      dateFrom: dateRange.start,
+      dateTo: dateRange.end,
+      region: regionProperCase,
     });
 
-  const mmsAggData = useMemo(() => {
-    if (!mmsRegionData || !Array.isArray(mmsRegionData)) return [];
-    return mmsRegionData.filter(
-      (item: any) =>
-        (item.region || "").toLowerCase() === mmsRegion.toLowerCase(),
-    );
-  }, [mmsRegionData, mmsRegion]);
-
   const customerSalesLoading =
-    customerConsAggResult.isLoading || mmsSalesLoading;
+    prepaidSalesSummaryLoading || postpaidSalesSummaryLoading;
 
-  // Compute customer sales totals broken down by source — Zeus (Postpaid /
-  // Prepaid billing) + MMS daily. AMR (daily meters and Zeus's own
-  // metermodeltype=AMR billing rows) is excluded from this page entirely.
   const customerSalesMetrics = useMemo(() => {
     const bySrc = new Map<string, number>();
     let total = 0;
@@ -4024,35 +4013,23 @@ export function RegionDetail({ region }: RegionDetailProps) {
       total += kwh;
     };
 
-    // Always track these three sources, even when one has zero data for the
+    // Always track these sources, even when one has zero data for the
     // period, so downstream drill-downs (Energy Flow diagram) can show them
     // as tracked-but-zero rather than silently absent.
     add("Zeus (Postpaid)", 0);
     add("Zeus (Prepaid)", 0);
     add("MMS (Prepaid)", 0);
+    add("BOT (Prepaid)", 0);
+    add("BXC (Prepaid)", 0);
 
-    // Zeus billing — Postpaid / Prepaid only (meterModelType=AMR rows are dropped)
-    if (
-      customerConsumptionAggData &&
-      Array.isArray(customerConsumptionAggData)
-    ) {
-      customerConsumptionAggData.forEach((item: any) => {
-        const kwh = item.sum_billconsumptionvalue || 0;
-        const t = String(item.metermodeltype || "")
-          .trim()
-          .toLowerCase();
-        if (t === "postpaid") add("Zeus (Postpaid)", kwh);
-        else if (t === "prepaid") add("Zeus (Prepaid)", kwh);
-      });
-    }
-
-    // MMS prepaid — single region-level row after client-side filter
-    const mmsRow = mmsAggData && mmsAggData.length > 0 ? mmsAggData[0] : null;
-    const mmsKwh = mmsRow ? mmsRow.sum_last_month_kwh_read || 0 : 0;
-    add("MMS (Prepaid)", mmsKwh);
+    add("Zeus (Postpaid)", postpaidSalesSummary?.by_source?.zeus_postpaid?.kwh ?? 0);
+    add("Zeus (Prepaid)", prepaidSalesSummary?.by_source?.zeus_prepaid?.kwh ?? 0);
+    add("MMS (Prepaid)", prepaidSalesSummary?.by_source?.mms?.kwh ?? 0);
+    add("BOT (Prepaid)", prepaidSalesSummary?.by_source?.bot?.kwh ?? 0);
+    add("BXC (Prepaid)", prepaidSalesSummary?.by_source?.bxc?.kwh ?? 0);
 
     return { total, bySrc };
-  }, [customerConsumptionAggData, mmsAggData]);
+  }, [prepaidSalesSummary, postpaidSalesSummary]);
 
   // Fetch meter health status for REGIONAL_BOUNDARY — only when this region actually has boundary points.
   // If boundaryMeteringPoints is empty and we fire the query, the API returns ALL boundary meters globally,

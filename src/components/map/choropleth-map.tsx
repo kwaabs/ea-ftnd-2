@@ -9,7 +9,7 @@ import { useDtxAggregate } from "@/hooks/api/use-dtx-api"
 import { useRegionalBoundaryAggregate } from "@/hooks/api/use-regional-boundary-api"
 import { useMeters } from "@/hooks/api/use-meter-api"
 import { useZeusBillingAggregate } from "@/hooks/api/use-zeus-billing-aggregate-api"
-import { useMmsCustomerSalesAggregate } from "@/hooks/api/use-mms-customer-sales-aggregate-api"
+import { useSalesSummary } from "@/hooks/api/use-sales-summary-api"
 import { useAppStore } from "@/stores/app-store"
 import { formatApiDate } from "@/lib/utils"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
@@ -57,16 +57,19 @@ export function ChoroplethMap() {
     const { data: boundaryData, isLoading: isLoadingBoundary } = useRegionalBoundaryAggregate({ dateFrom, dateTo })
 
     // Customer sales sources — billed/read kWh, not grid-side metering.
-    // Postpaid = Zeus Postpaid + Zeus AMR; Prepaid = Zeus Prepaid + MMS —
-    // same convention used everywhere else in the app (region/district
-    // detail, customer sales overview, dashboard). Zeus is grouped by both
-    // region and meter type so Postpaid vs Prepaid can be split out below.
+    // Postpaid = Zeus Postpaid + Zeus AMR (Zeus is grouped by both region
+    // and meter type so the two can be split out below). Prepaid comes
+    // from the canonical cross-source endpoint (ea-bknd-3/internal/
+    // salessummary: Zeus Prepaid deduped against MMS, plus MMS, BOT, BXC)
+    // rather than a hand-rolled Zeus+MMS-only merge, so this map never
+    // silently misses a legacy source the way it once did.
     const { data: zeusData, isLoading: isLoadingZeus } = useZeusBillingAggregate({
         dateFrom,
         dateTo,
         groupBy: ["metermodeltype", "regionname"],
     })
-    const { data: mmsData, isLoading: isLoadingMms } = useMmsCustomerSalesAggregate({
+    const { data: prepaidSummary, isLoading: isLoadingPrepaidSummary } = useSalesSummary({
+        category: "prepaid",
         dateFrom,
         dateTo,
         groupBy: "region",
@@ -77,7 +80,7 @@ export function ChoroplethMap() {
     // than surfacing a retry button — a slow/stuck fetch just keeps this
     // true until it finally succeeds, and the real data pops in whenever
     // that happens.
-    const isLoadingSales = isLoadingZeus || isLoadingMms
+    const isLoadingSales = isLoadingZeus || isLoadingPrepaidSummary
 
     // ── Per-type region lookup helpers ──────────────────────────────────────
     // BSP: byRegion[].region is lowercased, value is supplyKwh / netSupplyKwh
@@ -141,14 +144,13 @@ export function ChoroplethMap() {
     }
     const getPostpaidKwh = (regionName: string): number =>
         getPostpaidZeusKwh(regionName) + getPostpaidAmrKwh(regionName)
-    // Prepaid: Zeus Prepaid billed consumption + MMS kWh read (last month),
-    // per region.
+    // Prepaid: cross-source total (Zeus Prepaid deduped against MMS, plus
+    // MMS, BOT, BXC) per region, from the canonical salessummary endpoint.
     const getPrepaidKwh = (regionName: string): number => {
-        const zeusPrepaid = (zeusData ?? [])
-            .filter((z) => normalizeZeusType(z.metermodeltype) === "prepaid" && regionNamesMatch(regionName, z.regionname))
-            .reduce((sum, z) => sum + (z.sum_billconsumptionvalue ?? 0), 0)
-        const mmsKwh = mmsData?.find((m) => regionNamesMatch(regionName, m.region))?.sum_last_month_kwh_read ?? 0
-        return zeusPrepaid + mmsKwh
+        return (
+            prepaidSummary?.rows.find((r) => regionNamesMatch(regionName, r.group_value))
+                ?.total_kwh ?? 0
+        )
     }
     // Loss: total supply into the region (BSP import + regional boundary
     // import) minus everything billed/read across both sales categories.
@@ -210,7 +212,7 @@ export function ChoroplethMap() {
             prepaid: rangeFrom(allRegionNames.map(getPrepaidKwh)),
             loss: rangeFrom(allRegionNames.map(getLoss)),
         }
-    }, [bspData, dtxData, boundaryData, zeusData, mmsData, allRegionNames])
+    }, [bspData, dtxData, boundaryData, zeusData, prepaidSummary, allRegionNames])
 
     // Global min/max across all active metrics — used for choropleth color scaling
     const { minValue, maxValue } = useMemo(() => {
@@ -227,7 +229,7 @@ export function ChoroplethMap() {
             return total
         })
         return { minValue: Math.min(...values), maxValue: Math.max(...values) }
-    }, [bspData, dtxData, boundaryData, zeusData, mmsData, allRegionNames, selectedMetrics])
+    }, [bspData, dtxData, boundaryData, zeusData, prepaidSummary, allRegionNames, selectedMetrics])
 
     const getRegionColor = (regionName: string) => {
         const noMetric =
@@ -295,7 +297,7 @@ export function ChoroplethMap() {
         })
 
         return { type: "FeatureCollection" as const, features }
-    }, [geometryData, bspData, dtxData, boundaryData, zeusData, mmsData, selectedMetrics])
+    }, [geometryData, bspData, dtxData, boundaryData, zeusData, prepaidSummary, selectedMetrics])
 
     // Derived live from current data rather than frozen at click time — see
     // the SelectedRegion comment above.
@@ -312,7 +314,7 @@ export function ChoroplethMap() {
         const prepaid_kwh = getPrepaidKwh(region)
         const loss_kwh = getLoss(region)
         return { bsp_import, dtx_import, net_consumption, cross_boundary, postpaid_kwh, postpaid_zeus_kwh, postpaid_amr_kwh, prepaid_kwh, loss_kwh }
-    }, [selectedRegion, bspData, dtxData, boundaryData, zeusData, mmsData])
+    }, [selectedRegion, bspData, dtxData, boundaryData, zeusData, prepaidSummary])
 
     // Initialize map with retry mechanism
     useEffect(() => {
