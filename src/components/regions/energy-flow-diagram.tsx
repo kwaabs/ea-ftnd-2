@@ -268,10 +268,9 @@ export function EnergyFlowDiagram({
 
         if (label === "Zeus (Postpaid)") {
             postpaidChildren.push(row);
-        } else if (
-            label === "Zeus (Prepaid)" ||
-            label === "MMS (Prepaid)"
-        ) {
+        } else if (label.endsWith("(Prepaid)")) {
+            // Zeus (Prepaid), MMS (Prepaid), and any legacy source
+            // (BOT/BXC/...) — all labeled "<Source> (Prepaid)".
             prepaidChildren.push(row);
         } else {
             // Unknown Zeus service types — keep visible under Postpaid
@@ -542,7 +541,7 @@ export function EnergyFlowDiagram({
                                     Loading sales…
                                 </span>
                                 <div className="text-[11px] text-muted-foreground">
-                                    Zeus · MMS
+                                    Zeus · MMS · BOT · BXC
                                 </div>
                             </div>
                         ) : (
@@ -732,7 +731,7 @@ export function EnergyFlowDiagram({
                             <p className="mt-0.5 leading-relaxed">
                                 Energy billed or metered to customers, drawn from DTX distribution.
                                 Expand Customer Sales for Postpaid (Zeus Postpaid billing) and
-                                Prepaid (Zeus Prepaid / MMS), then drill into each source. The gap
+                                Prepaid (Zeus Prepaid / MMS / BOT / BXC), then drill into each source. The gap
                                 between DTX Distribution and Customer Sales reflects unbilled
                                 energy and system losses.
                             </p>

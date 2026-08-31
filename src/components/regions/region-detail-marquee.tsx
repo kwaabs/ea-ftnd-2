@@ -3,7 +3,8 @@
 import { useEffect, useMemo, useState } from "react"
 import { Marquee, MarqueeItem } from "@/components/ui/marquee"
 import { useZeusBillingAggregate } from "@/hooks/api/use-zeus-billing-aggregate-api"
-import { useMmsCustomerSalesAggregate } from "@/hooks/api/use-mms-customer-sales-aggregate-api"
+import { useSalesSummary } from "@/hooks/api/use-sales-summary-api"
+import { normalizeRegionName, shortRegionLabel } from "@/hooks/use-resolved-region-name"
 
 /** Rotate sales (region + its districts) -> debt (region + its districts), two minutes each. */
 const PHASE_MS = 2 * 60 * 1000
@@ -21,7 +22,9 @@ interface RegionDetailMarqueeProps {
   /** Zeus's own regionname value that actually matches this region (may
    * differ from `region` — see useResolvedRegionName). Defaults to `region`. */
   zeusRegion?: string
-  /** MMS's own region value that actually matches this region. Defaults to `region`. */
+  /** Unused — the cross-source sales summary endpoint resolves MMS/BOT/BXC's
+   * own region naming server-side. Kept optional so existing callers don't
+   * need updating. */
   mmsRegion?: string
   dateRange: { start: string; end: string }
 }
@@ -53,7 +56,6 @@ function normalizeType(raw?: string | null): "Postpaid" | "Prepaid" | "Other" {
 export function RegionDetailMarquee({
   region,
   zeusRegion,
-  mmsRegion,
   dateRange,
 }: RegionDetailMarqueeProps) {
   const [phaseIndex, setPhaseIndex] = useState(0)
@@ -79,17 +81,22 @@ export function RegionDetailMarquee({
     groupBy: ["districtname", "metermodeltype"],
     meterModelType: "Postpaid,Prepaid",
   })
+  // Prepaid figure: Zeus (deduped against MMS) + MMS + BOT + BXC, from the
+  // canonical cross-source endpoint (ea-bknd-3/internal/salessummary) — a
+  // hand-rolled Zeus+MMS-only merge here would silently miss BOT/BXC and
+  // any future legacy source the same way this file's total once did.
   const {
-    data: mmsDistrictData,
-    isLoading: mmsLoading,
-    isError: mmsIsError,
-    error: mmsError,
-  } = useMmsCustomerSalesAggregate({
+    data: prepaidSummary,
+    isLoading: prepaidSummaryLoading,
+    isError: prepaidSummaryIsError,
+    error: prepaidSummaryError,
+  } = useSalesSummary({
+    category: "prepaid",
     ...dateParams,
-    region: mmsRegion ?? region,
+    region: region,
     groupBy: "district",
   })
-  const isLoading = zeusLoading || mmsLoading
+  const isLoading = zeusLoading || prepaidSummaryLoading
 
   // Surface fetch failures distinctly from "genuinely empty" — a silent
   // `data || []` fallback would otherwise make an errored request look
@@ -101,40 +108,49 @@ export function RegionDetailMarquee({
         zeusError,
       )
     }
-    if (mmsIsError) {
+    if (prepaidSummaryIsError) {
       console.error(
-        `[RegionDetailMarquee] MMS district aggregate failed for region="${region}":`,
-        mmsError,
+        `[RegionDetailMarquee] Sales summary (prepaid) failed for region="${region}":`,
+        prepaidSummaryError,
       )
     }
-  }, [zeusIsError, zeusError, mmsIsError, mmsError, region])
+  }, [zeusIsError, zeusError, prepaidSummaryIsError, prepaidSummaryError, region])
 
-  // Per-district sales (Zeus + MMS) and debt (Zeus only).
+  // Per-district sales (Zeus Postpaid + cross-source Prepaid) and debt
+  // (Zeus only — the only source that tracks debt at all). Keyed by a
+  // suffix/case-normalized district name so "Cape Coast District" (Zeus)
+  // and "Cape Coast" (everything else) land in the same row instead of
+  // silently fragmenting into two.
   const districtRows = useMemo(() => {
     const map = new Map<
       string,
       { district: string; postpaidKwh: number; prepaidKwh: number; debt: number }
     >()
-    const ensure = (d: string) => {
-      if (!map.has(d)) {
-        map.set(d, { district: d, postpaidKwh: 0, prepaidKwh: 0, debt: 0 })
+    const ensure = (rawName: string) => {
+      const key = normalizeRegionName(rawName)
+      if (!map.has(key)) {
+        map.set(key, {
+          district: shortRegionLabel(rawName),
+          postpaidKwh: 0,
+          prepaidKwh: 0,
+          debt: 0,
+        })
       }
-      return map.get(d)!
+      return map.get(key)!
     }
 
     ;(zeusDistrictData || []).forEach((item) => {
       const row = ensure(item.districtname || "Unknown")
       const type = normalizeType(item.metermodeltype)
       if (type === "Postpaid") row.postpaidKwh += item.sum_billconsumptionvalue || 0
-      else if (type === "Prepaid") row.prepaidKwh += item.sum_billconsumptionvalue || 0
       row.debt += item.sum_debtamount || 0
     })
-    ;(mmsDistrictData || []).forEach((item) => {
-      ensure(item.district || "Unknown").prepaidKwh += item.sum_last_month_kwh_read || 0
+    ;(prepaidSummary?.rows || []).forEach((row) => {
+      ensure(row.group_value || "Unknown").prepaidKwh += row.total_kwh
     })
 
     return [...map.values()]
-  }, [zeusDistrictData, mmsDistrictData])
+  }, [zeusDistrictData, prepaidSummary])
 
   // Region totals — derived from summing the district rows.
   const regionSummary = useMemo(() => {
@@ -186,7 +202,7 @@ export function RegionDetailMarquee({
           </MarqueeItem>
           {districtSalesRows.length === 0 ? (
             <MarqueeItem className="text-sm font-medium text-muted-foreground">
-              {zeusIsError || mmsIsError
+              {zeusIsError || prepaidSummaryIsError
                 ? "District sales failed to load — see console for details."
                 : "No district sales data for this period."}
             </MarqueeItem>

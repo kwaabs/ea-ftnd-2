@@ -41,6 +41,7 @@ import { CustomerSalesDetail } from "@/components/customer-sales/customer-sales-
 import { MmsCustomerSalesDetail } from "@/components/customer-sales/mms-customer-sales-detail"
 import { BotConsumptionView } from "@/components/customer-sales/bot-consumption-view"
 import { BxcConsumptionView } from "@/components/customer-sales/bxc-consumption-view"
+import { PrepaidAllSourcesOverview } from "@/components/customer-sales/prepaid-all-sources-overview"
 import {
   normalizeRegionName,
   shortRegionLabel,
@@ -377,13 +378,18 @@ export function PrepaidHubView() {
         </h2>
       </div>
 
-      <Tabs defaultValue="overview">
-        <TabsList className="grid w-full max-w-md grid-cols-2">
-          <TabsTrigger value="overview">Overview</TabsTrigger>
+      <Tabs defaultValue="all-sources">
+        <TabsList className="grid w-full max-w-lg grid-cols-3">
+          <TabsTrigger value="all-sources">Overview</TabsTrigger>
+          <TabsTrigger value="zeus-mms">Zeus + MMS</TabsTrigger>
           <TabsTrigger value="legacy-meters">Legacy Meters</TabsTrigger>
         </TabsList>
 
-        <TabsContent value="overview" className="mt-4 space-y-6">
+        <TabsContent value="all-sources" className="mt-4">
+          <PrepaidAllSourcesOverview dateRange={dateRange} />
+        </TabsContent>
+
+        <TabsContent value="zeus-mms" className="mt-4 space-y-6">
       <p className="text-muted-foreground">
         Zeus prepaid accounts and MMS prepaid meters, blended — MMS takes
         precedence on any meter it already has, so nothing is counted twice
