@@ -737,3 +737,43 @@ export interface SalesSummary {
   by_source: Record<string, SalesSummarySourceStat>
   rows: SalesSummaryRow[]
 }
+
+// PNS-ingested legacy consumption source (ea-bknd-3/internal/
+// pnsconsumption). Unlike BOT/BXC, region/district are only available as
+// opaque regionid/districtid codes — no name lookup exists yet, so these
+// are raw codes, not human-readable names, until the DBA supplies a
+// mapping.
+export interface PnsConsumptionAggregateItem {
+  region_id?: string | null
+  district_id?: string | null
+  tariff_category?: string | null
+  bill_month?: string | null
+  customer_count: number
+  sum_energy_kwh: number
+}
+
+export interface PnsConsumptionAggregateResponse {
+  data: PnsConsumptionAggregateItem[]
+  total: number
+}
+
+export interface PnsConsumptionDetail {
+  service_id: string
+  customer_id: string
+  service_point: string
+  region_id: string
+  district_id: string
+  tariff_category: string
+  bill_month: string
+  bill_date: string
+  energy_kwh: number
+  station_id: string
+}
+
+export interface PnsConsumptionDetailResponse {
+  data: PnsConsumptionDetail[]
+  total: number
+  page: number
+  limit: number
+  total_pages: number
+}

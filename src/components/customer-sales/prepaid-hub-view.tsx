@@ -5,7 +5,6 @@ import {
   AreaChartIcon,
   BarChart3,
   BatteryCharging,
-  Clock,
   Scale,
   Users,
   Wallet,
@@ -41,6 +40,7 @@ import { CustomerSalesDetail } from "@/components/customer-sales/customer-sales-
 import { MmsCustomerSalesDetail } from "@/components/customer-sales/mms-customer-sales-detail"
 import { BotConsumptionView } from "@/components/customer-sales/bot-consumption-view"
 import { BxcConsumptionView } from "@/components/customer-sales/bxc-consumption-view"
+import { PnsConsumptionView } from "@/components/customer-sales/pns-consumption-view"
 import { PrepaidAllSourcesOverview } from "@/components/customer-sales/prepaid-all-sources-overview"
 import {
   normalizeRegionName,
@@ -1038,13 +1038,7 @@ export function PrepaidHubView() {
               <BxcConsumptionView dateRange={dateRange} />
             </TabsContent>
             <TabsContent value="pns" className="mt-4">
-              <Card>
-                <CardContent className="py-16 flex flex-col items-center justify-center text-center gap-2">
-                  <Clock className="h-8 w-8 text-muted-foreground" />
-                  <h3 className="text-lg font-semibold text-foreground">PNS</h3>
-                  <p className="text-sm text-muted-foreground">Coming soon</p>
-                </CardContent>
-              </Card>
+              <PnsConsumptionView dateRange={dateRange} />
             </TabsContent>
           </Tabs>
         </TabsContent>
