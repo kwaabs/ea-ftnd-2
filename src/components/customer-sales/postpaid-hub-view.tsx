@@ -60,10 +60,10 @@ export function PostpaidHubView() {
       <Tabs defaultValue={initialSource} className="space-y-6">
         <TabsList className="grid w-full max-w-md grid-cols-2">
           <TabsTrigger value="zeus" className="data-[state=active]:text-blue-700">
-            Zeus
+            Non AMR Postpaid
           </TabsTrigger>
           <TabsTrigger value="amr" className="data-[state=active]:text-orange-700">
-            AMR
+            AMR Postpaid
           </TabsTrigger>
         </TabsList>
 
