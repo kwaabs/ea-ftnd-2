@@ -375,8 +375,12 @@ export function OverviewMainTabV3({
       (prepaidSalesSummary?.by_source?.bot?.kwh ?? 0) +
       (prepaidSalesSummary?.by_source?.bxc?.kwh ?? 0);
 
-    const prepaidKwh = zeusPrepaidKwh + mmsKwh + legacyKwh;
-    const total = zeusPostpaidKwh + zeusAmrKwh + prepaidKwh;
+    // "MMS Prepaid" = Zeus Prepaid (deduped against MMS) + MMS — the
+    // original two-source Prepaid definition. "Legacy Prepaid" = BOT +
+    // BXC, the newer bot-ingested legacy meter sources.
+    const mmsPrepaidKwh = zeusPrepaidKwh + mmsKwh;
+    const legacyPrepaidKwh = legacyKwh;
+    const total = zeusPostpaidKwh + zeusAmrKwh + mmsPrepaidKwh + legacyPrepaidKwh;
     if (total === 0) {
       return null;
     }
@@ -384,7 +388,8 @@ export function OverviewMainTabV3({
     return {
       zeusPostpaidKwh,
       zeusAmrKwh,
-      prepaidKwh,
+      mmsPrepaidKwh,
+      legacyPrepaidKwh,
       total,
     };
   }, [prepaidSalesSummary, postpaidSalesSummary]);
@@ -7941,7 +7946,13 @@ export function OverviewMainTabV3({
                     variant="outline"
                     className="text-[10px] gap-1 border-emerald-300 text-emerald-700"
                   >
-                    Prepaid {formatSalesKwh(energySalesBreakdown.prepaidKwh)}
+                    MMS Prepaid {formatSalesKwh(energySalesBreakdown.mmsPrepaidKwh)}
+                  </Badge>
+                  <Badge
+                    variant="outline"
+                    className="text-[10px] gap-1 border-amber-300 text-amber-700"
+                  >
+                    Legacy Prepaid {formatSalesKwh(energySalesBreakdown.legacyPrepaidKwh)}
                   </Badge>
                 </div>
               )}
@@ -8299,7 +8310,13 @@ export function OverviewMainTabV3({
                   variant="outline"
                   className="text-[10px] gap-1 border-emerald-300 text-emerald-700"
                 >
-                  Prepaid {formatSalesKwh(energySalesBreakdown.prepaidKwh)}
+                  MMS Prepaid {formatSalesKwh(energySalesBreakdown.mmsPrepaidKwh)}
+                </Badge>
+                <Badge
+                  variant="outline"
+                  className="text-[10px] gap-1 border-amber-300 text-amber-700"
+                >
+                  Legacy Prepaid {formatSalesKwh(energySalesBreakdown.legacyPrepaidKwh)}
                 </Badge>
               </div>
             )}
