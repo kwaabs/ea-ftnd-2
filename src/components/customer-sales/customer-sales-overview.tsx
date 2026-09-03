@@ -18,6 +18,7 @@ import { useZeusBillingAggregate } from "@/hooks/api/use-zeus-billing-aggregate-
 import { useMmsCustomerSalesAggregate } from "@/hooks/api/use-mms-customer-sales-aggregate-api";
 import { useBotConsumptionAggregate } from "@/hooks/api/use-bot-consumption-api";
 import { useBxcConsumptionAggregate } from "@/hooks/api/use-bxc-consumption-api";
+import { usePnsConsumptionAggregate } from "@/hooks/api/use-pns-consumption-api";
 import { normalizeRegionName, shortRegionLabel } from "@/hooks/use-resolved-region-name";
 import { cn } from "@/lib/utils";
 import {
@@ -228,6 +229,16 @@ export function CustomerSalesOverview({
     ...params,
     groupBy: "region",
   });
+  // PNS now has a real backend too, but unlike BOT/BXC its region/district
+  // are opaque codes (e.g. "10001001"), not human-readable names — see
+  // usePnsConsumptionAggregate's doc comment. So it's folded into the
+  // Legacy national/source totals below like BOT/BXC, but deliberately
+  // left OUT of combinedChartData's per-region breakdown, which would
+  // otherwise show a raw code as if it were a region.
+  const { data: pnsRegionData } = usePnsConsumptionAggregate({
+    ...params,
+    groupBy: "region",
+  });
   // District drill-down for the Postpaid/Zeus combined chart — only fetched
   // once a region is clicked.
   const { data: postpaidDistrictData, isLoading: postpaidDistrictLoading } =
@@ -395,11 +406,29 @@ export function CustomerSalesOverview({
       totalCustomers: items.reduce((s, i) => s + (i.customer_count || 0), 0),
     };
   }, [bxcRegionData]);
+  const pnsTotals = useMemo(() => {
+    const items = pnsRegionData || [];
+    return {
+      totalKwh: items.reduce((s, i) => s + (i.sum_energy_kwh || 0), 0),
+      totalCustomers: items.reduce((s, i) => s + (i.customer_count || 0), 0),
+    };
+  }, [pnsRegionData]);
 
-  // ── Data source breakdown (Zeus vs MMS) — the two underlying systems
-  // this page's data is sourced from, independent of Postpaid/Prepaid
-  // classification. Zeus here is Postpaid + Prepaid + AMR combined, since
-  // all three metermodeltype values come from the same Zeus billing feed.
+  // Legacy = BOT + BXC + PNS combined — the three legacy meter sources with
+  // a real backend today (the other 10 on the Legacy Meters tab are
+  // "coming soon" placeholders with no data to fold in yet).
+  const legacyKwh =
+    botTotals.totalKwh + bxcTotals.totalKwh + pnsTotals.totalKwh;
+  const legacyCustomers =
+    botTotals.totalCustomers + bxcTotals.totalCustomers + pnsTotals.totalCustomers;
+
+  // ── Data source breakdown (Zeus vs MMS vs Legacy) — the underlying
+  // systems this page's data is sourced from, independent of
+  // Postpaid/Prepaid classification. Zeus here is Postpaid + Prepaid + AMR
+  // combined, since all three metermodeltype values come from the same
+  // Zeus billing feed. Legacy (BOT/BXC/PNS) has no billing figure of its
+  // own — only kWh and customer counts — so it reads 0 under the Billing
+  // toggle rather than pretending to have one.
   const sourceBreakdown = useMemo(() => {
     const zeusKwh =
       zeusByServiceType.Postpaid.totalKwh +
@@ -414,20 +443,24 @@ export function CustomerSalesOverview({
       zeusByServiceType.Prepaid.totalBilling +
       zeusByServiceType.AMR.totalBilling;
     return {
-      kwh: { zeus: zeusKwh, mms: mmsStats.totalKwh },
-      customers: { zeus: zeusCustomers, mms: mmsStats.totalCustomers },
-      billing: { zeus: zeusBilling, mms: mmsStats.totalCredit },
+      kwh: { zeus: zeusKwh, mms: mmsStats.totalKwh, legacy: legacyKwh },
+      customers: {
+        zeus: zeusCustomers,
+        mms: mmsStats.totalCustomers,
+        legacy: legacyCustomers,
+      },
+      billing: { zeus: zeusBilling, mms: mmsStats.totalCredit, legacy: 0 },
     };
-  }, [zeusByServiceType, mmsStats]);
+  }, [zeusByServiceType, mmsStats, legacyKwh, legacyCustomers]);
 
   // ── Category buckets (Customer Consumption IA) ──
-  // Postpaid = Zeus Postpaid + Zeus AMR; Prepaid = Zeus Prepaid + MMS + BOT
-  // + BXC, MMS taking precedence over Zeus on any meter it already has —
-  // see zeusPrepaidDedupedNationalData's comment above for why this reads
-  // deduped totals rather than zeusByServiceType.Prepaid directly. BOT and
-  // BXC need no precedence handling: confirmed genuinely unique meters
-  // against Zeus/MMS and each other, so they're summed straight in. PNS
-  // isn't included yet — no backend for it.
+  // Postpaid = Zeus Postpaid + Zeus AMR; Prepaid = Zeus Prepaid + MMS +
+  // Legacy (BOT + BXC + PNS), MMS taking precedence over Zeus on any meter
+  // it already has — see zeusPrepaidDedupedNationalData's comment above for
+  // why this reads deduped totals rather than zeusByServiceType.Prepaid
+  // directly. Legacy needs no precedence handling: confirmed genuinely
+  // unique meters against Zeus/MMS and each other, so it's summed straight
+  // in.
   const zeusPrepaidDedupedNational = (zeusPrepaidDedupedNationalData || [])[0] || {
     sum_billconsumptionvalue: 0,
     customer_count: 0,
@@ -437,24 +470,21 @@ export function CustomerSalesOverview({
   const prepaidKwh =
     (zeusPrepaidDedupedNational.sum_billconsumptionvalue || 0) +
     mmsStats.totalKwh +
-    botTotals.totalKwh +
-    bxcTotals.totalKwh;
+    legacyKwh;
   const combinedKwh = postpaidKwh + prepaidKwh;
   const combinedCustomers =
     zeusByServiceType.Postpaid.totalCustomers +
     zeusByServiceType.AMR.totalCustomers +
     (zeusPrepaidDedupedNational.customer_count || 0) +
     mmsStats.totalCustomers +
-    botTotals.totalCustomers +
-    bxcTotals.totalCustomers;
+    legacyCustomers;
   const postpaidCustomers =
     zeusByServiceType.Postpaid.totalCustomers +
     zeusByServiceType.AMR.totalCustomers;
   const prepaidCustomers =
     (zeusPrepaidDedupedNational.customer_count || 0) +
     mmsStats.totalCustomers +
-    botTotals.totalCustomers +
-    bxcTotals.totalCustomers;
+    legacyCustomers;
 
   // Keep zeusStats as Postpaid for legacy chart sections that expect it
   const zeusStats = {
@@ -690,7 +720,7 @@ export function CustomerSalesOverview({
               <CardTitle>Data Sources</CardTitle>
               <CardDescription>
                 Where this page&apos;s figures come from — Zeus (billing, all
-                meter types) vs MMS (prepaid vending)
+                meter types), MMS (prepaid vending) and Legacy (BOT, BXC, PNS)
               </CardDescription>
             </div>
             <ToggleGroup
@@ -713,9 +743,10 @@ export function CustomerSalesOverview({
           ) : (
             (() => {
               const active = sourceBreakdown[sourceMetric];
-              const total = active.zeus + active.mms;
+              const total = active.zeus + active.mms + active.legacy;
               const zeusPct = total > 0 ? (active.zeus / total) * 100 : 0;
               const mmsPct = total > 0 ? (active.mms / total) * 100 : 0;
+              const legacyPct = total > 0 ? (active.legacy / total) * 100 : 0;
               const format =
                 sourceMetric === "kwh"
                   ? formatKwh
@@ -733,8 +764,12 @@ export function CustomerSalesOverview({
                       className="bg-green-600"
                       style={{ width: `${mmsPct}%` }}
                     />
+                    <div
+                      className="bg-amber-600"
+                      style={{ width: `${legacyPct}%` }}
+                    />
                   </div>
-                  <div className="grid grid-cols-2 gap-4 mt-3">
+                  <div className="grid grid-cols-3 gap-4 mt-3">
                     <div>
                       <div className="flex items-center gap-1.5">
                         <span className="h-2.5 w-2.5 rounded-full bg-blue-600 shrink-0" />
@@ -759,6 +794,18 @@ export function CustomerSalesOverview({
                         {format(active.mms)}
                       </div>
                     </div>
+                    <div>
+                      <div className="flex items-center gap-1.5">
+                        <span className="h-2.5 w-2.5 rounded-full bg-amber-600 shrink-0" />
+                        <span className="text-sm font-medium">Legacy</span>
+                        <span className="text-xs text-muted-foreground">
+                          {legacyPct.toFixed(1)}%
+                        </span>
+                      </div>
+                      <div className="text-xl font-bold text-amber-700 mt-0.5">
+                        {sourceMetric === "billing" ? "—" : format(active.legacy)}
+                      </div>
+                    </div>
                   </div>
                 </>
               );
@@ -772,7 +819,8 @@ export function CustomerSalesOverview({
         <CardHeader>
           <CardTitle>Consumption by Region — Postpaid vs Prepaid</CardTitle>
           <CardDescription>
-            Postpaid (Zeus + AMR) and Prepaid (Zeus + MMS) kWh per region
+            Postpaid (Zeus: AMR + Non-AMR) and Prepaid (Zeus + MMS + Legacy)
+            kWh per region
           </CardDescription>
         </CardHeader>
         <CardContent>
@@ -811,15 +859,15 @@ export function CustomerSalesOverview({
                   formatter={(value: number, name: string) => [
                     formatKwhRaw(value),
                     name === "postpaid"
-                      ? "Postpaid (Zeus + AMR)"
-                      : "Prepaid (Zeus + MMS)",
+                      ? "Postpaid (Zeus: AMR + Non-AMR)"
+                      : "Prepaid (Zeus + MMS + Legacy)",
                   ]}
                 />
                 <Legend
                   formatter={(v) =>
                     v === "postpaid"
-                      ? "Postpaid (Zeus + AMR)"
-                      : "Prepaid (Zeus + MMS)"
+                      ? "Postpaid (Zeus: AMR + Non-AMR)"
+                      : "Prepaid (Zeus + MMS + Legacy)"
                   }
                 />
                 <Bar
@@ -873,7 +921,8 @@ export function CustomerSalesOverview({
                   Region Breakdown — Combined (Postpaid + Prepaid)
                 </CardTitle>
                 <CardDescription>
-                  Postpaid (Zeus + AMR) and Prepaid (Zeus + MMS) by region
+                  Postpaid (Zeus: AMR + Non-AMR) and Prepaid (Zeus + MMS +
+                  Legacy) by region
                 </CardDescription>
               </CardHeader>
               <CardContent>

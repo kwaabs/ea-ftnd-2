@@ -62,7 +62,7 @@ export default function CustomerSalesPage() {
             Customer Consumption (Sales)
           </h2>
           <p className="text-muted-foreground mt-1">
-            Overview across Postpaid (Zeus + AMR) and Prepaid (Zeus + MMS)
+            Overview across Postpaid (Zeus: AMR + Non-AMR) and Prepaid (Zeus + MMS + Legacy)
           </p>
         </div>
 
