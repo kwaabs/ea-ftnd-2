@@ -124,6 +124,15 @@ const AMR_COLORS = [
   "#fff7ed",
 ];
 
+// Labels for the 4-series "Consumption by Region — Postpaid vs Prepaid"
+// chart's dataKeys, shared between its Tooltip and Legend formatters.
+const COMBINED_CHART_SERIES_LABELS: Record<string, string> = {
+  nonAmrPostpaid: "Non-AMR Postpaid (Zeus)",
+  amrPostpaid: "AMR Postpaid (Zeus)",
+  zeusMmsPrepaid: "Prepaid (Zeus + MMS)",
+  legacyPrepaid: "Legacy Prepaid (BOT + BXC)",
+};
+
 type ChartKind = "bar" | "area";
 
 interface RegionChartRow {
@@ -515,48 +524,75 @@ export function CustomerSalesOverview({
   // differently (e.g. "Accra East Region" vs "Accra East"), and an exact
   // match would split one real region into two bars/marquee entries.
   // Displayed via shortRegionLabel — always the suffix-free short form.
+  // Four sub-series instead of a flat postpaid/prepaid split — Non-AMR and
+  // AMR are both Zeus billing feeds (metermodeltype partitions the same
+  // table), while Zeus+MMS Prepaid and Legacy Prepaid are kept apart since
+  // MMS takes precedence over Zeus on shared meters (dedup already applied
+  // upstream via zeusPrepaidDedupedRegionData) but Legacy (BOT/BXC) never
+  // overlaps either. postpaid/prepaid are kept as derived totals so the
+  // marquee and region-breakdown table below (which only need the 2-bucket
+  // view) don't need to change. PNS is deliberately NOT folded into
+  // legacyPrepaid here — its region is an opaque code, not a name (see the
+  // pnsRegionData fetch's comment above) — so this chart's Legacy bar is
+  // BOT + BXC only; PNS still counts toward the page's Legacy totals
+  // elsewhere (Data Sources card, KPI cards).
   const combinedChartData = useMemo(() => {
-    const regionMap = new Map<
-      string,
-      { region: string; postpaid: number; prepaid: number }
-    >();
+    interface Row {
+      region: string;
+      nonAmrPostpaid: number;
+      amrPostpaid: number;
+      zeusMmsPrepaid: number;
+      legacyPrepaid: number;
+    }
+    const regionMap = new Map<string, Row>();
     const ensure = (raw: string) => {
       const key = normalizeRegionName(raw);
       if (!regionMap.has(key)) {
-        regionMap.set(key, { region: shortRegionLabel(raw), postpaid: 0, prepaid: 0 });
+        regionMap.set(key, {
+          region: shortRegionLabel(raw),
+          nonAmrPostpaid: 0,
+          amrPostpaid: 0,
+          zeusMmsPrepaid: 0,
+          legacyPrepaid: 0,
+        });
       }
       return regionMap.get(key)!;
     };
     zeusItems.forEach((i) => {
-      ensure(i.regionname || "Unknown").postpaid +=
+      ensure(i.regionname || "Unknown").nonAmrPostpaid +=
         i.sum_billconsumptionvalue || 0;
     });
     zeusAmrItems.forEach((i) => {
-      ensure(i.regionname || "Unknown").postpaid +=
+      ensure(i.regionname || "Unknown").amrPostpaid +=
         i.sum_billconsumptionvalue || 0;
     });
     // MMS-deduped Zeus Prepaid — see the note on zeusPrepaidDedupedRegionData
     // above for why this is a separate fetch rather than zeusItems-style
     // client-side filtering of the shared zeusData query.
     (zeusPrepaidDedupedRegionData || []).forEach((i) => {
-      ensure(i.regionname || "Unknown").prepaid +=
+      ensure(i.regionname || "Unknown").zeusMmsPrepaid +=
         i.sum_billconsumptionvalue || 0;
     });
     mmsItems.forEach((i) => {
-      ensure(i.region || "Unknown").prepaid += i.sum_last_month_kwh_read || 0;
+      ensure(i.region || "Unknown").zeusMmsPrepaid +=
+        i.sum_last_month_kwh_read || 0;
     });
     // BOT/BXC — confirmed genuinely unique meters against Zeus/MMS and each
-    // other, summed straight into Prepaid like MMS above (no precedence
-    // needed here, unlike the Zeus-vs-MMS dedup).
+    // other, summed straight into Legacy Prepaid (no precedence needed here,
+    // unlike the Zeus-vs-MMS dedup above).
     (botRegionData || []).forEach((i) => {
-      ensure(i.region || "Unknown").prepaid += i.sum_kwh || 0;
+      ensure(i.region || "Unknown").legacyPrepaid += i.sum_kwh || 0;
     });
     (bxcRegionData || []).forEach((i) => {
-      ensure(i.region || "Unknown").prepaid += i.sum_kwh || 0;
+      ensure(i.region || "Unknown").legacyPrepaid += i.sum_kwh || 0;
     });
-    return [...regionMap.values()].sort(
-      (a, b) => b.postpaid + b.prepaid - (a.postpaid + a.prepaid),
-    );
+    return [...regionMap.values()]
+      .map((row) => ({
+        ...row,
+        postpaid: row.nonAmrPostpaid + row.amrPostpaid,
+        prepaid: row.zeusMmsPrepaid + row.legacyPrepaid,
+      }))
+      .sort((a, b) => b.postpaid + b.prepaid - (a.postpaid + a.prepaid));
   }, [zeusItems, zeusAmrItems, zeusPrepaidDedupedRegionData, mmsItems, botRegionData, bxcRegionData]);
 
   const isLoading =
@@ -819,8 +855,8 @@ export function CustomerSalesOverview({
         <CardHeader>
           <CardTitle>Consumption by Region — Postpaid vs Prepaid</CardTitle>
           <CardDescription>
-            Postpaid (Zeus: AMR + Non-AMR) and Prepaid (Zeus + MMS + Legacy)
-            kWh per region
+            Postpaid split into Non-AMR / AMR (Zeus), Prepaid split into
+            Zeus+MMS / Legacy (BOT+BXC) — kWh per region
           </CardDescription>
         </CardHeader>
         <CardContent>
@@ -858,29 +894,39 @@ export function CustomerSalesOverview({
                 <Tooltip
                   formatter={(value: number, name: string) => [
                     formatKwhRaw(value),
-                    name === "postpaid"
-                      ? "Postpaid (Zeus: AMR + Non-AMR)"
-                      : "Prepaid (Zeus + MMS + Legacy)",
+                    COMBINED_CHART_SERIES_LABELS[name] || name,
                   ]}
                 />
                 <Legend
-                  formatter={(v) =>
-                    v === "postpaid"
-                      ? "Postpaid (Zeus: AMR + Non-AMR)"
-                      : "Prepaid (Zeus + MMS + Legacy)"
-                  }
+                  formatter={(v) => COMBINED_CHART_SERIES_LABELS[v] || v}
                 />
                 <Bar
-                  dataKey="postpaid"
+                  dataKey="nonAmrPostpaid"
+                  stackId="postpaid"
                   fill="#2563eb"
-                  radius={[4, 4, 0, 0]}
-                  name="postpaid"
+                  radius={[0, 0, 0, 0]}
+                  name="nonAmrPostpaid"
                 />
                 <Bar
-                  dataKey="prepaid"
-                  fill="#059669"
+                  dataKey="amrPostpaid"
+                  stackId="postpaid"
+                  fill="#f97316"
                   radius={[4, 4, 0, 0]}
-                  name="prepaid"
+                  name="amrPostpaid"
+                />
+                <Bar
+                  dataKey="zeusMmsPrepaid"
+                  stackId="prepaid"
+                  fill="#059669"
+                  radius={[0, 0, 0, 0]}
+                  name="zeusMmsPrepaid"
+                />
+                <Bar
+                  dataKey="legacyPrepaid"
+                  stackId="prepaid"
+                  fill="#d97706"
+                  radius={[4, 4, 0, 0]}
+                  name="legacyPrepaid"
                 />
               </BarChart>
             </ResponsiveContainer>
