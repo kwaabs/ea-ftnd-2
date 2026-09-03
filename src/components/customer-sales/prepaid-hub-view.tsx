@@ -41,6 +41,7 @@ import { MmsCustomerSalesDetail } from "@/components/customer-sales/mms-customer
 import { BotConsumptionView } from "@/components/customer-sales/bot-consumption-view"
 import { BxcConsumptionView } from "@/components/customer-sales/bxc-consumption-view"
 import { PnsConsumptionView } from "@/components/customer-sales/pns-consumption-view"
+import { LegacyMeterComingSoon } from "@/components/customer-sales/legacy-meter-coming-soon"
 import { PrepaidAllSourcesOverview } from "@/components/customer-sales/prepaid-all-sources-overview"
 import {
   normalizeRegionName,
@@ -1026,10 +1027,20 @@ export function PrepaidHubView() {
 
         <TabsContent value="legacy-meters" className="mt-4">
           <Tabs defaultValue="bot">
-            <TabsList className="grid w-full max-w-md grid-cols-3">
-              <TabsTrigger value="bot">BOT</TabsTrigger>
-              <TabsTrigger value="bxc">BXC</TabsTrigger>
-              <TabsTrigger value="pns">PNS</TabsTrigger>
+            <TabsList className="flex h-auto w-full max-w-none flex-wrap justify-start gap-1 p-1">
+              <TabsTrigger value="bot" className="flex-none">BOT</TabsTrigger>
+              <TabsTrigger value="bxc" className="flex-none">BXC</TabsTrigger>
+              <TabsTrigger value="pns" className="flex-none">PNS</TabsTrigger>
+              <TabsTrigger value="ecash13" className="flex-none">ECASH 1&amp;3</TabsTrigger>
+              <TabsTrigger value="holley" className="flex-none">HOLLEY</TabsTrigger>
+              <TabsTrigger value="imes" className="flex-none">IMES</TabsTrigger>
+              <TabsTrigger value="clou" className="flex-none">CLOU</TabsTrigger>
+              <TabsTrigger value="mbh" className="flex-none">MBH</TabsTrigger>
+              <TabsTrigger value="ecash4" className="flex-none">ECASH 4</TabsTrigger>
+              <TabsTrigger value="smartg" className="flex-none">SMART G</TabsTrigger>
+              <TabsTrigger value="alphaliberty" className="flex-none">ALPHA LIBERTY</TabsTrigger>
+              <TabsTrigger value="inest" className="flex-none">INEST</TabsTrigger>
+              <TabsTrigger value="nuri" className="flex-none">NURI</TabsTrigger>
             </TabsList>
             <TabsContent value="bot" className="mt-4">
               <BotConsumptionView dateRange={dateRange} />
@@ -1039,6 +1050,36 @@ export function PrepaidHubView() {
             </TabsContent>
             <TabsContent value="pns" className="mt-4">
               <PnsConsumptionView dateRange={dateRange} />
+            </TabsContent>
+            <TabsContent value="ecash13" className="mt-4">
+              <LegacyMeterComingSoon name="ECASH 1&3" />
+            </TabsContent>
+            <TabsContent value="holley" className="mt-4">
+              <LegacyMeterComingSoon name="HOLLEY" />
+            </TabsContent>
+            <TabsContent value="imes" className="mt-4">
+              <LegacyMeterComingSoon name="IMES" />
+            </TabsContent>
+            <TabsContent value="clou" className="mt-4">
+              <LegacyMeterComingSoon name="CLOU" />
+            </TabsContent>
+            <TabsContent value="mbh" className="mt-4">
+              <LegacyMeterComingSoon name="MBH" />
+            </TabsContent>
+            <TabsContent value="ecash4" className="mt-4">
+              <LegacyMeterComingSoon name="ECASH 4" />
+            </TabsContent>
+            <TabsContent value="smartg" className="mt-4">
+              <LegacyMeterComingSoon name="SMART G" />
+            </TabsContent>
+            <TabsContent value="alphaliberty" className="mt-4">
+              <LegacyMeterComingSoon name="ALPHA LIBERTY" />
+            </TabsContent>
+            <TabsContent value="inest" className="mt-4">
+              <LegacyMeterComingSoon name="INEST" />
+            </TabsContent>
+            <TabsContent value="nuri" className="mt-4">
+              <LegacyMeterComingSoon name="NURI" />
             </TabsContent>
           </Tabs>
         </TabsContent>
