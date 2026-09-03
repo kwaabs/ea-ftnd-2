@@ -5,6 +5,7 @@ import { useSearchParams } from "next/navigation"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { ZeusPageView } from "@/components/customer-sales/zeus-page-view"
 import { AmrPageView } from "@/components/amr/amr-page-view"
+import { PostpaidAllSourcesOverview } from "@/components/customer-sales/postpaid-all-sources-overview"
 import { useAppStore } from "@/stores/app-store"
 
 function formatDateToString(
@@ -43,7 +44,9 @@ export function PostpaidHubView() {
 
   const initialSource = useMemo(() => {
     const raw = (searchParams.get("source") || "").toLowerCase()
-    return raw === "amr" ? "amr" : "zeus"
+    if (raw === "amr") return "amr"
+    if (raw === "zeus" || raw === "non-amr") return "zeus"
+    return "overview"
   }, [searchParams])
 
   return (
@@ -58,7 +61,8 @@ export function PostpaidHubView() {
       </div>
 
       <Tabs defaultValue={initialSource} className="space-y-6">
-        <TabsList className="grid w-full max-w-md grid-cols-2">
+        <TabsList className="grid w-full max-w-lg grid-cols-3">
+          <TabsTrigger value="overview">Overview</TabsTrigger>
           <TabsTrigger value="zeus" className="data-[state=active]:text-blue-700">
             Non AMR Postpaid
           </TabsTrigger>
@@ -66,6 +70,10 @@ export function PostpaidHubView() {
             AMR Postpaid
           </TabsTrigger>
         </TabsList>
+
+        <TabsContent value="overview" className="mt-0">
+          <PostpaidAllSourcesOverview dateRange={dateRange} region={region} district={district} />
+        </TabsContent>
 
         <TabsContent value="zeus" className="mt-0">
           <ZeusPageView
