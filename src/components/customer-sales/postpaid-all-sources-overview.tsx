@@ -1,7 +1,7 @@
 "use client"
 
 import { useMemo, useState } from "react"
-import { BarChart3, Scale, Trophy, Users, Zap } from "lucide-react"
+import { BarChart3, PercentCircle, Scale, Users, Zap } from "lucide-react"
 import {
   Bar,
   BarChart,
@@ -186,8 +186,8 @@ export function PostpaidAllSourcesOverview({ dateRange, region, district }: Post
     const totalCustomers = bySource.reduce((s, x) => s + x.customers, 0)
     const totalBilling = bySource.reduce((s, x) => s + x.billing, 0)
     const totalDebt = bySource.reduce((s, x) => s + x.debt, 0)
-    const leading = bySource.find((x) => x.kwh > 0)
-    return { totalKwh, totalCustomers, totalBilling, totalDebt, leadingSource: leading?.source ?? "—" }
+    const debtRatio = totalBilling > 0 ? (totalDebt / totalBilling) * 100 : 0
+    return { totalKwh, totalCustomers, totalBilling, totalDebt, debtRatio }
   }, [bySource])
 
   // Zeus's regionname convention (e.g. a trailing "Region" suffix) is
@@ -307,19 +307,16 @@ export function PostpaidAllSourcesOverview({ dateRange, region, district }: Post
         <Card>
           <CardContent className="pt-5">
             <p className="text-xs text-muted-foreground mb-1 flex items-center gap-1">
-              <Trophy className="h-3.5 w-3.5" /> Leading source
+              <PercentCircle className="h-3.5 w-3.5" /> Debt ratio
             </p>
             {regionLoading ? (
-              <Skeleton className="h-8 w-28" />
+              <Skeleton className="h-8 w-24" />
             ) : (
-              <p
-                className="text-2xl font-bold tabular-nums"
-                style={{ color: stats.leadingSource !== "—" ? SOURCE_COLORS[stats.leadingSource as Source] : undefined }}
-              >
-                {stats.leadingSource}
+              <p className="text-2xl font-bold text-rose-700 tabular-nums">
+                {stats.debtRatio.toFixed(1)}%
               </p>
             )}
-            <p className="text-xs text-muted-foreground mt-1">By total consumption</p>
+            <p className="text-xs text-muted-foreground mt-1">Debt as a share of billing</p>
           </CardContent>
         </Card>
       </div>
