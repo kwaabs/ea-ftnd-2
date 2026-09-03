@@ -1022,6 +1022,44 @@ export function PrepaidHubView() {
           />
         </TabsContent>
       </Tabs>
+
+      {/* Records with no region on file at all — the same "Unknown"
+          bucket the region breakdown table above groups into one row.
+          Always shown here (not gated behind clicking that row) so gaps
+          in region data are visible without having to know to click it.
+          region="Unknown" is a real, working filter value now — the
+          backend treats it as "region IS NULL OR blank" rather than a
+          literal string match (ea-bknd-3 dbx.InLowerOrBlank). */}
+      <Card>
+        <CardHeader>
+          <CardTitle>Unknown region records</CardTitle>
+          <CardDescription>
+            Zeus and MMS records with no region on file — worth a data-quality look
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          <Tabs defaultValue="zeus-unknown">
+            <TabsList className="grid w-full max-w-md grid-cols-2">
+              <TabsTrigger value="zeus-unknown" className="data-[state=active]:text-emerald-700">
+                Zeus Prepaid
+              </TabsTrigger>
+              <TabsTrigger value="mms-unknown" className="data-[state=active]:text-green-700">
+                MMS
+              </TabsTrigger>
+            </TabsList>
+            <TabsContent value="zeus-unknown" className="mt-4">
+              <CustomerSalesDetail
+                dateRange={dateRange}
+                region="Unknown"
+                serviceType="Prepaid"
+              />
+            </TabsContent>
+            <TabsContent value="mms-unknown" className="mt-4">
+              <MmsCustomerSalesDetail dateRange={dateRange} region="Unknown" />
+            </TabsContent>
+          </Tabs>
+        </CardContent>
+      </Card>
         </TabsContent>
 
         <TabsContent value="legacy-meters" className="mt-4">
