@@ -90,6 +90,11 @@ export interface EtlTestQueryResult {
   elapsed_ms: number
 }
 
+export interface EtlDestColumnInfo {
+  name: string
+  data_type: string
+}
+
 /** Same pattern as use-meters-admin-api.ts / use-express-feeders-admin-api.ts. */
 function authHeaders(): HeadersInit {
   const token = useUserStore.getState().token
@@ -266,6 +271,43 @@ export function useEtlJobState(jobId: string | null) {
       return response.json()
     },
     enabled: Boolean(jobId),
+  })
+}
+
+// ---------------------------------------------------------------------
+// Destination table/column discovery — feeds the Job form's destination
+// table picker and its source -> destination column mapping step.
+// ---------------------------------------------------------------------
+
+export function useEtlDestTables(schema: string) {
+  return useQuery<{ data: string[] }>({
+    queryKey: ["etl-dest-tables", schema],
+    queryFn: async () => {
+      const response = await fetch(
+        `${API_BASE_URL}/api/v1/etl/admin/dest-tables?schema=${encodeURIComponent(schema)}`,
+        { headers: authHeaders() },
+      )
+      if (!response.ok) throw new Error(await readError(response))
+      return response.json()
+    },
+    enabled: Boolean(schema),
+    staleTime: 30 * 1000,
+  })
+}
+
+export function useEtlDestTableColumns(schema: string, table: string | null) {
+  return useQuery<{ data: EtlDestColumnInfo[] }>({
+    queryKey: ["etl-dest-table-columns", schema, table],
+    queryFn: async () => {
+      const response = await fetch(
+        `${API_BASE_URL}/api/v1/etl/admin/dest-tables/${encodeURIComponent(table as string)}/columns?schema=${encodeURIComponent(schema)}`,
+        { headers: authHeaders() },
+      )
+      if (!response.ok) throw new Error(await readError(response))
+      return response.json()
+    },
+    enabled: Boolean(schema) && Boolean(table),
+    staleTime: 30 * 1000,
   })
 }
 

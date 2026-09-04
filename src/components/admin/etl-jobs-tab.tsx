@@ -38,14 +38,27 @@ import {
   deleteEtlJob,
   runEtlJobNow,
   updateEtlJob,
+  useEtlDestTableColumns,
+  useEtlDestTables,
   useEtlJobRuns,
   useEtlJobState,
   useEtlJobs,
   useEtlSources,
   type EtlJobInput,
   type EtlJobRecord,
+  type EtlTestQueryResult,
   type EtlWatermarkType,
 } from "@/hooks/api/use-etl-admin-api"
+
+type JobWizardStep = 1 | 2 | 3 | 4 | 5
+
+const WIZARD_STEPS: { step: JobWizardStep; label: string }[] = [
+  { step: 1, label: "Basics" },
+  { step: 2, label: "Source query" },
+  { step: 3, label: "Destination table" },
+  { step: 4, label: "Column mapping" },
+  { step: 5, label: "Review & save" },
+]
 
 const EMPTY_FORM: EtlJobInput = {
   name: "",
@@ -125,13 +138,46 @@ export function EtlJobsTab() {
   const [dialogOpen, setDialogOpen] = useState(false)
   const [editingId, setEditingId] = useState<string | null>(null)
   const [form, setForm] = useState<EtlJobInput>(EMPTY_FORM)
-  const [destColumnsText, setDestColumnsText] = useState("")
   const [triggerTimesText, setTriggerTimesText] = useState("")
   const [submitting, setSubmitting] = useState(false)
   const [formError, setFormError] = useState<string | null>(null)
   const [deletingId, setDeletingId] = useState<string | null>(null)
   const [runningId, setRunningId] = useState<string | null>(null)
   const [runFeedback, setRunFeedback] = useState<Record<string, string>>({})
+
+  // ---- Job wizard state -------------------------------------------------
+  // Step 4 (column mapping) needs the source query's actual result columns
+  // — not something typed in, run for real via Test query so the mapping
+  // is against columns that actually exist. sourceColumns/testedQuery
+  // together guard against a stale mapping: if the query text changes
+  // after a test, testedQuery no longer matches form.source_query and
+  // step 2 blocks Next until it's re-tested.
+  const [step, setStep] = useState<JobWizardStep>(1)
+  const [maxStepReached, setMaxStepReached] = useState<JobWizardStep>(1)
+  const [sourceColumns, setSourceColumns] = useState<string[]>([])
+  const [testedQuery, setTestedQuery] = useState<string | null>(null)
+  // Parallel to sourceColumns — mapping[i] is the destination column
+  // sourceColumns[i] loads into (or null while unmapped).
+  const [mapping, setMapping] = useState<(string | null)[]>([])
+  // When editing an existing job, its current dest_columns are a
+  // best-effort prefill for the mapping once a fresh test tells us how
+  // many source columns there are and confirms the count still matches.
+  const [prefillDestColumns, setPrefillDestColumns] = useState<string[] | null>(null)
+  const [useCustomTableName, setUseCustomTableName] = useState(false)
+
+  const { data: destTablesData } = useEtlDestTables(form.dest_schema)
+  const destTables = destTablesData?.data ?? []
+  const { data: destTableColumnsData, isLoading: destColumnsLoading } = useEtlDestTableColumns(
+    form.dest_schema,
+    form.dest_table || null,
+  )
+  const destTableColumns = destTableColumnsData?.data ?? []
+  const destTableColumnNames = destTableColumns.map((c) => c.name)
+
+  // The job's actual dest_columns — always derived from the mapping, never
+  // typed twice. Used for the mapping step itself, the watermark/conflict
+  // pickers in Review, and the final submit payload.
+  const destColumns = mapping.filter((c): c is string => Boolean(c && c.trim()))
 
   const [runsJobId, setRunsJobId] = useState<string | null>(null)
   const runsJob = jobs.find((j) => j.id === runsJobId) ?? null
@@ -140,12 +186,6 @@ export function EtlJobsTab() {
 
   const setField = <K extends keyof EtlJobInput>(key: K, value: EtlJobInput[K]) =>
     setForm((f) => ({ ...f, [key]: value }))
-
-  // watermark_column and conflict_columns must both be a subset of
-  // dest_columns (enforced server-side too) — deriving the picker options
-  // straight from what's typed into Columns means there's no column name
-  // to mistype a second time, and no way for the two to drift apart.
-  const destColumnsList = parseCsv(destColumnsText)
 
   const toggleConflictColumn = (col: string) => {
     setForm((f) => ({
@@ -156,13 +196,44 @@ export function EtlJobsTab() {
     }))
   }
 
+  const handleQueryTestResult = (result: EtlTestQueryResult | null, forQuery: string) => {
+    if (!result) return
+    setSourceColumns(result.columns)
+    setTestedQuery(forQuery)
+    setMapping(
+      prefillDestColumns && prefillDestColumns.length === result.columns.length
+        ? prefillDestColumns
+        : result.columns.map(() => null),
+    )
+    setPrefillDestColumns(null)
+  }
+
+  const setMappingAt = (i: number, value: string) => setMapping((m) => m.map((v, idx) => (idx === i ? value : v)))
+
+  // Changing the destination table invalidates whatever was mapped against
+  // the previous table's columns.
+  const handleDestTableChange = (table: string) => {
+    setField("dest_table", table)
+    setMapping(sourceColumns.map(() => null))
+  }
+
   const invalidate = () => queryClient.invalidateQueries({ queryKey: ["etl-jobs"] })
+
+  const resetWizard = () => {
+    setStep(1)
+    setMaxStepReached(1)
+    setSourceColumns([])
+    setTestedQuery(null)
+    setMapping([])
+    setUseCustomTableName(false)
+  }
 
   const openAdd = () => {
     setEditingId(null)
     setForm(EMPTY_FORM)
-    setDestColumnsText("")
     setTriggerTimesText("")
+    setPrefillDestColumns(null)
+    resetWizard()
     setFormError(null)
     setDialogOpen(true)
   }
@@ -171,26 +242,56 @@ export function EtlJobsTab() {
     setEditingId(j.id)
     const f = jobToForm(j)
     setForm(f)
-    setDestColumnsText(f.dest_columns.join(", "))
     setTriggerTimesText(f.trigger_times.join(", "))
+    setPrefillDestColumns(f.dest_columns.length > 0 ? f.dest_columns : null)
+    resetWizard()
     setFormError(null)
     setDialogOpen(true)
   }
 
+  const canProceed = (s: JobWizardStep): boolean => {
+    switch (s) {
+      case 1:
+        return Boolean(form.name.trim() && form.source_id && parseCsv(triggerTimesText).length > 0)
+      case 2:
+        return Boolean(form.source_query.trim() && testedQuery === form.source_query && sourceColumns.length > 0)
+      case 3:
+        return Boolean(form.dest_schema.trim() && form.dest_table.trim())
+      case 4:
+        return (
+          mapping.length === sourceColumns.length &&
+          mapping.every((v) => v && v.trim()) &&
+          new Set(mapping).size === mapping.length
+        )
+      default:
+        return true
+    }
+  }
+
+  const goNext = () => {
+    if (!canProceed(step)) return
+    const next = (step + 1) as JobWizardStep
+    setStep(next)
+    setMaxStepReached((m) => (next > m ? next : m))
+  }
+
+  const goToStep = (s: JobWizardStep) => {
+    if (s <= maxStepReached) setStep(s)
+  }
+
   const handleSubmit = async () => {
-    const destColumns = parseCsv(destColumnsText)
     const triggerTimes = parseCsv(triggerTimesText)
-    // Drop any picked conflict column that's no longer in Columns (e.g. the
-    // user checked it, then edited Columns to remove it) rather than
-    // submitting a stale value the backend would reject.
+    // Drop any picked conflict column that's no longer part of the mapping
+    // (e.g. the user checked it, then went back and remapped that source
+    // column elsewhere) rather than submitting a stale value.
     const conflictColumns = form.conflict_columns.filter((c) => destColumns.includes(c))
 
     if (!form.name.trim() || !form.source_id || !form.source_query.trim() || !form.dest_table.trim()) {
       setFormError("Name, source, source query, and destination table are all required")
       return
     }
-    if (destColumns.length === 0) {
-      setFormError("Destination columns must have at least one entry")
+    if (destColumns.length === 0 || destColumns.length !== sourceColumns.length) {
+      setFormError("Map every source column to a destination column first")
       return
     }
     if (triggerTimes.length === 0) {
@@ -202,7 +303,7 @@ export function EtlJobsTab() {
       return
     }
     if (form.mode === "incremental" && form.watermark_column && !destColumns.includes(form.watermark_column)) {
-      setFormError("Watermark column must be one of the destination columns")
+      setFormError("Watermark column must be one of the mapped destination columns")
       return
     }
 
@@ -286,167 +387,76 @@ export function EtlJobsTab() {
               </DialogDescription>
             </DialogHeader>
 
-            <div className="space-y-5">
-              <div className="grid grid-cols-2 gap-3">
-                <div className="space-y-1">
-                  <label className="text-xs text-muted-foreground">Name *</label>
-                  <Input value={form.name} onChange={(e) => setField("name", e.target.value)} />
-                </div>
-                <div className="space-y-1">
-                  <label className="text-xs text-muted-foreground">Source *</label>
-                  <Select value={form.source_id} onValueChange={(v) => setField("source_id", v)}>
-                    <SelectTrigger>
-                      <SelectValue placeholder="Choose a source" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {sources.map((s) => (
-                        <SelectItem key={s.id} value={s.id}>
-                          {s.name} ({s.kind})
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
-              </div>
-
-              <div className="space-y-2 rounded-md border p-3">
-                <p className="text-xs font-medium text-muted-foreground">
-                  Source query * — SELECT only. For an incremental job, include the literal token{" "}
-                  <code className="font-mono">{"{{WATERMARK}}"}</code> and{" "}
-                  <code className="font-mono">ORDER BY</code> the watermark column ascending.
-                </p>
-                <Textarea
-                  value={form.source_query}
-                  onChange={(e) => setField("source_query", e.target.value)}
-                  placeholder="SELECT id, amount, updated_at FROM invoices WHERE updated_at > {{WATERMARK}} ORDER BY updated_at"
-                  className="font-mono text-xs min-h-[90px]"
-                />
-                {form.source_id ? (
-                  <details className="pt-1">
-                    <summary className="text-xs text-primary cursor-pointer select-none">
-                      Test this query
-                    </summary>
-                    <div className="pt-2">
-                      <EtlQueryConsole
-                        sources={sources}
-                        sourceId={form.source_id}
-                        onSourceIdChange={(v) => setField("source_id", v)}
-                        query={form.source_query}
-                        onQueryChange={(v) => setField("source_query", v)}
-                        embedded
-                      />
-                    </div>
-                  </details>
-                ) : (
-                  <p className="text-xs text-muted-foreground">Choose a source above to test this query.</p>
-                )}
-              </div>
-
-              <div className="space-y-2">
-                <p className="text-xs font-medium text-muted-foreground">Destination</p>
-                <div className="grid grid-cols-2 gap-3">
-                  <div className="space-y-1">
-                    <label className="text-xs text-muted-foreground">Schema</label>
-                    <Input value={form.dest_schema} onChange={(e) => setField("dest_schema", e.target.value)} />
-                  </div>
-                  <div className="space-y-1">
-                    <label className="text-xs text-muted-foreground">Table *</label>
-                    <Input value={form.dest_table} onChange={(e) => setField("dest_table", e.target.value)} />
-                  </div>
-                  <div className="col-span-2 space-y-1">
-                    <label className="text-xs text-muted-foreground">
-                      Columns * (comma-separated, in the same order as the SELECT list)
-                    </label>
-                    <Input
-                      value={destColumnsText}
-                      onChange={(e) => setDestColumnsText(e.target.value)}
-                      placeholder="id, amount, updated_at"
-                    />
-                  </div>
-                  <div className="col-span-2 space-y-1">
-                    <label className="text-xs text-muted-foreground">
-                      Conflict columns (optional — upsert key; leave unchecked to plain-append every run)
-                    </label>
-                    {destColumnsList.length === 0 ? (
-                      <p className="text-xs text-muted-foreground">Enter destination columns above to pick from them.</p>
+            <div className="flex flex-wrap items-center gap-x-1 gap-y-1.5 border-b pb-3">
+              {WIZARD_STEPS.map(({ step: s, label }, i) => (
+                <div key={s} className="flex items-center gap-1">
+                  <button
+                    type="button"
+                    onClick={() => goToStep(s)}
+                    disabled={s > maxStepReached}
+                    className={
+                      "flex items-center gap-1.5 rounded-full px-2.5 py-1 text-xs whitespace-nowrap transition-colors " +
+                      (s === step
+                        ? "bg-primary text-primary-foreground"
+                        : s <= maxStepReached
+                          ? "text-muted-foreground hover:bg-muted cursor-pointer"
+                          : "text-muted-foreground/40 cursor-not-allowed")
+                    }
+                  >
+                    {s < maxStepReached ? (
+                      <CheckCircle2 className="h-3 w-3" />
                     ) : (
-                      <div className="flex flex-wrap gap-3 rounded-md border p-2">
-                        {destColumnsList.map((col) => (
-                          <label key={col} className="flex items-center gap-1.5 text-xs">
-                            <Checkbox
-                              checked={form.conflict_columns.includes(col)}
-                              onCheckedChange={() => toggleConflictColumn(col)}
-                            />
-                            {col}
-                          </label>
-                        ))}
-                      </div>
+                      <span className="tabular-nums">{s}</span>
                     )}
-                  </div>
+                    {label}
+                  </button>
+                  {i < WIZARD_STEPS.length - 1 && <span className="text-muted-foreground/30">›</span>}
                 </div>
-              </div>
+              ))}
+            </div>
 
-              <div className="space-y-2">
-                <p className="text-xs font-medium text-muted-foreground">Mode</p>
+            {step === 1 && (
+              <div className="space-y-5">
                 <div className="grid grid-cols-2 gap-3">
                   <div className="space-y-1">
-                    <label className="text-xs text-muted-foreground">Mode *</label>
-                    <Select value={form.mode} onValueChange={(v) => setField("mode", v as EtlJobInput["mode"])}>
+                    <label className="text-xs text-muted-foreground">Name *</label>
+                    <Input value={form.name} onChange={(e) => setField("name", e.target.value)} />
+                  </div>
+                  <div className="space-y-1">
+                    <label className="text-xs text-muted-foreground">Source *</label>
+                    <Select value={form.source_id} onValueChange={(v) => setField("source_id", v)}>
                       <SelectTrigger>
-                        <SelectValue />
+                        <SelectValue placeholder="Choose a source" />
                       </SelectTrigger>
                       <SelectContent>
-                        <SelectItem value="full_refresh">Full refresh</SelectItem>
-                        <SelectItem value="incremental">Incremental</SelectItem>
+                        {sources.map((s) => (
+                          <SelectItem key={s.id} value={s.id}>
+                            {s.name} ({s.kind})
+                          </SelectItem>
+                        ))}
                       </SelectContent>
                     </Select>
                   </div>
-                  {form.mode === "incremental" && (
-                    <>
-                      <div className="space-y-1">
-                        <label className="text-xs text-muted-foreground">Watermark column *</label>
-                        <Select
-                          value={form.watermark_column ?? undefined}
-                          onValueChange={(v) => setField("watermark_column", v)}
-                          disabled={destColumnsList.length === 0}
-                        >
-                          <SelectTrigger>
-                            <SelectValue
-                              placeholder={destColumnsList.length === 0 ? "Enter destination columns first" : "Choose a column"}
-                            />
-                          </SelectTrigger>
-                          <SelectContent>
-                            {destColumnsList.map((col) => (
-                              <SelectItem key={col} value={col}>
-                                {col}
-                              </SelectItem>
-                            ))}
-                          </SelectContent>
-                        </Select>
-                      </div>
-                      <div className="space-y-1">
-                        <label className="text-xs text-muted-foreground">Watermark type *</label>
-                        <Select
-                          value={form.watermark_type ?? undefined}
-                          onValueChange={(v) => setField("watermark_type", v as EtlWatermarkType)}
-                        >
-                          <SelectTrigger>
-                            <SelectValue placeholder="Choose a type" />
-                          </SelectTrigger>
-                          <SelectContent>
-                            <SelectItem value="timestamp">Timestamp</SelectItem>
-                            <SelectItem value="integer">Integer</SelectItem>
-                            <SelectItem value="string">String</SelectItem>
-                          </SelectContent>
-                        </Select>
-                      </div>
-                    </>
-                  )}
                 </div>
-              </div>
 
-              <div className="space-y-2">
-                <p className="text-xs font-medium text-muted-foreground">Schedule &amp; limits</p>
+                <div className="space-y-1">
+                  <label className="text-xs text-muted-foreground">Mode *</label>
+                  <Select value={form.mode} onValueChange={(v) => setField("mode", v as EtlJobInput["mode"])}>
+                    <SelectTrigger className="w-[220px]">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="full_refresh">Full refresh</SelectItem>
+                      <SelectItem value="incremental">Incremental</SelectItem>
+                    </SelectContent>
+                  </Select>
+                  <p className="text-xs text-muted-foreground">
+                    {form.mode === "incremental"
+                      ? "You'll pick the watermark column once the destination mapping is set, later in this form."
+                      : "Every run reloads the full result set."}
+                  </p>
+                </div>
+
                 <div className="grid grid-cols-3 gap-3">
                   <div className="col-span-2 space-y-1">
                     <label className="text-xs text-muted-foreground">
@@ -475,34 +485,293 @@ export function EtlJobsTab() {
                     />
                   </div>
                 </div>
-              </div>
 
-              <div className="flex items-center justify-between rounded-md border px-3 py-2">
-                <div>
-                  <p className="text-sm font-medium">Enabled</p>
-                  <p className="text-xs text-muted-foreground">
-                    Off by default — flip on once you&apos;ve tested the query and run it manually.
-                  </p>
+                <div className="flex items-center justify-between rounded-md border px-3 py-2">
+                  <div>
+                    <p className="text-sm font-medium">Enabled</p>
+                    <p className="text-xs text-muted-foreground">
+                      Off by default — flip on once you&apos;ve tested the query and run it manually.
+                    </p>
+                  </div>
+                  <Switch checked={form.enabled} onCheckedChange={(v) => setField("enabled", v)} />
                 </div>
-                <Switch checked={form.enabled} onCheckedChange={(v) => setField("enabled", v)} />
               </div>
+            )}
 
-              {formError && <p className="text-xs text-red-600">{formError}</p>}
-            </div>
-
-            <DialogFooter>
-              <Button type="button" onClick={handleSubmit} disabled={submitting}>
-                {submitting ? (
-                  <>
-                    <Loader2 className="h-3.5 w-3.5 mr-1.5 animate-spin" />
-                    Saving…
-                  </>
-                ) : editingId ? (
-                  "Save changes"
+            {step === 2 && (
+              <div className="space-y-2 rounded-md border p-3">
+                <p className="text-xs font-medium text-muted-foreground">
+                  Source query * — SELECT only. For an incremental job, include the literal token{" "}
+                  <code className="font-mono">{"{{WATERMARK}}"}</code> and{" "}
+                  <code className="font-mono">ORDER BY</code> the watermark column ascending.
+                </p>
+                <Textarea
+                  value={form.source_query}
+                  onChange={(e) => setField("source_query", e.target.value)}
+                  placeholder="SELECT id, amount, updated_at FROM invoices WHERE updated_at > {{WATERMARK}} ORDER BY updated_at"
+                  className="font-mono text-xs min-h-[90px]"
+                />
+                <EtlQueryConsole
+                  sources={sources}
+                  sourceId={form.source_id}
+                  onSourceIdChange={(v) => setField("source_id", v)}
+                  query={form.source_query}
+                  onQueryChange={(v) => setField("source_query", v)}
+                  onResult={handleQueryTestResult}
+                  embedded
+                />
+                {testedQuery === form.source_query && sourceColumns.length > 0 ? (
+                  <p className="text-xs text-emerald-700">
+                    {sourceColumns.length} column{sourceColumns.length === 1 ? "" : "s"} detected:{" "}
+                    <span className="font-mono">{sourceColumns.join(", ")}</span>
+                  </p>
                 ) : (
-                  "Create job"
+                  <p className="text-xs text-amber-700">
+                    Run the test above — this step needs the query&apos;s real columns to build the
+                    mapping next.
+                  </p>
                 )}
-              </Button>
+              </div>
+            )}
+
+            {step === 3 && (
+              <div className="space-y-3">
+                <div className="grid grid-cols-2 gap-3">
+                  <div className="space-y-1">
+                    <label className="text-xs text-muted-foreground">Schema</label>
+                    <Input
+                      value={form.dest_schema}
+                      onChange={(e) => {
+                        setField("dest_schema", e.target.value)
+                        handleDestTableChange("")
+                      }}
+                    />
+                  </div>
+                  <div className="space-y-1">
+                    <div className="flex items-center justify-between">
+                      <label className="text-xs text-muted-foreground">Table *</label>
+                      <button
+                        type="button"
+                        className="text-xs text-primary"
+                        onClick={() => setUseCustomTableName((v) => !v)}
+                      >
+                        {useCustomTableName ? "Choose from list instead" : "Can't find it? Type it"}
+                      </button>
+                    </div>
+                    {useCustomTableName ? (
+                      <Input
+                        value={form.dest_table}
+                        onChange={(e) => handleDestTableChange(e.target.value)}
+                        placeholder="table_name"
+                      />
+                    ) : (
+                      <Select
+                        value={form.dest_table || undefined}
+                        onValueChange={handleDestTableChange}
+                        disabled={destTables.length === 0}
+                      >
+                        <SelectTrigger>
+                          <SelectValue
+                            placeholder={destTables.length === 0 ? "No tables found in this schema" : "Choose a table"}
+                          />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {destTables.map((t) => (
+                            <SelectItem key={t} value={t}>
+                              {t}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    )}
+                  </div>
+                </div>
+                {form.dest_table && (
+                  <p className="text-xs text-muted-foreground">
+                    {destColumnsLoading
+                      ? "Loading columns…"
+                      : destTableColumnNames.length > 0
+                        ? `${destTableColumnNames.length} column(s) found — you'll match them to the source query's columns next.`
+                        : "No existing columns found for this table (maybe it hasn't been created yet) — you'll type destination column names manually in the mapping step."}
+                  </p>
+                )}
+              </div>
+            )}
+
+            {step === 4 && (
+              <div className="space-y-3">
+                <p className="text-xs text-muted-foreground">
+                  Match each column the source query returns to a column on{" "}
+                  <span className="font-mono">
+                    {form.dest_schema}.{form.dest_table}
+                  </span>
+                  . Every source column needs a destination — that&apos;s what gets loaded, in this
+                  order.
+                </p>
+                <div className="rounded-md border divide-y">
+                  {sourceColumns.map((sc, i) => {
+                    const usingSelect = destTableColumnNames.length > 0
+                    const available = destTableColumnNames.filter(
+                      (name) => mapping[i] === name || !mapping.includes(name),
+                    )
+                    return (
+                      <div key={`${sc}-${i}`} className="grid grid-cols-[1fr_auto_1fr] items-center gap-2 p-2.5">
+                        <span className="text-xs font-mono truncate" title={sc}>
+                          {sc}
+                        </span>
+                        <span className="text-muted-foreground text-xs">→</span>
+                        {usingSelect ? (
+                          <Select value={mapping[i] ?? undefined} onValueChange={(v) => setMappingAt(i, v)}>
+                            <SelectTrigger className="h-8">
+                              <SelectValue placeholder="Choose a column" />
+                            </SelectTrigger>
+                            <SelectContent>
+                              {available.map((name) => {
+                                const info = destTableColumns.find((c) => c.name === name)
+                                return (
+                                  <SelectItem key={name} value={name}>
+                                    {name}
+                                    {info ? ` — ${info.data_type}` : ""}
+                                  </SelectItem>
+                                )
+                              })}
+                            </SelectContent>
+                          </Select>
+                        ) : (
+                          <Input
+                            className="h-8"
+                            value={mapping[i] ?? ""}
+                            onChange={(e) => setMappingAt(i, e.target.value)}
+                            placeholder="destination_column_name"
+                          />
+                        )}
+                      </div>
+                    )
+                  })}
+                </div>
+                {mapping.some((v) => v && mapping.filter((x) => x === v).length > 1) && (
+                  <p className="text-xs text-red-600">Each destination column can only be used once.</p>
+                )}
+              </div>
+            )}
+
+            {step === 5 && (
+              <div className="space-y-5">
+                <div className="space-y-1.5 rounded-md border p-3 text-xs">
+                  <p>
+                    <span className="text-muted-foreground">Name:</span> {form.name}
+                  </p>
+                  <p>
+                    <span className="text-muted-foreground">Source:</span> {sourceName(form.source_id)}
+                  </p>
+                  <p>
+                    <span className="text-muted-foreground">Destination:</span>{" "}
+                    <span className="font-mono">
+                      {form.dest_schema}.{form.dest_table}
+                    </span>
+                  </p>
+                  <p>
+                    <span className="text-muted-foreground">Mode:</span>{" "}
+                    {form.mode === "incremental" ? "Incremental" : "Full refresh"}
+                  </p>
+                  <div>
+                    <span className="text-muted-foreground">Column mapping:</span>
+                    <ul className="mt-1 space-y-0.5 font-mono">
+                      {sourceColumns.map((sc, i) => (
+                        <li key={`${sc}-${i}`}>
+                          {sc} → {mapping[i] ?? "—"}
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                </div>
+
+                {form.mode === "incremental" && (
+                  <div className="grid grid-cols-2 gap-3">
+                    <div className="space-y-1">
+                      <label className="text-xs text-muted-foreground">Watermark column *</label>
+                      <Select
+                        value={form.watermark_column ?? undefined}
+                        onValueChange={(v) => setField("watermark_column", v)}
+                      >
+                        <SelectTrigger>
+                          <SelectValue placeholder="Choose a column" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {destColumns.map((col) => (
+                            <SelectItem key={col} value={col}>
+                              {col}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </div>
+                    <div className="space-y-1">
+                      <label className="text-xs text-muted-foreground">Watermark type *</label>
+                      <Select
+                        value={form.watermark_type ?? undefined}
+                        onValueChange={(v) => setField("watermark_type", v as EtlWatermarkType)}
+                      >
+                        <SelectTrigger>
+                          <SelectValue placeholder="Choose a type" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="timestamp">Timestamp</SelectItem>
+                          <SelectItem value="integer">Integer</SelectItem>
+                          <SelectItem value="string">String</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </div>
+                  </div>
+                )}
+
+                <div className="space-y-1">
+                  <label className="text-xs text-muted-foreground">
+                    Conflict columns (optional — upsert key; leave unchecked to plain-append every run)
+                  </label>
+                  <div className="flex flex-wrap gap-3 rounded-md border p-2">
+                    {destColumns.map((col) => (
+                      <label key={col} className="flex items-center gap-1.5 text-xs">
+                        <Checkbox
+                          checked={form.conflict_columns.includes(col)}
+                          onCheckedChange={() => toggleConflictColumn(col)}
+                        />
+                        {col}
+                      </label>
+                    ))}
+                  </div>
+                </div>
+
+                {formError && <p className="text-xs text-red-600">{formError}</p>}
+              </div>
+            )}
+
+            <DialogFooter className="sm:justify-between">
+              <div>
+                {step > 1 && (
+                  <Button type="button" variant="outline" onClick={() => setStep((s) => (s - 1) as JobWizardStep)}>
+                    Back
+                  </Button>
+                )}
+              </div>
+              {step < 5 ? (
+                <Button type="button" onClick={goNext} disabled={!canProceed(step)}>
+                  Next
+                </Button>
+              ) : (
+                <Button type="button" onClick={handleSubmit} disabled={submitting}>
+                  {submitting ? (
+                    <>
+                      <Loader2 className="h-3.5 w-3.5 mr-1.5 animate-spin" />
+                      Saving…
+                    </>
+                  ) : editingId ? (
+                    "Save changes"
+                  ) : (
+                    "Create job"
+                  )}
+                </Button>
+              )}
             </DialogFooter>
           </DialogContent>
         </Dialog>
