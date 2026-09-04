@@ -274,10 +274,15 @@ export function EtlJobsTab() {
       case 1:
         return Boolean(form.name.trim() && form.source_id && parseCsv(triggerTimesText).length > 0)
       case 2: {
-        const queryTested = Boolean(
-          form.source_query.trim() && testedQuery === form.source_query && sourceColumns.length > 0,
-        )
-        if (!queryTested) return false
+        // Not an exact re-test-the-current-text match: a query referencing
+        // {{WATERMARK}} or {{FILTER}} can never test clean, since Test
+        // sends the raw text as-is (no substitution) — the source has no
+        // idea what a literal "{{FILTER}}" is. Any successful test (even
+        // of an earlier version of the query, e.g. before the WHERE ...
+        // IN ({{FILTER}}) clause was added) is enough to detect columns
+        // and move on; a stale-query hint below nudges a re-test only
+        // when the SELECT list itself might have changed.
+        if (!form.source_query.trim() || sourceColumns.length === 0) return false
         const hasToken = form.source_query.includes(FILTER_TOKEN)
         return filterEnabled
           ? Boolean(form.filter_query?.trim()) && hasToken && form.mode === "full_refresh"
@@ -558,15 +563,27 @@ export function EtlJobsTab() {
                   onResult={handleQueryTestResult}
                   embedded
                 />
-                {testedQuery === form.source_query && sourceColumns.length > 0 ? (
-                  <p className="text-xs text-emerald-700">
-                    {sourceColumns.length} column{sourceColumns.length === 1 ? "" : "s"} detected:{" "}
-                    <span className="font-mono">{sourceColumns.join(", ")}</span>
-                  </p>
+                {sourceColumns.length > 0 ? (
+                  <div className="space-y-1">
+                    <p className="text-xs text-emerald-700">
+                      {sourceColumns.length} column{sourceColumns.length === 1 ? "" : "s"} detected:{" "}
+                      <span className="font-mono">{sourceColumns.join(", ")}</span>
+                    </p>
+                    {testedQuery !== form.source_query && (
+                      <p className="text-xs text-amber-700">
+                        Query edited since that test — if you only added a WHERE clause (e.g. the{" "}
+                        {"{{WATERMARK}}"} or {"{{FILTER}}"} token), the columns above are still correct
+                        and you&apos;re fine to continue. If you changed the SELECT list itself, re-run
+                        the test. (Test can&apos;t run a query containing {"{{WATERMARK}}"}/
+                        {"{{FILTER}}"} literally — that&apos;s expected, not an error.)
+                      </p>
+                    )}
+                  </div>
                 ) : (
                   <p className="text-xs text-amber-700">
                     Run the test above — this step needs the query&apos;s real columns to build the
-                    mapping next.
+                    mapping next. Test it before adding a {"{{WATERMARK}}"}/{"{{FILTER}}"} clause if
+                    your query needs one, since Test can&apos;t run those tokens literally.
                   </p>
                 )}
               </div>
