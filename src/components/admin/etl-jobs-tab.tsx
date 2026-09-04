@@ -75,7 +75,11 @@ const EMPTY_FORM: EtlJobInput = {
   batch_size: 5000,
   timeout_seconds: 3600,
   enabled: false,
+  filter_query: null,
+  filter_batch_size: null,
 }
+
+const FILTER_TOKEN = "{{FILTER}}"
 
 function jobToForm(j: EtlJobRecord): EtlJobInput {
   return {
@@ -93,6 +97,8 @@ function jobToForm(j: EtlJobRecord): EtlJobInput {
     batch_size: j.batch_size,
     timeout_seconds: j.timeout_seconds,
     enabled: j.enabled,
+    filter_query: j.filter_query,
+    filter_batch_size: j.filter_batch_size,
   }
 }
 
@@ -210,6 +216,20 @@ export function EtlJobsTab() {
 
   const setMappingAt = (i: number, value: string) => setMapping((m) => m.map((v, idx) => (idx === i ? value : v)))
 
+  // filter_query is null whenever the job isn't seeded from this app
+  // database — the toggle just flips between that and a starting "" so
+  // there's something to type into, while forcing mode to full_refresh
+  // (filter_query only supports that server-side, see JobInput.validate).
+  const filterEnabled = form.filter_query !== null
+
+  const toggleFilterEnabled = (checked: boolean) => {
+    setForm((f) =>
+      checked
+        ? { ...f, filter_query: f.filter_query ?? "", filter_batch_size: f.filter_batch_size ?? 1000, mode: "full_refresh" }
+        : { ...f, filter_query: null, filter_batch_size: null },
+    )
+  }
+
   // Changing the destination table invalidates whatever was mapped against
   // the previous table's columns.
   const handleDestTableChange = (table: string) => {
@@ -253,8 +273,16 @@ export function EtlJobsTab() {
     switch (s) {
       case 1:
         return Boolean(form.name.trim() && form.source_id && parseCsv(triggerTimesText).length > 0)
-      case 2:
-        return Boolean(form.source_query.trim() && testedQuery === form.source_query && sourceColumns.length > 0)
+      case 2: {
+        const queryTested = Boolean(
+          form.source_query.trim() && testedQuery === form.source_query && sourceColumns.length > 0,
+        )
+        if (!queryTested) return false
+        const hasToken = form.source_query.includes(FILTER_TOKEN)
+        return filterEnabled
+          ? Boolean(form.filter_query?.trim()) && hasToken && form.mode === "full_refresh"
+          : !hasToken
+      }
       case 3:
         return Boolean(form.dest_schema.trim() && form.dest_table.trim())
       case 4:
@@ -306,6 +334,10 @@ export function EtlJobsTab() {
       setFormError("Watermark column must be one of the mapped destination columns")
       return
     }
+    if (filterEnabled && (!form.filter_query?.trim() || form.mode !== "full_refresh")) {
+      setFormError("A filter query requires Full refresh mode and a non-empty query")
+      return
+    }
 
     const payload: EtlJobInput = {
       ...form,
@@ -314,6 +346,8 @@ export function EtlJobsTab() {
       trigger_times: triggerTimes,
       watermark_column: form.mode === "incremental" ? form.watermark_column : null,
       watermark_type: form.mode === "incremental" ? form.watermark_type : null,
+      filter_query: filterEnabled ? (form.filter_query?.trim() ?? null) : null,
+      filter_batch_size: filterEnabled ? (form.filter_batch_size ?? 1000) : null,
     }
 
     setSubmitting(true)
@@ -447,13 +481,17 @@ export function EtlJobsTab() {
                     </SelectTrigger>
                     <SelectContent>
                       <SelectItem value="full_refresh">Full refresh</SelectItem>
-                      <SelectItem value="incremental">Incremental</SelectItem>
+                      <SelectItem value="incremental" disabled={filterEnabled}>
+                        Incremental
+                      </SelectItem>
                     </SelectContent>
                   </Select>
                   <p className="text-xs text-muted-foreground">
-                    {form.mode === "incremental"
-                      ? "You'll pick the watermark column once the destination mapping is set, later in this form."
-                      : "Every run reloads the full result set."}
+                    {filterEnabled
+                      ? "Incremental is unavailable while this job is seeded from a filter query (Source query step)."
+                      : form.mode === "incremental"
+                        ? "You'll pick the watermark column once the destination mapping is set, later in this form."
+                        : "Every run reloads the full result set."}
                   </p>
                 </div>
 
@@ -530,6 +568,51 @@ export function EtlJobsTab() {
                     Run the test above — this step needs the query&apos;s real columns to build the
                     mapping next.
                   </p>
+                )}
+              </div>
+            )}
+
+            {step === 2 && (
+              <div className="space-y-2 rounded-md border p-3">
+                <div className="flex items-center justify-between gap-3">
+                  <div>
+                    <p className="text-sm font-medium">Seed this pull from your own database</p>
+                    <p className="text-xs text-muted-foreground">
+                      Run a query against this app database first (e.g. <code className="font-mono">app.meters</code>)
+                      and use its results to filter the source query above, in batches — reference{" "}
+                      <code className="font-mono">{FILTER_TOKEN}</code> inside an{" "}
+                      <code className="font-mono">IN (...)</code> clause. Only for Full refresh jobs — the source
+                      database never joins live against this one.
+                    </p>
+                  </div>
+                  <Switch checked={filterEnabled} onCheckedChange={toggleFilterEnabled} />
+                </div>
+                {filterEnabled && (
+                  <div className="space-y-3 pt-1">
+                    <div className="space-y-1">
+                      <label className="text-xs text-muted-foreground">Filter query * (runs against this app database)</label>
+                      <Textarea
+                        value={form.filter_query ?? ""}
+                        onChange={(e) => setField("filter_query", e.target.value)}
+                        placeholder="SELECT meter_number FROM app.meters WHERE status = 'active'"
+                        className="font-mono text-xs min-h-[70px]"
+                      />
+                    </div>
+                    <div className="space-y-1 w-[180px]">
+                      <label className="text-xs text-muted-foreground">Batch size</label>
+                      <Input
+                        type="number"
+                        value={form.filter_batch_size ?? 1000}
+                        onChange={(e) => setField("filter_batch_size", Number(e.target.value) || 1000)}
+                      />
+                    </div>
+                    {!form.source_query.includes(FILTER_TOKEN) && (
+                      <p className="text-xs text-amber-700">
+                        Add <code className="font-mono">{FILTER_TOKEN}</code> to the source query above, e.g.{" "}
+                        <code className="font-mono">WHERE meter_number IN ({FILTER_TOKEN})</code>.
+                      </p>
+                    )}
+                  </div>
                 )}
               </div>
             )}
@@ -674,6 +757,13 @@ export function EtlJobsTab() {
                     <span className="text-muted-foreground">Mode:</span>{" "}
                     {form.mode === "incremental" ? "Incremental" : "Full refresh"}
                   </p>
+                  {filterEnabled && (
+                    <p>
+                      <span className="text-muted-foreground">Filter query:</span>{" "}
+                      <span className="font-mono">{form.filter_query}</span> (batches of{" "}
+                      {form.filter_batch_size ?? 1000})
+                    </p>
+                  )}
                   <div>
                     <span className="text-muted-foreground">Column mapping:</span>
                     <ul className="mt-1 space-y-0.5 font-mono">
