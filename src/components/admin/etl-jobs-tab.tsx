@@ -8,6 +8,7 @@ import { Input } from "@/components/ui/input"
 import { Textarea } from "@/components/ui/textarea"
 import { Badge } from "@/components/ui/badge"
 import { Switch } from "@/components/ui/switch"
+import { Checkbox } from "@/components/ui/checkbox"
 import { Skeleton } from "@/components/ui/skeleton"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import {
@@ -125,7 +126,6 @@ export function EtlJobsTab() {
   const [editingId, setEditingId] = useState<string | null>(null)
   const [form, setForm] = useState<EtlJobInput>(EMPTY_FORM)
   const [destColumnsText, setDestColumnsText] = useState("")
-  const [conflictColumnsText, setConflictColumnsText] = useState("")
   const [triggerTimesText, setTriggerTimesText] = useState("")
   const [submitting, setSubmitting] = useState(false)
   const [formError, setFormError] = useState<string | null>(null)
@@ -141,13 +141,27 @@ export function EtlJobsTab() {
   const setField = <K extends keyof EtlJobInput>(key: K, value: EtlJobInput[K]) =>
     setForm((f) => ({ ...f, [key]: value }))
 
+  // watermark_column and conflict_columns must both be a subset of
+  // dest_columns (enforced server-side too) — deriving the picker options
+  // straight from what's typed into Columns means there's no column name
+  // to mistype a second time, and no way for the two to drift apart.
+  const destColumnsList = parseCsv(destColumnsText)
+
+  const toggleConflictColumn = (col: string) => {
+    setForm((f) => ({
+      ...f,
+      conflict_columns: f.conflict_columns.includes(col)
+        ? f.conflict_columns.filter((c) => c !== col)
+        : [...f.conflict_columns, col],
+    }))
+  }
+
   const invalidate = () => queryClient.invalidateQueries({ queryKey: ["etl-jobs"] })
 
   const openAdd = () => {
     setEditingId(null)
     setForm(EMPTY_FORM)
     setDestColumnsText("")
-    setConflictColumnsText("")
     setTriggerTimesText("")
     setFormError(null)
     setDialogOpen(true)
@@ -158,7 +172,6 @@ export function EtlJobsTab() {
     const f = jobToForm(j)
     setForm(f)
     setDestColumnsText(f.dest_columns.join(", "))
-    setConflictColumnsText(f.conflict_columns.join(", "))
     setTriggerTimesText(f.trigger_times.join(", "))
     setFormError(null)
     setDialogOpen(true)
@@ -166,8 +179,11 @@ export function EtlJobsTab() {
 
   const handleSubmit = async () => {
     const destColumns = parseCsv(destColumnsText)
-    const conflictColumns = parseCsv(conflictColumnsText)
     const triggerTimes = parseCsv(triggerTimesText)
+    // Drop any picked conflict column that's no longer in Columns (e.g. the
+    // user checked it, then edited Columns to remove it) rather than
+    // submitting a stale value the backend would reject.
+    const conflictColumns = form.conflict_columns.filter((c) => destColumns.includes(c))
 
     if (!form.name.trim() || !form.source_id || !form.source_query.trim() || !form.dest_table.trim()) {
       setFormError("Name, source, source query, and destination table are all required")
@@ -183,6 +199,10 @@ export function EtlJobsTab() {
     }
     if (form.mode === "incremental" && (!form.watermark_column || !form.watermark_type)) {
       setFormError("Incremental jobs need a watermark column and type")
+      return
+    }
+    if (form.mode === "incremental" && form.watermark_column && !destColumns.includes(form.watermark_column)) {
+      setFormError("Watermark column must be one of the destination columns")
       return
     }
 
@@ -345,13 +365,23 @@ export function EtlJobsTab() {
                   </div>
                   <div className="col-span-2 space-y-1">
                     <label className="text-xs text-muted-foreground">
-                      Conflict columns (optional — upsert key; leave blank to plain-append every run)
+                      Conflict columns (optional — upsert key; leave unchecked to plain-append every run)
                     </label>
-                    <Input
-                      value={conflictColumnsText}
-                      onChange={(e) => setConflictColumnsText(e.target.value)}
-                      placeholder="id"
-                    />
+                    {destColumnsList.length === 0 ? (
+                      <p className="text-xs text-muted-foreground">Enter destination columns above to pick from them.</p>
+                    ) : (
+                      <div className="flex flex-wrap gap-3 rounded-md border p-2">
+                        {destColumnsList.map((col) => (
+                          <label key={col} className="flex items-center gap-1.5 text-xs">
+                            <Checkbox
+                              checked={form.conflict_columns.includes(col)}
+                              onCheckedChange={() => toggleConflictColumn(col)}
+                            />
+                            {col}
+                          </label>
+                        ))}
+                      </div>
+                    )}
                   </div>
                 </div>
               </div>
@@ -375,11 +405,24 @@ export function EtlJobsTab() {
                     <>
                       <div className="space-y-1">
                         <label className="text-xs text-muted-foreground">Watermark column *</label>
-                        <Input
-                          value={form.watermark_column ?? ""}
-                          onChange={(e) => setField("watermark_column", e.target.value || null)}
-                          placeholder="updated_at"
-                        />
+                        <Select
+                          value={form.watermark_column ?? undefined}
+                          onValueChange={(v) => setField("watermark_column", v)}
+                          disabled={destColumnsList.length === 0}
+                        >
+                          <SelectTrigger>
+                            <SelectValue
+                              placeholder={destColumnsList.length === 0 ? "Enter destination columns first" : "Choose a column"}
+                            />
+                          </SelectTrigger>
+                          <SelectContent>
+                            {destColumnsList.map((col) => (
+                              <SelectItem key={col} value={col}>
+                                {col}
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
                       </div>
                       <div className="space-y-1">
                         <label className="text-xs text-muted-foreground">Watermark type *</label>
