@@ -11,7 +11,7 @@ import { useSidebarStore } from "@/stores/sidebar-store"
 import { useUserStore } from "@/stores/user-store"
 import { usePathname, useRouter } from "next/navigation"
 import { useFilterOptionsWithAvailability } from "@/hooks/api/use-filter-options"
-import { LayoutDashboard, Map, BarChart3, Globe, Users, ChevronRight, ChevronLeft, Settings, LogOut, User, MessageSquare } from "lucide-react"
+import { LayoutDashboard, Map, BarChart3, Globe, Users, ChevronRight, ChevronLeft, Settings, LogOut, User, MessageSquare, Database } from "lucide-react"
 import { useCommentsSheetStore } from "@/stores/comments-sheet-store"
 import { logoutSession } from "@/lib/auth-session"
 import { useIsNotifyEmail } from "@/hooks/api/use-notify-email-api"
@@ -240,6 +240,12 @@ export function Sidebar() {
                     label: "Manage Meters",
                     icon: Settings,
                     href: "/admin/meters",
+                },
+                {
+                    id: "manage-etl",
+                    label: "Data Loading",
+                    icon: Database,
+                    href: "/admin/etl",
                 },
             ]
             : []),
