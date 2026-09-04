@@ -54,6 +54,14 @@ export interface EtlJobInput {
   batch_size: number
   timeout_seconds: number
   enabled: boolean
+  /** Seeds the {{FILTER}} token in source_query: a SELECT run against
+   * THIS app database (never the external source) before every run, its
+   * single result column chunked into filter_batch_size-sized groups —
+   * source_query runs once per chunk with {{FILTER}} substituted as a SQL
+   * IN (...) list. Only valid for mode "full_refresh". null/empty means
+   * the job isn't filtered — every run just runs source_query as-is. */
+  filter_query: string | null
+  filter_batch_size: number | null
 }
 
 export interface EtlJobRecord extends EtlJobInput {
