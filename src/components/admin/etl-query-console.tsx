@@ -20,6 +20,12 @@ interface EtlQueryConsoleProps {
   /** Compact mode for embedding inside the job form dialog — smaller
    * heading, no page-level framing. */
   embedded?: boolean
+  /** Fired after each run — the result on success, or null on failure/no
+   * result. The Job form's mapping step uses this to capture the exact
+   * source columns (and the query they came from) it needs to map against
+   * a destination table, without keeping its own separate copy of the
+   * test-run logic. */
+  onResult?: (result: EtlTestQueryResult | null, forQuery: string) => void
 }
 
 /**
@@ -43,6 +49,7 @@ export function EtlQueryConsole({
   query,
   onQueryChange,
   embedded,
+  onResult,
 }: EtlQueryConsoleProps) {
   const [running, setRunning] = useState(false)
   const [result, setResult] = useState<EtlTestQueryResult | null>(null)
@@ -62,9 +69,11 @@ export function EtlQueryConsole({
     try {
       const res = await testEtlQuery(sourceId, query)
       setResult(res)
+      onResult?.(res, query)
     } catch (err) {
       setResult(null)
       setError(err instanceof Error ? err.message : "Query failed")
+      onResult?.(null, query)
     } finally {
       setRunning(false)
     }
