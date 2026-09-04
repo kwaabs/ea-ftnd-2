@@ -24,13 +24,19 @@ export interface EtlSourceInput {
   port: number
   database_name: string
   username: string
-  password_env_var: string
+  /** Write-only: never returned by the API. Required (non-empty) on
+   * create; on update, null/empty means "leave the current password
+   * unchanged" — the Edit form never has the real value to prefill. */
+  password: string | null
   extra_params: Record<string, string>
   enabled: boolean
 }
 
-export interface EtlSourceRecord extends EtlSourceInput {
+export interface EtlSourceRecord extends Omit<EtlSourceInput, "password"> {
   id: string
+  /** Whether a password is currently stored — the actual value is never
+   * returned by the API (see EtlSourceInput.password). */
+  has_password: boolean
 }
 
 export interface EtlJobInput {

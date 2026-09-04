@@ -48,7 +48,7 @@ const EMPTY_FORM: EtlSourceInput = {
   port: 5432,
   database_name: "",
   username: "",
-  password_env_var: "",
+  password: "",
   extra_params: {},
   enabled: false,
 }
@@ -67,7 +67,9 @@ function sourceToForm(s: EtlSourceRecord): EtlSourceInput {
     port: s.port,
     database_name: s.database_name,
     username: s.username,
-    password_env_var: s.password_env_var,
+    // Never prefilled — the API never returns the actual password (see
+    // EtlSourceInput.password's doc comment). Left blank = keep unchanged.
+    password: "",
     extra_params: s.extra_params ?? {},
     enabled: s.enabled,
   }
@@ -88,6 +90,8 @@ export function EtlSourcesTab() {
   const [testResult, setTestResult] = useState<Record<string, { ok: boolean; message: string }>>({})
   const [draftTesting, setDraftTesting] = useState(false)
   const [draftTestResult, setDraftTestResult] = useState<{ ok: boolean; message: string } | null>(null)
+
+  const currentSourceHasPassword = sources.find((s) => s.id === editingId)?.has_password ?? false
 
   const setField = <K extends keyof EtlSourceInput>(key: K, value: EtlSourceInput[K]) =>
     setForm((f) => ({ ...f, [key]: value }))
@@ -111,8 +115,12 @@ export function EtlSourcesTab() {
   }
 
   const handleSubmit = async () => {
-    if (!form.name.trim() || !form.host.trim() || !form.database_name.trim() || !form.username.trim() || !form.password_env_var.trim()) {
-      setFormError("Name, host, database, username, and password env var are all required")
+    if (!form.name.trim() || !form.host.trim() || !form.database_name.trim() || !form.username.trim()) {
+      setFormError("Name, host, database, and username are all required")
+      return
+    }
+    if (!editingId && !form.password?.trim()) {
+      setFormError("Password is required")
       return
     }
     setSubmitting(true)
@@ -148,14 +156,26 @@ export function EtlSourcesTab() {
   }
 
   const handleDraftTest = async () => {
-    if (!form.host.trim() || !form.database_name.trim() || !form.username.trim() || !form.password_env_var.trim()) {
-      setDraftTestResult({ ok: false, message: "Fill in host, database, username, and password env var first" })
+    if (!form.host.trim() || !form.database_name.trim() || !form.username.trim()) {
+      setDraftTestResult({ ok: false, message: "Fill in host, database, and username first" })
+      return
+    }
+    const hasNewPassword = Boolean(form.password?.trim())
+    if (!hasNewPassword && !editingId) {
+      setDraftTestResult({ ok: false, message: "Enter a password first" })
       return
     }
     setDraftTesting(true)
     setDraftTestResult(null)
     try {
-      const res = await testEtlSourceConnectionDraft(form)
+      // Editing with the password field left blank -> test the currently
+      // saved password (via the id-based endpoint) rather than the draft
+      // one, since a blank password here means "keep existing," not "no
+      // password" — see EtlSourceInput.password's doc comment.
+      const res =
+        hasNewPassword || !editingId
+          ? await testEtlSourceConnectionDraft(form)
+          : await testEtlSourceConnection(editingId)
       setDraftTestResult(
         res.ok
           ? { ok: true, message: `Connected in ${res.elapsed_ms}ms` }
@@ -275,17 +295,24 @@ export function EtlSourcesTab() {
                   <Input value={form.username} onChange={(e) => setField("username", e.target.value)} />
                 </div>
                 <div className="space-y-1">
-                  <label className="text-xs text-muted-foreground">Password env var *</label>
+                  <label className="text-xs text-muted-foreground">
+                    Password {editingId ? "" : "*"}
+                  </label>
                   <Input
-                    value={form.password_env_var}
-                    onChange={(e) => setField("password_env_var", e.target.value)}
-                    placeholder="ETL_ORACLE_FINANCE_PASSWORD"
+                    type="password"
+                    autoComplete="new-password"
+                    value={form.password ?? ""}
+                    onChange={(e) => setField("password", e.target.value)}
+                    placeholder={editingId ? "Leave blank to keep the current password" : ""}
                   />
                 </div>
               </div>
               <p className="text-xs text-muted-foreground">
-                Set <code className="font-mono">{form.password_env_var || "ETL_..._PASSWORD"}</code> in
-                the server&apos;s environment — this password is never sent to or stored by this UI.
+                {editingId
+                  ? currentSourceHasPassword
+                    ? "Stored encrypted. A password is currently set — leave this field blank to keep it unchanged, or enter a new one to rotate it."
+                    : "Stored encrypted. No password is currently set — enter one to add it."
+                  : "Stored encrypted. Required to create this source."}
               </p>
 
               <div className="flex items-center gap-2">
