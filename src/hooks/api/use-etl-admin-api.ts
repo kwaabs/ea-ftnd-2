@@ -159,6 +159,21 @@ export async function testEtlSourceConnection(id: string): Promise<EtlTestConnec
   return response.json()
 }
 
+/** Same connect-and-ping check as testEtlSourceConnection, but against a
+ * source that hasn't been saved yet — the Add/Edit Source form's own
+ * in-progress values, before they're ever a row in app.etl_sources. */
+export async function testEtlSourceConnectionDraft(
+  input: EtlSourceInput,
+): Promise<EtlTestConnectionResult> {
+  const response = await fetch(`${API_BASE_URL}/api/v1/etl/admin/sources/test-connection`, {
+    method: "POST",
+    headers: authHeaders(),
+    body: JSON.stringify(input),
+  })
+  if (!response.ok) throw new Error(await readError(response))
+  return response.json()
+}
+
 // ---------------------------------------------------------------------
 // Jobs
 // ---------------------------------------------------------------------

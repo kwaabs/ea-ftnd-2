@@ -34,6 +34,7 @@ import {
   createEtlSource,
   deleteEtlSource,
   testEtlSourceConnection,
+  testEtlSourceConnectionDraft,
   updateEtlSource,
   useEtlSources,
   type EtlSourceInput,
@@ -85,6 +86,8 @@ export function EtlSourcesTab() {
   const [deletingId, setDeletingId] = useState<string | null>(null)
   const [testingId, setTestingId] = useState<string | null>(null)
   const [testResult, setTestResult] = useState<Record<string, { ok: boolean; message: string }>>({})
+  const [draftTesting, setDraftTesting] = useState(false)
+  const [draftTestResult, setDraftTestResult] = useState<{ ok: boolean; message: string } | null>(null)
 
   const setField = <K extends keyof EtlSourceInput>(key: K, value: EtlSourceInput[K]) =>
     setForm((f) => ({ ...f, [key]: value }))
@@ -95,6 +98,7 @@ export function EtlSourcesTab() {
     setEditingId(null)
     setForm(EMPTY_FORM)
     setFormError(null)
+    setDraftTestResult(null)
     setDialogOpen(true)
   }
 
@@ -102,6 +106,7 @@ export function EtlSourcesTab() {
     setEditingId(s.id)
     setForm(sourceToForm(s))
     setFormError(null)
+    setDraftTestResult(null)
     setDialogOpen(true)
   }
 
@@ -139,6 +144,27 @@ export function EtlSourcesTab() {
       }))
     } finally {
       setDeletingId(null)
+    }
+  }
+
+  const handleDraftTest = async () => {
+    if (!form.host.trim() || !form.database_name.trim() || !form.username.trim() || !form.password_env_var.trim()) {
+      setDraftTestResult({ ok: false, message: "Fill in host, database, username, and password env var first" })
+      return
+    }
+    setDraftTesting(true)
+    setDraftTestResult(null)
+    try {
+      const res = await testEtlSourceConnectionDraft(form)
+      setDraftTestResult(
+        res.ok
+          ? { ok: true, message: `Connected in ${res.elapsed_ms}ms` }
+          : { ok: false, message: res.error || "Connection failed" },
+      )
+    } catch (err) {
+      setDraftTestResult({ ok: false, message: err instanceof Error ? err.message : "Connection failed" })
+    } finally {
+      setDraftTesting(false)
     }
   }
 
@@ -261,6 +287,32 @@ export function EtlSourcesTab() {
                 Set <code className="font-mono">{form.password_env_var || "ETL_..._PASSWORD"}</code> in
                 the server&apos;s environment — this password is never sent to or stored by this UI.
               </p>
+
+              <div className="flex items-center gap-2">
+                <Button type="button" variant="outline" size="sm" onClick={handleDraftTest} disabled={draftTesting}>
+                  {draftTesting ? (
+                    <Loader2 className="h-3.5 w-3.5 mr-1.5 animate-spin" />
+                  ) : (
+                    <Plug className="h-3.5 w-3.5 mr-1.5" />
+                  )}
+                  Test connection
+                </Button>
+                {draftTestResult && (
+                  <span
+                    className={
+                      "text-xs flex items-center gap-1 " +
+                      (draftTestResult.ok ? "text-emerald-700" : "text-red-600")
+                    }
+                  >
+                    {draftTestResult.ok ? (
+                      <CheckCircle2 className="h-3 w-3" />
+                    ) : (
+                      <XCircle className="h-3 w-3" />
+                    )}
+                    {draftTestResult.message}
+                  </span>
+                )}
+              </div>
 
               <div className="flex items-center justify-between rounded-md border px-3 py-2">
                 <div>
