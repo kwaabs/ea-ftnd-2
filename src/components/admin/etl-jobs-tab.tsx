@@ -255,7 +255,10 @@ export function EtlJobsTab() {
               Add Job
             </Button>
           </DialogTrigger>
-          <DialogContent className="sm:max-w-3xl max-h-[85vh] overflow-y-auto">
+          <DialogContent
+            className="sm:max-w-3xl max-h-[85vh] overflow-y-auto"
+            onPointerDownOutside={(e) => e.preventDefault()}
+          >
             <DialogHeader>
               <DialogTitle>{editingId ? "Edit Job" : "Add Job"}</DialogTitle>
               <DialogDescription>
@@ -608,7 +611,10 @@ export function EtlJobsTab() {
       </Card>
 
       <Dialog open={Boolean(runsJobId)} onOpenChange={(open) => !open && setRunsJobId(null)}>
-        <DialogContent className="sm:max-w-2xl max-h-[85vh] overflow-y-auto">
+        <DialogContent
+          className="sm:max-w-2xl max-h-[85vh] overflow-y-auto"
+          onPointerDownOutside={(e) => e.preventDefault()}
+        >
           <DialogHeader>
             <DialogTitle>Runs — {runsJob?.name ?? ""}</DialogTitle>
             <DialogDescription>
