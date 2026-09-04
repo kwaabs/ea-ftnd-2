@@ -224,7 +224,10 @@ export function EtlSourcesTab() {
               Add Source
             </Button>
           </DialogTrigger>
-          <DialogContent className="sm:max-w-lg max-h-[85vh] overflow-y-auto">
+          <DialogContent
+            className="sm:max-w-lg max-h-[85vh] overflow-y-auto"
+            onPointerDownOutside={(e) => e.preventDefault()}
+          >
             <DialogHeader>
               <DialogTitle>{editingId ? "Edit Source" : "Add Source"}</DialogTitle>
               <DialogDescription>
