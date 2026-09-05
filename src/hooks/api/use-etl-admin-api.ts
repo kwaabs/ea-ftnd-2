@@ -12,7 +12,7 @@ const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8780"
  * (internal/etl/engine.go) on its own schedule; nothing on this page runs
  * a job itself except the explicit "Run now" / "Test query" actions.
  */
-export type EtlSourceKind = "oracle" | "mssql" | "postgres"
+export type EtlSourceKind = "oracle" | "mssql" | "postgres" | "http_api"
 export type EtlJobMode = "full_refresh" | "incremental"
 export type EtlWatermarkType = "timestamp" | "integer" | "string"
 export type EtlRunStatus = "running" | "success" | "failed"
@@ -20,13 +20,21 @@ export type EtlRunStatus = "running" | "success" | "failed"
 export interface EtlSourceInput {
   name: string
   kind: EtlSourceKind
+  /** For kind "http_api": the base URL, e.g. "https://api.example.com" —
+   * the job's source_query supplies the path. For the DB kinds: hostname. */
   host: string
+  /** Unused for kind "http_api". */
   port: number
+  /** Unused for kind "http_api". */
   database_name: string
+  /** For kind "http_api": the API's "api-id", sent as-is in a request
+   * header. For the DB kinds: the DB username. */
   username: string
   /** Write-only: never returned by the API. Required (non-empty) on
    * create; on update, null/empty means "leave the current password
-   * unchanged" — the Edit form never has the real value to prefill. */
+   * unchanged" — the Edit form never has the real value to prefill. For
+   * kind "http_api": the API's secret key, used only locally to compute
+   * an HMAC request signature — never sent on the wire itself. */
   password: string | null
   extra_params: Record<string, string>
   enabled: boolean
@@ -62,6 +70,11 @@ export interface EtlJobInput {
    * the job isn't filtered — every run just runs source_query as-is. */
   filter_query: string | null
   filter_batch_size: number | null
+  /** Only meaningful when the job's source is kind "http_api" — see each
+   * field's comment on the Go side (internal/etl/models.go's Job). */
+  source_fields: string[]
+  records_path: string
+  page_size: number
 }
 
 export interface EtlJobRecord extends EtlJobInput {
@@ -96,6 +109,11 @@ export interface EtlTestQueryResult {
   rows: unknown[][]
   truncated: boolean
   elapsed_ms: number
+  /** Set only for a kind "http_api" source: the top-level JSON response
+   * field auto-detected as the record array (e.g. "rows"), since a JSON
+   * response has no equivalent of a SQL SELECT list to name columns from.
+   * Prefill the job's records_path with this. */
+  detected_records_path?: string
 }
 
 export interface EtlDestColumnInfo {

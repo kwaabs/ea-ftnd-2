@@ -57,6 +57,7 @@ const DEFAULT_PORT: Record<EtlSourceInput["kind"], number> = {
   oracle: 1521,
   mssql: 1433,
   postgres: 5432,
+  http_api: 0, // unused for this kind
 }
 
 function sourceToForm(s: EtlSourceRecord): EtlSourceInput {
@@ -114,13 +115,20 @@ export function EtlSourcesTab() {
     setDialogOpen(true)
   }
 
+  const isHttpApi = form.kind === "http_api"
+
   const handleSubmit = async () => {
-    if (!form.name.trim() || !form.host.trim() || !form.database_name.trim() || !form.username.trim()) {
+    if (isHttpApi) {
+      if (!form.name.trim() || !form.host.trim() || !form.username.trim()) {
+        setFormError("Name, base URL, and API ID are all required")
+        return
+      }
+    } else if (!form.name.trim() || !form.host.trim() || !form.database_name.trim() || !form.username.trim()) {
       setFormError("Name, host, database, and username are all required")
       return
     }
     if (!editingId && !form.password?.trim()) {
-      setFormError("Password is required")
+      setFormError(isHttpApi ? "API key is required" : "Password is required")
       return
     }
     setSubmitting(true)
@@ -156,7 +164,12 @@ export function EtlSourcesTab() {
   }
 
   const handleDraftTest = async () => {
-    if (!form.host.trim() || !form.database_name.trim() || !form.username.trim()) {
+    if (isHttpApi) {
+      if (!form.host.trim() || !form.username.trim()) {
+        setDraftTestResult({ ok: false, message: "Fill in the base URL and API ID first" })
+        return
+      }
+    } else if (!form.host.trim() || !form.database_name.trim() || !form.username.trim()) {
       setDraftTestResult({ ok: false, message: "Fill in host, database, and username first" })
       return
     }
@@ -266,56 +279,72 @@ export function EtlSourcesTab() {
                     <SelectItem value="oracle">Oracle</SelectItem>
                     <SelectItem value="mssql">MSSQL</SelectItem>
                     <SelectItem value="postgres">Postgres</SelectItem>
+                    <SelectItem value="http_api">HTTP API</SelectItem>
                   </SelectContent>
                 </Select>
               </div>
-              <div className="grid grid-cols-3 gap-3">
-                <div className="col-span-2 space-y-1">
-                  <label className="text-xs text-muted-foreground">Host *</label>
-                  <Input value={form.host} onChange={(e) => setField("host", e.target.value)} />
-                </div>
+              {isHttpApi ? (
                 <div className="space-y-1">
-                  <label className="text-xs text-muted-foreground">Port *</label>
+                  <label className="text-xs text-muted-foreground">Base URL *</label>
                   <Input
-                    type="number"
-                    value={form.port}
-                    onChange={(e) => setField("port", Number(e.target.value) || 0)}
+                    value={form.host}
+                    onChange={(e) => setField("host", e.target.value)}
+                    placeholder="https://api.example.com"
                   />
                 </div>
-              </div>
-              <div className="space-y-1">
-                <label className="text-xs text-muted-foreground">
-                  {form.kind === "oracle" ? "Service name *" : "Database *"}
-                </label>
-                <Input
-                  value={form.database_name}
-                  onChange={(e) => setField("database_name", e.target.value)}
-                />
-              </div>
+              ) : (
+                <>
+                  <div className="grid grid-cols-3 gap-3">
+                    <div className="col-span-2 space-y-1">
+                      <label className="text-xs text-muted-foreground">Host *</label>
+                      <Input value={form.host} onChange={(e) => setField("host", e.target.value)} />
+                    </div>
+                    <div className="space-y-1">
+                      <label className="text-xs text-muted-foreground">Port *</label>
+                      <Input
+                        type="number"
+                        value={form.port}
+                        onChange={(e) => setField("port", Number(e.target.value) || 0)}
+                      />
+                    </div>
+                  </div>
+                  <div className="space-y-1">
+                    <label className="text-xs text-muted-foreground">
+                      {form.kind === "oracle" ? "Service name *" : "Database *"}
+                    </label>
+                    <Input
+                      value={form.database_name}
+                      onChange={(e) => setField("database_name", e.target.value)}
+                    />
+                  </div>
+                </>
+              )}
               <div className="grid grid-cols-2 gap-3">
                 <div className="space-y-1">
-                  <label className="text-xs text-muted-foreground">Username *</label>
+                  <label className="text-xs text-muted-foreground">
+                    {isHttpApi ? "API ID *" : "Username *"}
+                  </label>
                   <Input value={form.username} onChange={(e) => setField("username", e.target.value)} />
                 </div>
                 <div className="space-y-1">
                   <label className="text-xs text-muted-foreground">
-                    Password {editingId ? "" : "*"}
+                    {isHttpApi ? "API key" : "Password"} {editingId ? "" : "*"}
                   </label>
                   <Input
                     type="password"
                     autoComplete="new-password"
                     value={form.password ?? ""}
                     onChange={(e) => setField("password", e.target.value)}
-                    placeholder={editingId ? "Leave blank to keep the current password" : ""}
+                    placeholder={editingId ? `Leave blank to keep the current ${isHttpApi ? "API key" : "password"}` : ""}
                   />
                 </div>
               </div>
               <p className="text-xs text-muted-foreground">
                 {editingId
                   ? currentSourceHasPassword
-                    ? "Stored encrypted. A password is currently set — leave this field blank to keep it unchanged, or enter a new one to rotate it."
-                    : "Stored encrypted. No password is currently set — enter one to add it."
-                  : "Stored encrypted. Required to create this source."}
+                    ? `Stored encrypted. ${isHttpApi ? "An API key is" : "A password is"} currently set — leave this field blank to keep it unchanged, or enter a new one to rotate it.`
+                    : `Stored encrypted. No ${isHttpApi ? "API key" : "password"} is currently set — enter one to add it.`
+                  : `Stored encrypted. Required to create this source.${isHttpApi ? " Never sent on the wire itself — only used locally to sign requests (HMAC)." : ""}`}
               </p>
 
               <div className="flex items-center gap-2">
@@ -418,9 +447,11 @@ export function EtlSourcesTab() {
                           </Badge>
                         </td>
                         <td className="py-2.5 px-4 text-muted-foreground">
-                          {s.host}:{s.port}
+                          {s.kind === "http_api" ? s.host : `${s.host}:${s.port}`}
                         </td>
-                        <td className="py-2.5 px-4 text-muted-foreground">{s.database_name}</td>
+                        <td className="py-2.5 px-4 text-muted-foreground">
+                          {s.kind === "http_api" ? "—" : s.database_name}
+                        </td>
                         <td className="py-2.5 px-4">
                           <Badge
                             variant="outline"

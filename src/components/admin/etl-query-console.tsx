@@ -54,6 +54,7 @@ export function EtlQueryConsole({
   const [running, setRunning] = useState(false)
   const [result, setResult] = useState<EtlTestQueryResult | null>(null)
   const [error, setError] = useState<string | null>(null)
+  const isHttpApi = sources.find((s) => s.id === sourceId)?.kind === "http_api"
 
   const run = async () => {
     if (!sourceId) {
@@ -85,9 +86,9 @@ export function EtlQueryConsole({
         <div>
           <h3 className="text-sm font-semibold text-foreground">Test query</h3>
           <p className="text-xs text-muted-foreground mt-0.5">
-            Run a read-only query against a source and preview the result — a few sample rows, a
-            row count, a count of distinct values, whatever you want to check. Nothing here is
-            saved or loaded anywhere.
+            {isHttpApi
+              ? "Fetch one sample page from an HTTP API source and preview the result — the record array field and its columns are auto-detected from the response. Nothing here is saved or loaded anywhere."
+              : "Run a read-only query against a source and preview the result — a few sample rows, a row count, a count of distinct values, whatever you want to check. Nothing here is saved or loaded anywhere."}
           </p>
         </div>
       )}
@@ -118,7 +119,9 @@ export function EtlQueryConsole({
       <SqlTextarea
         value={query}
         onChange={onQueryChange}
-        placeholder="SELECT * FROM invoices FETCH FIRST 20 ROWS ONLY"
+        placeholder={
+          isHttpApi ? "/api/v1/sales?year=2026&month=5" : "SELECT * FROM invoices FETCH FIRST 20 ROWS ONLY"
+        }
         className="min-h-[100px]"
       />
 
@@ -129,6 +132,12 @@ export function EtlQueryConsole({
           <p className="text-xs text-muted-foreground">
             {result.rows.length} row{result.rows.length === 1 ? "" : "s"}
             {result.truncated ? " (truncated at 200)" : ""} · {result.elapsed_ms}ms
+            {result.detected_records_path && (
+              <>
+                {" "}
+                · records field detected: <span className="font-mono">{result.detected_records_path}</span>
+              </>
+            )}
           </p>
           {result.columns.length === 0 ? (
             <p className="text-xs text-muted-foreground py-4 text-center">No columns returned.</p>
