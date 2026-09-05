@@ -77,6 +77,9 @@ const EMPTY_FORM: EtlJobInput = {
   enabled: false,
   filter_query: null,
   filter_batch_size: null,
+  source_fields: [],
+  records_path: "data",
+  page_size: 500,
 }
 
 const FILTER_TOKEN = "{{FILTER}}"
@@ -99,6 +102,9 @@ function jobToForm(j: EtlJobRecord): EtlJobInput {
     enabled: j.enabled,
     filter_query: j.filter_query,
     filter_batch_size: j.filter_batch_size,
+    source_fields: j.source_fields ?? [],
+    records_path: j.records_path || "data",
+    page_size: j.page_size || 500,
   }
 }
 
@@ -190,6 +196,13 @@ export function EtlJobsTab() {
   // pickers in Review, and the final submit payload.
   const destColumns = mapping.filter((c): c is string => Boolean(c && c.trim()))
 
+  // An http_api job's "source query" is a path+query-string template, not
+  // SQL — sourceColumns (detected JSON field names, see
+  // handleQueryTestResult) becomes source_fields on submit instead of
+  // being purely informational the way it is for the SQL kinds (whose
+  // column order is already implicit in the SELECT list itself).
+  const isHttpApi = sources.find((s) => s.id === form.source_id)?.kind === "http_api"
+
   const [runsJobId, setRunsJobId] = useState<string | null>(null)
   const runsJob = jobs.find((j) => j.id === runsJobId) ?? null
   const { data: runsData } = useEtlJobRuns(runsJobId, { refetchInterval: runsJobId ? 3000 : undefined })
@@ -217,6 +230,13 @@ export function EtlJobsTab() {
         : result.columns.map(() => null),
     )
     setPrefillDestColumns(null)
+    // Only set for an http_api source (see EtlTestQueryResult.detected_records_path)
+    // — the top-level JSON field the response's record array was found
+    // under, auto-detected since a JSON object has no reliable field
+    // order the way a SQL SELECT list does.
+    if (result.detected_records_path) {
+      setField("records_path", result.detected_records_path)
+    }
   }
 
   const setMappingAt = (i: number, value: string) => setMapping((m) => m.map((v, idx) => (idx === i ? value : v)))
@@ -292,6 +312,7 @@ export function EtlJobsTab() {
         // and move on; a stale-query hint below nudges a re-test only
         // when the SELECT list itself might have changed.
         if (!form.source_query.trim() || sourceColumns.length === 0) return false
+        if (isHttpApi && (!form.records_path.trim() || form.page_size <= 0)) return false
         const hasToken = form.source_query.includes(FILTER_TOKEN)
         return filterEnabled
           ? Boolean(form.filter_query?.trim()) && hasToken && form.mode === "full_refresh"
@@ -365,6 +386,11 @@ export function EtlJobsTab() {
       watermark_type: form.mode === "incremental" ? form.watermark_type : null,
       filter_query: filterEnabled ? (form.filter_query?.trim() ?? null) : null,
       filter_batch_size: filterEnabled ? (form.filter_batch_size ?? 1000) : null,
+      // source_fields is the http_api analog of "the SELECT list's column
+      // order" — sourceColumns (detected JSON field names) is already
+      // positionally aligned with destColumns via the same mapping array,
+      // exactly like the SQL kinds' implicit SELECT-list-order contract.
+      source_fields: isHttpApi ? sourceColumns : [],
     }
 
     setSubmitting(true)
@@ -570,14 +596,29 @@ export function EtlJobsTab() {
             {step === 2 && (
               <div className="space-y-2 rounded-md border p-3">
                 <p className="text-xs font-medium text-muted-foreground">
-                  Source query * — SELECT only. For an incremental job, include the literal token{" "}
-                  <code className="font-mono">{"{{WATERMARK}}"}</code> and{" "}
-                  <code className="font-mono">ORDER BY</code> the watermark column ascending.
+                  {isHttpApi ? (
+                    <>
+                      Path + query string * — no host (the source&apos;s base URL supplies that),
+                      and no auth/limit/offset/timestamp params (the engine adds those). For an
+                      incremental job, include the literal token{" "}
+                      <code className="font-mono">{"{{WATERMARK}}"}</code> in a query param value.
+                    </>
+                  ) : (
+                    <>
+                      Source query * — SELECT only. For an incremental job, include the literal
+                      token <code className="font-mono">{"{{WATERMARK}}"}</code> and{" "}
+                      <code className="font-mono">ORDER BY</code> the watermark column ascending.
+                    </>
+                  )}
                 </p>
                 <SqlTextarea
                   value={form.source_query}
                   onChange={(v) => setField("source_query", v)}
-                  placeholder="SELECT id, amount, updated_at FROM invoices WHERE updated_at > {{WATERMARK}} ORDER BY updated_at"
+                  placeholder={
+                    isHttpApi
+                      ? "/api/v1/sales?year=2026&month={{WATERMARK}}"
+                      : "SELECT id, amount, updated_at FROM invoices WHERE updated_at > {{WATERMARK}} ORDER BY updated_at"
+                  }
                 />
                 <EtlQueryConsole
                   sources={sources}
@@ -588,17 +629,44 @@ export function EtlJobsTab() {
                   onResult={handleQueryTestResult}
                   embedded
                 />
+                {isHttpApi && (
+                  <div className="grid grid-cols-2 gap-3 pt-1">
+                    <div className="space-y-1">
+                      <label className="text-xs text-muted-foreground">
+                        Records field * — dot-path to the response&apos;s record array
+                      </label>
+                      <Input
+                        value={form.records_path}
+                        onChange={(e) => setField("records_path", e.target.value)}
+                        placeholder="rows"
+                        className="font-mono"
+                      />
+                    </div>
+                    <div className="space-y-1">
+                      <label className="text-xs text-muted-foreground">
+                        Page size — rows requested per HTTP page
+                      </label>
+                      <Input
+                        type="number"
+                        value={form.page_size}
+                        onChange={(e) => setField("page_size", Number(e.target.value) || 500)}
+                      />
+                    </div>
+                  </div>
+                )}
                 {sourceColumns.length > 0 ? (
                   <div className="space-y-1">
                     <p className="text-xs text-emerald-700">
-                      {sourceColumns.length} column{sourceColumns.length === 1 ? "" : "s"} detected:{" "}
+                      {sourceColumns.length} {isHttpApi ? "field" : "column"}
+                      {sourceColumns.length === 1 ? "" : "s"} detected:{" "}
                       <span className="font-mono">{sourceColumns.join(", ")}</span>
                     </p>
                     {testedQuery !== form.source_query && (
                       <p className="text-xs text-amber-700">
-                        Query edited since that test — if you only added a WHERE clause (e.g. the{" "}
+                        Query edited since that test — if you only added a{" "}
+                        {isHttpApi ? "query param" : "WHERE clause"} (e.g. the{" "}
                         {"{{WATERMARK}}"} or {"{{FILTER}}"} token), the columns above are still correct
-                        and you&apos;re fine to continue. If you changed the SELECT list itself, re-run
+                        and you&apos;re fine to continue. If you changed which fields come back, re-run
                         the test. (Test can&apos;t run a query containing {"{{WATERMARK}}"}/
                         {"{{FILTER}}"} literally — that&apos;s expected, not an error.)
                       </p>
@@ -606,9 +674,10 @@ export function EtlJobsTab() {
                   </div>
                 ) : (
                   <p className="text-xs text-amber-700">
-                    Run the test above — this step needs the query&apos;s real columns to build the
-                    mapping next. Test it before adding a {"{{WATERMARK}}"}/{"{{FILTER}}"} clause if
-                    your query needs one, since Test can&apos;t run those tokens literally.
+                    Run the test above — this step needs the query&apos;s real{" "}
+                    {isHttpApi ? "fields" : "columns"} to build the mapping next. Test it before
+                    adding a {"{{WATERMARK}}"}/{"{{FILTER}}"} clause if your query needs one, since
+                    Test can&apos;t run those tokens literally.
                   </p>
                 )}
               </div>
@@ -622,9 +691,18 @@ export function EtlJobsTab() {
                     <p className="text-xs text-muted-foreground">
                       Run a query against this app database first (e.g. <code className="font-mono">app.meters</code>)
                       and use its results to filter the source query above, in batches — reference{" "}
-                      <code className="font-mono">{FILTER_TOKEN}</code> inside an{" "}
-                      <code className="font-mono">IN (...)</code> clause. Only for Full refresh jobs — the source
-                      database never joins live against this one.
+                      <code className="font-mono">{FILTER_TOKEN}</code>{" "}
+                      {isHttpApi ? (
+                        <>
+                          inside a query param value, e.g.{" "}
+                          <code className="font-mono">ids={FILTER_TOKEN}</code>
+                        </>
+                      ) : (
+                        <>
+                          inside an <code className="font-mono">IN (...)</code> clause
+                        </>
+                      )}
+                      . Only for Full refresh jobs — the source never joins live against this one.
                     </p>
                   </div>
                   <Switch checked={filterEnabled} onCheckedChange={toggleFilterEnabled} />
@@ -808,6 +886,13 @@ export function EtlJobsTab() {
                       <span className="text-muted-foreground">Filter query:</span>{" "}
                       <span className="font-mono">{form.filter_query}</span> (batches of{" "}
                       {form.filter_batch_size ?? 1000})
+                    </p>
+                  )}
+                  {isHttpApi && (
+                    <p>
+                      <span className="text-muted-foreground">Records field:</span>{" "}
+                      <span className="font-mono">{form.records_path}</span> · Page size:{" "}
+                      {form.page_size}
                     </p>
                   )}
                   <div>
