@@ -428,7 +428,7 @@ export function EtlJobsTab() {
             </Button>
           </DialogTrigger>
           <DialogContent
-            className="sm:max-w-3xl max-h-[85vh] overflow-y-auto"
+            className="sm:max-w-3xl lg:max-w-6xl max-h-[85vh] overflow-y-auto"
             onPointerDownOutside={(e) => e.preventDefault()}
           >
             <DialogHeader>
