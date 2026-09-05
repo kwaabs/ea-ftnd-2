@@ -3,7 +3,7 @@
 import { useState } from "react"
 import { Loader2, Play } from "lucide-react"
 import { Button } from "@/components/ui/button"
-import { Textarea } from "@/components/ui/textarea"
+import { SqlTextarea } from "@/components/admin/sql-textarea"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import {
   type EtlSourceRecord,
@@ -115,11 +115,11 @@ export function EtlQueryConsole({
         </Button>
       </div>
 
-      <Textarea
+      <SqlTextarea
         value={query}
-        onChange={(e) => onQueryChange(e.target.value)}
+        onChange={onQueryChange}
         placeholder="SELECT * FROM invoices FETCH FIRST 20 ROWS ONLY"
-        className="font-mono text-xs min-h-[100px]"
+        className="min-h-[100px]"
       />
 
       {error && <p className="text-xs text-red-600">{error}</p>}

@@ -5,7 +5,7 @@ import { useQueryClient } from "@tanstack/react-query"
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
-import { Textarea } from "@/components/ui/textarea"
+import { SqlTextarea } from "@/components/admin/sql-textarea"
 import { Badge } from "@/components/ui/badge"
 import { Switch } from "@/components/ui/switch"
 import { Checkbox } from "@/components/ui/checkbox"
@@ -428,7 +428,7 @@ export function EtlJobsTab() {
             </Button>
           </DialogTrigger>
           <DialogContent
-            className="sm:max-w-3xl max-h-[85vh] overflow-y-auto"
+            className="sm:max-w-3xl lg:max-w-6xl max-h-[85vh] overflow-y-auto"
             onPointerDownOutside={(e) => e.preventDefault()}
           >
             <DialogHeader>
@@ -574,11 +574,10 @@ export function EtlJobsTab() {
                   <code className="font-mono">{"{{WATERMARK}}"}</code> and{" "}
                   <code className="font-mono">ORDER BY</code> the watermark column ascending.
                 </p>
-                <Textarea
+                <SqlTextarea
                   value={form.source_query}
-                  onChange={(e) => setField("source_query", e.target.value)}
+                  onChange={(v) => setField("source_query", v)}
                   placeholder="SELECT id, amount, updated_at FROM invoices WHERE updated_at > {{WATERMARK}} ORDER BY updated_at"
-                  className="font-mono text-xs min-h-[90px]"
                 />
                 <EtlQueryConsole
                   sources={sources}
@@ -634,11 +633,11 @@ export function EtlJobsTab() {
                   <div className="space-y-3 pt-1">
                     <div className="space-y-1">
                       <label className="text-xs text-muted-foreground">Filter query * (runs against this app database)</label>
-                      <Textarea
+                      <SqlTextarea
                         value={form.filter_query ?? ""}
-                        onChange={(e) => setField("filter_query", e.target.value)}
+                        onChange={(v) => setField("filter_query", v)}
                         placeholder="SELECT meter_number FROM app.meters WHERE status = 'active'"
-                        className="font-mono text-xs min-h-[70px]"
+                        className="min-h-[70px]"
                       />
                     </div>
                     <div className="space-y-1 w-[180px]">
