@@ -76,9 +76,20 @@ interface PnsConsumptionDetailParams {
   search?: string
   page?: number
   limit?: number
+  /** "customer_id" | "energy_kwh" | "bill_month" — matches the backend's
+   * detailSortColumn whitelist exactly. Anything else falls back to the
+   * server's stable default order. */
+  sortBy?: string
+  sortOrder?: "asc" | "desc"
   enabled?: boolean
 }
 
+/** Returns the full paginated envelope ({data, total, page, limit,
+ * total_pages}) — never just the row array. This endpoint caps `limit` at
+ * 500 per request server-side, so `total`/`total_pages` are the only way
+ * to know the true match count and page through the rest; treating
+ * `data.length` as if it were the grand total (as this hook used to)
+ * silently hid every row past the first 500 for any query with more. */
 export function usePnsConsumptionDetail(params: PnsConsumptionDetailParams) {
   const queryString = new URLSearchParams()
 
@@ -91,8 +102,10 @@ export function usePnsConsumptionDetail(params: PnsConsumptionDetailParams) {
   if (params.search) queryString.append("search", params.search)
   if (params.page) queryString.append("page", params.page.toString())
   if (params.limit) queryString.append("limit", params.limit.toString())
+  if (params.sortBy) queryString.append("sortBy", params.sortBy)
+  if (params.sortOrder) queryString.append("sortOrder", params.sortOrder)
 
-  return useQuery<PnsConsumptionDetail[]>({
+  return useQuery<PnsConsumptionDetailResponse>({
     queryKey: [
       "pns-consumption-detail",
       params.dateFrom,
@@ -104,6 +117,8 @@ export function usePnsConsumptionDetail(params: PnsConsumptionDetailParams) {
       params.search,
       params.page,
       params.limit,
+      params.sortBy,
+      params.sortOrder,
     ],
     enabled: params.enabled !== false && Boolean(params.dateFrom && params.dateTo),
     queryFn: async () => {
@@ -112,10 +127,52 @@ export function usePnsConsumptionDetail(params: PnsConsumptionDetailParams) {
       if (!response.ok) {
         throw new Error(`Failed to fetch pns consumption detail: ${response.status}`)
       }
-      const data: PnsConsumptionDetailResponse = await response.json()
-      return data.data || []
+      return response.json()
     },
     staleTime: 5 * 60 * 1000,
     refetchOnMount: false,
   })
+}
+
+function detailUrl(params: Omit<PnsConsumptionDetailParams, "page" | "limit" | "enabled">, page: number): string {
+  const qs = new URLSearchParams()
+  if (params.dateFrom) qs.append("dateFrom", params.dateFrom)
+  if (params.dateTo) qs.append("dateTo", params.dateTo)
+  if (params.region) qs.append("region", params.region)
+  if (params.district) qs.append("district", params.district)
+  if (params.tariff) qs.append("tariff", params.tariff)
+  if (params.billMonth) qs.append("billMonth", params.billMonth)
+  if (params.search) qs.append("search", params.search)
+  if (params.sortBy) qs.append("sortBy", params.sortBy)
+  if (params.sortOrder) qs.append("sortOrder", params.sortOrder)
+  qs.append("page", page.toString())
+  qs.append("limit", "500") // the server's own per-request cap
+  return `${API_BASE_URL}/api/v1/meters/consumption/pns-consumption/detail?${qs.toString()}`
+}
+
+/** Fetches every matching row across all pages for a full export — the
+ * paginated table view only ever holds one page in memory, but "Download"
+ * of the result set means the whole thing. Page 1 first to learn
+ * total_pages, then the rest run in parallel. */
+export async function fetchAllPnsConsumptionDetail(
+  params: Omit<PnsConsumptionDetailParams, "page" | "limit" | "enabled">,
+): Promise<PnsConsumptionDetail[]> {
+  const first = await fetchWithTimeout(detailUrl(params, 1), 30000)
+  if (!first.ok) throw new Error(`Failed to fetch pns consumption detail: ${first.status}`)
+  const firstPage: PnsConsumptionDetailResponse = await first.json()
+  const all = [...(firstPage.data || [])]
+
+  if (firstPage.total_pages > 1) {
+    const rest = await Promise.all(
+      Array.from({ length: firstPage.total_pages - 1 }, (_, i) => i + 2).map(async (page) => {
+        const res = await fetchWithTimeout(detailUrl(params, page), 30000)
+        if (!res.ok) throw new Error(`Failed to fetch pns consumption detail (page ${page}): ${res.status}`)
+        const json: PnsConsumptionDetailResponse = await res.json()
+        return json.data || []
+      }),
+    )
+    for (const page of rest) all.push(...page)
+  }
+
+  return all
 }
