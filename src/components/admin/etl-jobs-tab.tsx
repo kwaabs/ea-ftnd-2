@@ -145,6 +145,11 @@ export function EtlJobsTab() {
   const [editingId, setEditingId] = useState<string | null>(null)
   const [form, setForm] = useState<EtlJobInput>(EMPTY_FORM)
   const [triggerTimesText, setTriggerTimesText] = useState("")
+  // Off means a manual-only job — no automatic schedule at all, only ever
+  // run via "Run now" (the backend already supports this: trigger_times
+  // can be empty). Defaults on so existing behavior/expectations for a
+  // new job don't change unless someone explicitly opts out.
+  const [scheduleEnabled, setScheduleEnabled] = useState(true)
   const [submitting, setSubmitting] = useState(false)
   const [formError, setFormError] = useState<string | null>(null)
   const [deletingId, setDeletingId] = useState<string | null>(null)
@@ -252,6 +257,7 @@ export function EtlJobsTab() {
     setEditingId(null)
     setForm(EMPTY_FORM)
     setTriggerTimesText("")
+    setScheduleEnabled(true)
     setPrefillDestColumns(null)
     resetWizard()
     setFormError(null)
@@ -263,6 +269,7 @@ export function EtlJobsTab() {
     const f = jobToForm(j)
     setForm(f)
     setTriggerTimesText(f.trigger_times.join(", "))
+    setScheduleEnabled(f.trigger_times.length > 0)
     setPrefillDestColumns(f.dest_columns.length > 0 ? f.dest_columns : null)
     resetWizard()
     setFormError(null)
@@ -272,7 +279,9 @@ export function EtlJobsTab() {
   const canProceed = (s: JobWizardStep): boolean => {
     switch (s) {
       case 1:
-        return Boolean(form.name.trim() && form.source_id && parseCsv(triggerTimesText).length > 0)
+        return Boolean(
+          form.name.trim() && form.source_id && (!scheduleEnabled || parseCsv(triggerTimesText).length > 0),
+        )
       case 2: {
         // Not an exact re-test-the-current-text match: a query referencing
         // {{WATERMARK}} or {{FILTER}} can never test clean, since Test
@@ -313,7 +322,10 @@ export function EtlJobsTab() {
   }
 
   const handleSubmit = async () => {
-    const triggerTimes = parseCsv(triggerTimesText)
+    // Empty on purpose when scheduleEnabled is off — a manual-only job
+    // with no automatic schedule at all, only ever run via "Run now"
+    // (the backend supports this: trigger_times can be empty).
+    const triggerTimes = scheduleEnabled ? parseCsv(triggerTimesText) : []
     // Drop any picked conflict column that's no longer part of the mapping
     // (e.g. the user checked it, then went back and remapped that source
     // column elsewhere) rather than submitting a stale value.
@@ -327,8 +339,8 @@ export function EtlJobsTab() {
       setFormError("Map every source column to a destination column first")
       return
     }
-    if (triggerTimes.length === 0) {
-      setFormError("Trigger times must have at least one entry, e.g. 01:00")
+    if (scheduleEnabled && triggerTimes.length === 0) {
+      setFormError("Trigger times must have at least one entry, e.g. 01:00 — or turn off the schedule for a manual-only job")
       return
     }
     if (form.mode === "incremental" && (!form.watermark_column || !form.watermark_type)) {
@@ -500,17 +512,31 @@ export function EtlJobsTab() {
                   </p>
                 </div>
 
-                <div className="grid grid-cols-3 gap-3">
-                  <div className="col-span-2 space-y-1">
-                    <label className="text-xs text-muted-foreground">
-                      Trigger times * (comma-separated, 24h UTC)
-                    </label>
-                    <Input
-                      value={triggerTimesText}
-                      onChange={(e) => setTriggerTimesText(e.target.value)}
-                      placeholder="01:00, 03:30"
-                    />
+                <div className="flex items-center justify-between rounded-md border px-3 py-2">
+                  <div>
+                    <p className="text-sm font-medium">Run on a schedule</p>
+                    <p className="text-xs text-muted-foreground">
+                      {scheduleEnabled
+                        ? "Fires automatically at the trigger times below, every day."
+                        : "One-off / manual-only job — it will never run on its own. Trigger it yourself with Run now whenever you need it."}
+                    </p>
                   </div>
+                  <Switch checked={scheduleEnabled} onCheckedChange={setScheduleEnabled} />
+                </div>
+
+                <div className="grid grid-cols-3 gap-3">
+                  {scheduleEnabled && (
+                    <div className="col-span-2 space-y-1">
+                      <label className="text-xs text-muted-foreground">
+                        Trigger times * (comma-separated, 24h UTC)
+                      </label>
+                      <Input
+                        value={triggerTimesText}
+                        onChange={(e) => setTriggerTimesText(e.target.value)}
+                        placeholder="01:00, 03:30"
+                      />
+                    </div>
+                  )}
                   <div className="space-y-1">
                     <label className="text-xs text-muted-foreground">Batch size</label>
                     <Input
@@ -774,6 +800,10 @@ export function EtlJobsTab() {
                     <span className="text-muted-foreground">Mode:</span>{" "}
                     {form.mode === "incremental" ? "Incremental" : "Full refresh"}
                   </p>
+                  <p>
+                    <span className="text-muted-foreground">Schedule:</span>{" "}
+                    {scheduleEnabled ? parseCsv(triggerTimesText).join(", ") || "—" : "Manual only (Run now)"}
+                  </p>
                   {filterEnabled && (
                     <p>
                       <span className="text-muted-foreground">Filter query:</span>{" "}
@@ -933,7 +963,13 @@ export function EtlJobsTab() {
                             {j.mode === "incremental" ? "Incremental" : "Full refresh"}
                           </Badge>
                         </td>
-                        <td className="py-2.5 px-4 text-muted-foreground">{j.trigger_times.join(", ")}</td>
+                        <td className="py-2.5 px-4 text-muted-foreground">
+                          {j.trigger_times.length > 0 ? (
+                            j.trigger_times.join(", ")
+                          ) : (
+                            <span className="italic">Manual only</span>
+                          )}
+                        </td>
                         <td className="py-2.5 px-4">
                           <Badge
                             variant="outline"
