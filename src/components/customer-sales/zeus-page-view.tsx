@@ -6,6 +6,7 @@ import {
   AreaChartIcon,
   ArrowUpRight,
   BarChart3,
+  BarChartHorizontal,
   DollarSign,
   Scale,
   Users,
@@ -115,6 +116,18 @@ function formatMoney(value: number | null | undefined) {
 
 type ChartKind = "bar" | "area";
 
+// User-facing bar direction — "vertical" is the normal chart (bars stand up,
+// regions along the bottom), "horizontal" flips it (bars lie sideways,
+// regions listed down the left). Deliberately NOT named after Recharts'
+// own `layout` prop, whose "vertical"/"horizontal" values mean the
+// opposite of what they sound like (layout="vertical" draws horizontal
+// bars) — barDirectionToRechartsLayout below is the one place that
+// inversion has to be remembered.
+type BarDirection = "vertical" | "horizontal";
+function barDirectionToRechartsLayout(d: BarDirection): "horizontal" | "vertical" {
+  return d === "vertical" ? "horizontal" : "vertical";
+}
+
 interface RegionChartRow {
   regionname: string;
   /** Billed kWh for the tab's own meter type (Postpaid or Prepaid). */
@@ -123,16 +136,45 @@ interface RegionChartRow {
   customerCount: number;
 }
 
-/** Renders both the total consumption and total customer-count figures above a stacked bar/area point. */
+/**
+ * Renders both the total consumption and total customer-count figures next
+ * to a stacked bar/area point — above it for a normal vertical bar, to its
+ * right for a flipped horizontal bar (props.width is the bar's length
+ * along the value axis either way, but which screen axis that maps to
+ * swaps with direction, per Recharts' layout prop — see
+ * barDirectionToRechartsLayout above).
+ */
 function DualValueLabel(
-  props: { data: RegionChartRow[] } & Record<string, unknown>,
+  // Named barDirection (not "direction") deliberately — Recharts' own
+  // LabelList content props already carry a "direction" field (the SVG
+  // text-direction attribute), so reusing that name here would collide
+  // with a wider, incompatible type once spread via {...props} at the
+  // call sites below.
+  props: { data: RegionChartRow[]; barDirection?: BarDirection } & Record<string, unknown>,
 ) {
   const x = Number(props.x) || 0;
   const y = Number(props.y) || 0;
   const width = Number(props.width) || 0;
+  const height = Number(props.height) || 0;
   const index = Number(props.index) || 0;
   const row = props.data[index];
   if (!row) return null;
+
+  if (props.barDirection === "horizontal") {
+    const cy = y + height / 2;
+    const tx = x + width + 6;
+    return (
+      <g>
+        <text x={tx} y={cy - 4} textAnchor="start" className="fill-blue-700 text-[11px] font-semibold">
+          {formatKwh(row.totalKwh)}
+        </text>
+        <text x={tx} y={cy + 9} textAnchor="start" className="fill-purple-700 text-[10px] font-medium">
+          {formatNumber(row.customerCount)} cust.
+        </text>
+      </g>
+    );
+  }
+
   const cx = x + width / 2;
   return (
     <g>
@@ -159,6 +201,7 @@ export function ZeusPageView({
   const isLocked = Boolean(lockedServiceType);
   const [selectedRegion, setSelectedRegion] = useState<string | null>(null);
   const [chartKind, setChartKind] = useState<ChartKind>("bar");
+  const [barDirection, setBarDirection] = useState<BarDirection>("vertical");
   const effectiveRegion = selectedRegion || region;
   const serviceMeta = ZEUS_SERVICE_META[serviceType];
 
@@ -432,21 +475,40 @@ export function ZeusPageView({
               {`Billed kWh and ${serviceMeta.label.toLowerCase()} accounts per region — Zeus ${serviceMeta.label}`}
             </CardDescription>
           </div>
-          <ToggleGroup
-            type="single"
-            value={chartKind}
-            onValueChange={(v) => {
-              if (v) setChartKind(v as ChartKind);
-            }}
-            variant="outline"
-          >
-            <ToggleGroupItem value="bar" aria-label="Bar chart">
-              <BarChart3 className="h-4 w-4" />
-            </ToggleGroupItem>
-            <ToggleGroupItem value="area" aria-label="Area chart">
-              <AreaChartIcon className="h-4 w-4" />
-            </ToggleGroupItem>
-          </ToggleGroup>
+          <div className="flex items-center gap-2">
+            {chartKind === "bar" && (
+              <ToggleGroup
+                type="single"
+                value={barDirection}
+                onValueChange={(v) => {
+                  if (v) setBarDirection(v as BarDirection);
+                }}
+                variant="outline"
+              >
+                <ToggleGroupItem value="vertical" aria-label="Vertical bars">
+                  <BarChart3 className="h-4 w-4" />
+                </ToggleGroupItem>
+                <ToggleGroupItem value="horizontal" aria-label="Horizontal bars">
+                  <BarChartHorizontal className="h-4 w-4" />
+                </ToggleGroupItem>
+              </ToggleGroup>
+            )}
+            <ToggleGroup
+              type="single"
+              value={chartKind}
+              onValueChange={(v) => {
+                if (v) setChartKind(v as ChartKind);
+              }}
+              variant="outline"
+            >
+              <ToggleGroupItem value="bar" aria-label="Bar chart">
+                <BarChart3 className="h-4 w-4" />
+              </ToggleGroupItem>
+              <ToggleGroupItem value="area" aria-label="Area chart">
+                <AreaChartIcon className="h-4 w-4" />
+              </ToggleGroupItem>
+            </ToggleGroup>
+          </div>
         </CardHeader>
         <CardContent>
           {regionLoading ? (
@@ -460,27 +522,61 @@ export function ZeusPageView({
               {chartKind === "bar" ? (
                 <BarChart
                   data={byConsumption}
-                  margin={{ top: 40, right: 8, left: 8, bottom: 80 }}
+                  layout={barDirectionToRechartsLayout(barDirection)}
+                  margin={
+                    barDirection === "horizontal"
+                      ? { top: 20, right: 90, left: 90, bottom: 20 }
+                      : { top: 40, right: 8, left: 8, bottom: 80 }
+                  }
                 >
-                  <CartesianGrid strokeDasharray="3 3" vertical={false} />
-                  <XAxis
-                    dataKey="regionname"
-                    tickFormatter={(v: string) => shortRegionLabel(v)}
-                    angle={-35}
-                    textAnchor="end"
-                    tick={{ fontSize: 11 }}
-                    interval={0}
+                  <CartesianGrid
+                    strokeDasharray="3 3"
+                    vertical={barDirection === "horizontal"}
+                    horizontal={barDirection === "vertical"}
                   />
-                  <YAxis
-                    tickFormatter={(v) =>
-                      Math.abs(v) >= 1_000_000
-                        ? `${(v / 1_000_000).toFixed(0)}M`
-                        : Math.abs(v) >= 1_000
-                          ? `${(v / 1_000).toFixed(0)}k`
-                          : String(v)
-                    }
-                    tick={{ fontSize: 11 }}
-                  />
+                  {barDirection === "horizontal" ? (
+                    <>
+                      <XAxis
+                        type="number"
+                        tickFormatter={(v) =>
+                          Math.abs(v) >= 1_000_000
+                            ? `${(v / 1_000_000).toFixed(0)}M`
+                            : Math.abs(v) >= 1_000
+                              ? `${(v / 1_000).toFixed(0)}k`
+                              : String(v)
+                        }
+                        tick={{ fontSize: 11 }}
+                      />
+                      <YAxis
+                        type="category"
+                        dataKey="regionname"
+                        tickFormatter={(v: string) => shortRegionLabel(v)}
+                        tick={{ fontSize: 11 }}
+                        width={80}
+                      />
+                    </>
+                  ) : (
+                    <>
+                      <XAxis
+                        dataKey="regionname"
+                        tickFormatter={(v: string) => shortRegionLabel(v)}
+                        angle={-35}
+                        textAnchor="end"
+                        tick={{ fontSize: 11 }}
+                        interval={0}
+                      />
+                      <YAxis
+                        tickFormatter={(v) =>
+                          Math.abs(v) >= 1_000_000
+                            ? `${(v / 1_000_000).toFixed(0)}M`
+                            : Math.abs(v) >= 1_000
+                              ? `${(v / 1_000).toFixed(0)}k`
+                              : String(v)
+                        }
+                        tick={{ fontSize: 11 }}
+                      />
+                    </>
+                  )}
                   <Tooltip
                     formatter={(v: number, name: string) => [formatKwhRaw(v), name]}
                     labelFormatter={(label: string) => shortRegionLabel(label)}
@@ -490,7 +586,7 @@ export function ZeusPageView({
                     name={serviceMeta.label}
                     stackId="region"
                     fill={SERIES_COLOR[serviceType]}
-                    radius={[6, 6, 0, 0]}
+                    radius={barDirection === "horizontal" ? [0, 6, 6, 0] : [6, 6, 0, 0]}
                     cursor="pointer"
                     isAnimationActive={false}
                     onClick={(data: { regionname?: string }) => {
@@ -499,7 +595,9 @@ export function ZeusPageView({
                   >
                     <LabelList
                       dataKey="currentKwh"
-                      content={(props) => <DualValueLabel {...props} data={byConsumption} />}
+                      content={(props) => (
+                        <DualValueLabel {...props} data={byConsumption} barDirection={barDirection} />
+                      )}
                     />
                     {byConsumption.map((row) => (
                       <Cell
