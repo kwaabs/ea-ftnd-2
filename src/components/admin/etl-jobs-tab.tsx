@@ -1019,9 +1019,9 @@ export function EtlJobsTab() {
               ))}
             </div>
           ) : (
-            <div className="overflow-x-auto">
+            <div className="overflow-x-auto overflow-y-auto max-h-[600px]">
               <table className="w-full text-sm">
-                <thead>
+                <thead className="sticky top-0 z-10 bg-card">
                   <tr className="border-b">
                     <th className="text-left py-2 pr-4 font-medium text-muted-foreground">Name</th>
                     <th className="text-left py-2 px-4 font-medium text-muted-foreground">Source</th>
