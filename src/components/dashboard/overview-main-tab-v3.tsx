@@ -399,8 +399,10 @@ export function OverviewMainTabV3({
   // 1,000 kWh = 1 MWh; 1,000,000 kWh = 1 GWh — see
   // customer-sales-overview.tsx's formatKwh for the identical fix/comment.
   const formatSalesKwh = (value: number) => {
-    if (value >= 1_000_000) return `${(value / 1_000_000).toFixed(2)} GWh`;
-    if (value >= 1_000) return `${(value / 1_000).toFixed(2)} MWh`;
+    if (value >= 1_000_000)
+      return `${(value / 1_000_000).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })} GWh`;
+    if (value >= 1_000)
+      return `${(value / 1_000).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })} MWh`;
     return `${value.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })} kWh`;
   };
 

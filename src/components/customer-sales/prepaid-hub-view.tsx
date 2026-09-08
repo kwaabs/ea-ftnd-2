@@ -7,7 +7,6 @@ import {
   BatteryCharging,
   Scale,
   Users,
-  Wallet,
   Zap,
 } from "lucide-react"
 import {
@@ -70,8 +69,9 @@ function formatKwhRaw(value: number | null | undefined) {
 function formatKwh(value: number | null | undefined) {
   if (value === null || value === undefined) return "0"
   if (Math.abs(value) >= 1_000_000)
-    return `${(value / 1_000_000).toFixed(2)}M kWh`
-  if (Math.abs(value) >= 1_000) return `${(value / 1_000).toFixed(1)}k kWh`
+    return `${(value / 1_000_000).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}M kWh`
+  if (Math.abs(value) >= 1_000)
+    return `${(value / 1_000).toLocaleString("en-US", { minimumFractionDigits: 1, maximumFractionDigits: 1 })}k kWh`
   return `${value.toLocaleString("en-US", { maximumFractionDigits: 0 })} kWh`
 }
 
@@ -465,20 +465,6 @@ export function PrepaidHubView() {
             ) : (
               <p className="text-2xl font-bold text-green-700 tabular-nums">
                 {formatMoney(stats.mmsCredit)}
-              </p>
-            )}
-          </CardContent>
-        </Card>
-        <Card>
-          <CardContent className="pt-5">
-            <p className="text-xs text-muted-foreground mb-1 flex items-center gap-1">
-              <Wallet className="h-3.5 w-3.5" /> MMS credit balance
-            </p>
-            {regionLoading ? (
-              <Skeleton className="h-8 w-28" />
-            ) : (
-              <p className="text-2xl font-bold text-green-700 tabular-nums">
-                {formatMoney(stats.mmsBalance)}
               </p>
             )}
           </CardContent>

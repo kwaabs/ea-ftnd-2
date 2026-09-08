@@ -58,8 +58,10 @@ interface CustomerSalesOverviewProps {
 // actually 1 TWh) — fixed to the real SI prefixes.
 function formatKwh(value: number | null | undefined) {
   if (value === null || value === undefined) return "—";
-  if (value >= 1_000_000) return `${(value / 1_000_000).toFixed(2)} GWh`;
-  if (value >= 1_000) return `${(value / 1_000).toFixed(2)} MWh`;
+  if (value >= 1_000_000)
+    return `${(value / 1_000_000).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })} GWh`;
+  if (value >= 1_000)
+    return `${(value / 1_000).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })} MWh`;
   return `${value.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })} kWh`;
 }
 
