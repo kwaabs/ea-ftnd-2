@@ -580,7 +580,13 @@ export function ZeusPageView({
                     type={barDirection === "horizontal" ? "category" : "number"}
                     dataKey={barDirection === "horizontal" ? "regionname" : undefined}
                     tickFormatter={barDirection === "horizontal" ? formatAxisRegion : formatAxisKwh}
-                    width={barDirection === "horizontal" ? 80 : undefined}
+                    // 60 (not undefined) for the vertical/numeric case: confirmed
+                    // live that Recharts 2.15.4 does NOT fall back to its own
+                    // default width when this prop is passed as an explicit
+                    // `undefined` -- the plot area computation comes out NaN
+                    // instead, cascading into a broken clip-path, both axes, and
+                    // every bar's geometry. 60 is Recharts' own YAxis default.
+                    width={barDirection === "horizontal" ? 80 : 60}
                     tick={{ fontSize: 11 }}
                   />
                   <Tooltip
