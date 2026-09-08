@@ -579,7 +579,16 @@ export function ZeusPageView({
                   )}
                   <Tooltip
                     formatter={(v: number, name: string) => [formatKwhRaw(v), name]}
-                    labelFormatter={(label: string) => shortRegionLabel(label)}
+                    // Guarded, not just `shortRegionLabel(label)`: confirmed live
+                    // (crashed the whole page) that once layout="vertical"
+                    // (our "horizontal bars" direction — regionname moves to the
+                    // category YAxis), Recharts' default tooltip content can call
+                    // this with the hovered point's numeric axis value instead of
+                    // the region name, and shortRegionLabel has no guard of its
+                    // own against a non-string input.
+                    labelFormatter={(label: unknown) =>
+                      typeof label === "string" ? shortRegionLabel(label) : String(label ?? "")
+                    }
                   />
                   <Bar
                     dataKey="currentKwh"
