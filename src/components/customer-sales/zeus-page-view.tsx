@@ -87,6 +87,38 @@ const SERIES_COLOR: Record<ZeusServiceType, string> = {
   AMR: "#ea580c",
 };
 
+function hexToRgb(hex: string): [number, number, number] {
+  const h = hex.replace("#", "");
+  return [parseInt(h.slice(0, 2), 16), parseInt(h.slice(2, 4), 16), parseInt(h.slice(4, 6), 16)];
+}
+
+function mixRgb(
+  a: [number, number, number],
+  b: [number, number, number],
+  t: number,
+): [number, number, number] {
+  return [a[0] + (b[0] - a[0]) * t, a[1] + (b[1] - a[1]) * t, a[2] + (b[2] - a[2]) * t];
+}
+
+function rgbToHex([r, g, b]: [number, number, number]): string {
+  const c = (n: number) => Math.round(Math.max(0, Math.min(255, n))).toString(16).padStart(2, "0");
+  return `#${c(r)}${c(g)}${c(b)}`;
+}
+
+// Single-hue sequential ramp (light tint -> darker/richer shade of the
+// tab's own accent color) for the horizontal-bar "heat map" look — a
+// light-to-dark intensity scale is the standard heat-map convention,
+// picked over an unrelated yellow-to-red scale so it stays visually
+// consistent with this tab's existing blue/green/orange accent instead of
+// introducing a fourth, unrelated color scheme.
+function heatColor(value: number, min: number, max: number, baseHex: string): string {
+  const base = hexToRgb(baseHex);
+  const light = mixRgb([255, 255, 255], base, 0.18);
+  const dark = mixRgb(base, [0, 0, 0], 0.35);
+  const t = max > min ? (value - min) / (max - min) : 1;
+  return rgbToHex(mixRgb(light, dark, Math.max(0, Math.min(1, t))));
+}
+
 function formatKwhRaw(value: number | null | undefined) {
   if (value === null || value === undefined) return "0 kWh";
   return `${(value || 0).toLocaleString("en-US", { maximumFractionDigits: 0 })} kWh`;
@@ -324,6 +356,13 @@ export function ZeusPageView({
       .sort((a, b) => b.totalKwh - a.totalKwh)
       .slice(0, 12);
   }, [regionAgg]);
+
+  // Range for the horizontal-bar heat-map coloring below — min/max of
+  // whatever's actually on screen, not a fixed scale, so the color spread
+  // stays meaningful regardless of which service type/date range is
+  // selected.
+  const heatMin = byConsumption.length ? Math.min(...byConsumption.map((r) => r.currentKwh)) : 0;
+  const heatMax = byConsumption.length ? Math.max(...byConsumption.map((r) => r.currentKwh)) : 0;
 
   const selectRegion = (value: string | null) => {
     setSelectedRegion((prev) => (prev === value ? null : value));
@@ -614,7 +653,16 @@ export function ZeusPageView({
                     {byConsumption.map((row) => (
                       <Cell
                         key={row.regionname}
-                        fill={SERIES_COLOR[serviceType]}
+                        fill={
+                          barDirection === "horizontal"
+                            ? heatColor(
+                                row.currentKwh,
+                                heatMin,
+                                heatMax,
+                                SERIES_COLOR[serviceType],
+                              )
+                            : SERIES_COLOR[serviceType]
+                        }
                         fillOpacity={
                           !selectedRegion || selectedRegion === row.regionname ? 1 : 0.35
                         }
