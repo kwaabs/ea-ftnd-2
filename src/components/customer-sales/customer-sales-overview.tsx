@@ -51,11 +51,14 @@ interface CustomerSalesOverviewProps {
   dateRange: { start: string; end: string };
 }
 
+// 1,000 kWh = 1 MWh; 1,000 MWh = 1 GWh (i.e. 1,000,000 kWh = 1 GWh) — the
+// two brackets below matched these thresholds already but mislabeled the
+// result (the >= 1,000,000 kWh bracket said "MWh" instead of "GWh", and a
+// third >= 1,000,000,000 kWh bracket also said "GWh" even though that's
+// actually 1 TWh) — fixed to the real SI prefixes.
 function formatKwh(value: number | null | undefined) {
   if (value === null || value === undefined) return "—";
-  if (value >= 1_000_000_000)
-    return `${(value / 1_000_000_000).toFixed(2)} GWh`;
-  if (value >= 1_000_000) return `${(value / 1_000_000).toFixed(2)} MWh`;
+  if (value >= 1_000_000) return `${(value / 1_000_000).toFixed(2)} GWh`;
   if (value >= 1_000) return `${(value / 1_000).toFixed(2)} MWh`;
   return `${value.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })} kWh`;
 }
