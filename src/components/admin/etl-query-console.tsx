@@ -55,6 +55,13 @@ export function EtlQueryConsole({
   const [result, setResult] = useState<EtlTestQueryResult | null>(null)
   const [error, setError] = useState<string | null>(null)
   const isHttpApi = sources.find((s) => s.id === sourceId)?.kind === "http_api"
+  // Defensive: a query legitimately matching zero records has no columns
+  // to derive (see the backend fix in httpsource.go's testHTTPQuery) —
+  // coalesce to empty arrays here too rather than trust every response
+  // shape forever, so a null/undefined field renders the existing "No
+  // columns returned."/"No rows." empty states instead of crashing.
+  const columns = result?.columns ?? []
+  const rows = result?.rows ?? []
 
   const run = async () => {
     if (!sourceId) {
@@ -130,7 +137,7 @@ export function EtlQueryConsole({
       {result && (
         <div className="space-y-2">
           <p className="text-xs text-muted-foreground">
-            {result.rows.length} row{result.rows.length === 1 ? "" : "s"}
+            {rows.length} row{rows.length === 1 ? "" : "s"}
             {result.truncated ? " (truncated at 200)" : ""} · {result.elapsed_ms}ms
             {result.detected_records_path && (
               <>
@@ -139,14 +146,14 @@ export function EtlQueryConsole({
               </>
             )}
           </p>
-          {result.columns.length === 0 ? (
+          {columns.length === 0 ? (
             <p className="text-xs text-muted-foreground py-4 text-center">No columns returned.</p>
           ) : (
             <div className="overflow-x-auto max-h-[320px] overflow-y-auto rounded border">
               <table className="w-full text-xs">
                 <thead className="sticky top-0 bg-muted">
                   <tr className="border-b">
-                    {result.columns.map((c) => (
+                    {columns.map((c) => (
                       <th key={c} className="text-left py-1.5 px-2 font-medium text-muted-foreground whitespace-nowrap">
                         {c}
                       </th>
@@ -154,14 +161,14 @@ export function EtlQueryConsole({
                   </tr>
                 </thead>
                 <tbody>
-                  {result.rows.length === 0 ? (
+                  {rows.length === 0 ? (
                     <tr>
-                      <td colSpan={result.columns.length} className="text-center text-muted-foreground py-4">
+                      <td colSpan={columns.length} className="text-center text-muted-foreground py-4">
                         No rows.
                       </td>
                     </tr>
                   ) : (
-                    result.rows.map((row, i) => (
+                    rows.map((row, i) => (
                       <tr key={i} className="border-b last:border-0">
                         {row.map((v, j) => (
                           <td key={j} className="py-1 px-2 whitespace-nowrap font-mono">
