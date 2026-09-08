@@ -114,6 +114,26 @@ function formatMoney(value: number | null | undefined) {
   })}`;
 }
 
+// Shared by the region chart's numeric axis (Y in vertical-bar mode, X in
+// horizontal-bar mode) — kept as one function rather than duplicated per
+// axis so the M/k thresholds can't drift between them.
+function formatAxisKwh(v: number): string {
+  return Math.abs(v) >= 1_000_000
+    ? `${(v / 1_000_000).toFixed(0)}M`
+    : Math.abs(v) >= 1_000
+      ? `${(v / 1_000).toFixed(0)}k`
+      : String(v);
+}
+
+// Shared by the region chart's category axis (X in vertical-bar mode, Y in
+// horizontal-bar mode). Guarded the same way the chart's Tooltip
+// labelFormatter is guarded below — confirmed live that Recharts can call
+// an axis tickFormatter with a non-string value in some render passes, and
+// shortRegionLabel has no guard of its own against that.
+function formatAxisRegion(v: unknown): string {
+  return typeof v === "string" ? shortRegionLabel(v) : String(v ?? "");
+}
+
 type ChartKind = "bar" | "area";
 
 // User-facing bar direction — "vertical" is the normal chart (bars stand up,
@@ -534,61 +554,38 @@ export function ZeusPageView({
                     vertical={barDirection === "horizontal"}
                     horizontal={barDirection === "vertical"}
                   />
-                  {barDirection === "horizontal" ? (
-                    <>
-                      <XAxis
-                        type="number"
-                        tickFormatter={(v) =>
-                          Math.abs(v) >= 1_000_000
-                            ? `${(v / 1_000_000).toFixed(0)}M`
-                            : Math.abs(v) >= 1_000
-                              ? `${(v / 1_000).toFixed(0)}k`
-                              : String(v)
-                        }
-                        tick={{ fontSize: 11 }}
-                      />
-                      <YAxis
-                        type="category"
-                        dataKey="regionname"
-                        tickFormatter={(v: string) => shortRegionLabel(v)}
-                        tick={{ fontSize: 11 }}
-                        width={80}
-                      />
-                    </>
-                  ) : (
-                    <>
-                      <XAxis
-                        dataKey="regionname"
-                        tickFormatter={(v: string) => shortRegionLabel(v)}
-                        angle={-35}
-                        textAnchor="end"
-                        tick={{ fontSize: 11 }}
-                        interval={0}
-                      />
-                      <YAxis
-                        tickFormatter={(v) =>
-                          Math.abs(v) >= 1_000_000
-                            ? `${(v / 1_000_000).toFixed(0)}M`
-                            : Math.abs(v) >= 1_000
-                              ? `${(v / 1_000).toFixed(0)}k`
-                              : String(v)
-                        }
-                        tick={{ fontSize: 11 }}
-                      />
-                    </>
-                  )}
+                  {/* XAxis/YAxis are kept as unconditional direct children of
+                      BarChart, below — only their props swap by direction.
+                      Confirmed live: Recharts' own child-type scan (used to
+                      build the chart's layout/domain) does NOT recurse into
+                      a <>...</> Fragment, so an earlier version of this that
+                      picked between two <><XAxis/><YAxis/></> Fragment
+                      branches left Recharts unable to find either axis at
+                      all in horizontal mode -- symptoms were exactly this:
+                      no visible axes, a wrong/oversized bar domain with
+                      only one bar actually drawn, and the tooltip's label
+                      falling back to a raw "0" instead of the region name
+                      it would normally read off the (undetected) category
+                      axis. */}
+                  <XAxis
+                    type={barDirection === "horizontal" ? "number" : "category"}
+                    dataKey={barDirection === "horizontal" ? undefined : "regionname"}
+                    tickFormatter={barDirection === "horizontal" ? formatAxisKwh : formatAxisRegion}
+                    angle={barDirection === "horizontal" ? undefined : -35}
+                    textAnchor={barDirection === "horizontal" ? undefined : "end"}
+                    interval={barDirection === "horizontal" ? undefined : 0}
+                    tick={{ fontSize: 11 }}
+                  />
+                  <YAxis
+                    type={barDirection === "horizontal" ? "category" : "number"}
+                    dataKey={barDirection === "horizontal" ? "regionname" : undefined}
+                    tickFormatter={barDirection === "horizontal" ? formatAxisRegion : formatAxisKwh}
+                    width={barDirection === "horizontal" ? 80 : undefined}
+                    tick={{ fontSize: 11 }}
+                  />
                   <Tooltip
                     formatter={(v: number, name: string) => [formatKwhRaw(v), name]}
-                    // Guarded, not just `shortRegionLabel(label)`: confirmed live
-                    // (crashed the whole page) that once layout="vertical"
-                    // (our "horizontal bars" direction — regionname moves to the
-                    // category YAxis), Recharts' default tooltip content can call
-                    // this with the hovered point's numeric axis value instead of
-                    // the region name, and shortRegionLabel has no guard of its
-                    // own against a non-string input.
-                    labelFormatter={(label: unknown) =>
-                      typeof label === "string" ? shortRegionLabel(label) : String(label ?? "")
-                    }
+                    labelFormatter={formatAxisRegion}
                   />
                   <Bar
                     dataKey="currentKwh"
