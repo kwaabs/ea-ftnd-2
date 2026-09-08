@@ -68,8 +68,9 @@ function formatKwhRaw(value: number | null | undefined) {
 function formatKwh(value: number | null | undefined) {
   if (value === null || value === undefined) return "0";
   if (Math.abs(value) >= 1_000_000)
-    return `${(value / 1_000_000).toFixed(2)}M kWh`;
-  if (Math.abs(value) >= 1_000) return `${(value / 1_000).toFixed(1)}k kWh`;
+    return `${(value / 1_000_000).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}M kWh`;
+  if (Math.abs(value) >= 1_000)
+    return `${(value / 1_000).toLocaleString("en-US", { minimumFractionDigits: 1, maximumFractionDigits: 1 })}k kWh`;
   return `${value.toLocaleString("en-US", { maximumFractionDigits: 0 })} kWh`;
 }
 

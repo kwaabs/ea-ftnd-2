@@ -32,8 +32,10 @@ interface RegionDetailMarqueeProps {
 // 1,000 kWh = 1 MWh; 1,000,000 kWh = 1 GWh — the >= 1,000,000 bracket used
 // to divide by 1,000,000 but still label the result "MWh" instead of "GWh".
 function formatKwh(value: number): string {
-  if (value >= 1_000_000) return `${(value / 1_000_000).toFixed(2)} GWh`
-  if (value >= 1_000) return `${(value / 1_000).toFixed(2)} MWh`
+  if (value >= 1_000_000)
+    return `${(value / 1_000_000).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })} GWh`
+  if (value >= 1_000)
+    return `${(value / 1_000).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })} MWh`
   return `${value.toLocaleString("en-US", { maximumFractionDigits: 0 })} kWh`
 }
 
