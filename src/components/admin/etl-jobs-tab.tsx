@@ -222,12 +222,17 @@ export function EtlJobsTab() {
 
   const handleQueryTestResult = (result: EtlTestQueryResult | null, forQuery: string) => {
     if (!result) return
-    setSourceColumns(result.columns)
+    // Defensive: a query matching zero records (e.g. a month with no
+    // data) legitimately has no columns to report — treat a
+    // missing/null columns array the same as an empty one instead of
+    // crashing every downstream .length/.map/.join call on it.
+    const columns = result.columns ?? []
+    setSourceColumns(columns)
     setTestedQuery(forQuery)
     setMapping(
-      prefillDestColumns && prefillDestColumns.length === result.columns.length
+      prefillDestColumns && prefillDestColumns.length === columns.length
         ? prefillDestColumns
-        : result.columns.map(() => null),
+        : columns.map(() => null),
     )
     setPrefillDestColumns(null)
     // Only set for an http_api source (see EtlTestQueryResult.detected_records_path)
