@@ -478,6 +478,7 @@ export function CustomerSalesOverview({
   const zeusPrepaidDedupedNational = (zeusPrepaidDedupedNationalData || [])[0] || {
     sum_billconsumptionvalue: 0,
     customer_count: 0,
+    sum_billamount: 0,
   };
   const postpaidKwh =
     zeusByServiceType.Postpaid.totalKwh + zeusByServiceType.AMR.totalKwh;
@@ -509,6 +510,38 @@ export function CustomerSalesOverview({
           zeusByServiceType.Postpaid.totalCustomers
         : 0,
   };
+
+  // ── Region Breakdown (Combined tab) footer totals — Non-AMR Postpaid,
+  // AMR Postpaid, Prepaid (Zeus deduped + MMS), Legacy (BOT + BXC only,
+  // same PNS exclusion as combinedChartData above since PNS's region is an
+  // opaque code, not a name). Deliberately NOT reusing combinedKwh/
+  // combinedCustomers/legacyKwh from above — those include PNS, which
+  // would make this footer not equal the sum of the table's own visible
+  // Legacy column.
+  const regionTableLegacyKwh = botTotals.totalKwh + bxcTotals.totalKwh;
+  const regionTableLegacyCustomers =
+    botTotals.totalCustomers + bxcTotals.totalCustomers;
+  const regionTablePrepaidKwh =
+    (zeusPrepaidDedupedNational.sum_billconsumptionvalue || 0) +
+    mmsStats.totalKwh;
+  const regionTablePrepaidCustomers =
+    (zeusPrepaidDedupedNational.customer_count || 0) + mmsStats.totalCustomers;
+  const regionTablePrepaidValue =
+    (zeusPrepaidDedupedNational.sum_billamount || 0) + mmsStats.totalCredit;
+  const regionTableCombinedKwh =
+    zeusStats.totalKwh +
+    zeusByServiceType.AMR.totalKwh +
+    regionTablePrepaidKwh +
+    regionTableLegacyKwh;
+  const regionTableCombinedCustomers =
+    zeusStats.totalCustomers +
+    zeusByServiceType.AMR.totalCustomers +
+    regionTablePrepaidCustomers +
+    regionTableLegacyCustomers;
+  const regionTableCombinedValue =
+    zeusStats.totalBilling +
+    zeusByServiceType.AMR.totalBilling +
+    regionTablePrepaidValue;
 
   // ── Chart data ──
 
@@ -972,8 +1005,11 @@ export function CustomerSalesOverview({
                   Region Breakdown — Combined (Postpaid + Prepaid)
                 </CardTitle>
                 <CardDescription>
-                  Postpaid (Zeus: AMR + Non-AMR) and Prepaid (Zeus + MMS +
-                  Legacy) by region
+                  Postpaid (Non-AMR + AMR, both Zeus) and Prepaid (Zeus + MMS
+                  blended, plus Legacy) by region — Legacy here is BOT + BXC
+                  only; PNS has no region name to map onto a row, but still
+                  counts toward the page&apos;s top-level Legacy/Total
+                  figures above.
                 </CardDescription>
               </CardHeader>
               <CardContent>
@@ -991,19 +1027,25 @@ export function CustomerSalesOverview({
                             colSpan={3}
                             className="text-center py-2 px-4 font-medium text-blue-700"
                           >
-                            Zeus — Postpaid
-                          </th>
-                          <th
-                            colSpan={3}
-                            className="text-center py-2 px-4 font-medium text-green-700"
-                          >
-                            MMS — Prepaid
+                            Non-AMR Postpaid (Zeus)
                           </th>
                           <th
                             colSpan={3}
                             className="text-center py-2 px-4 font-medium text-orange-700"
                           >
-                            AMR (Postpaid)
+                            AMR Postpaid (Zeus)
+                          </th>
+                          <th
+                            colSpan={3}
+                            className="text-center py-2 px-4 font-medium text-green-700"
+                          >
+                            Prepaid (Zeus + MMS)
+                          </th>
+                          <th
+                            colSpan={2}
+                            className="text-center py-2 px-4 font-medium text-teal-700"
+                          >
+                            Legacy Prepaid (BOT + BXC)
                           </th>
                           <th
                             colSpan={3}
@@ -1025,15 +1067,6 @@ export function CustomerSalesOverview({
                           <th className="text-right py-2 px-4 font-medium text-xs text-blue-600">
                             Billing
                           </th>
-                          <th className="text-right py-2 px-4 font-medium text-xs text-green-600">
-                            kWh
-                          </th>
-                          <th className="text-right py-2 px-4 font-medium text-xs text-green-600">
-                            Customers
-                          </th>
-                          <th className="text-right py-2 px-4 font-medium text-xs text-green-600">
-                            Credit
-                          </th>
                           <th className="text-right py-2 px-4 font-medium text-xs text-orange-600">
                             kWh
                           </th>
@@ -1042,6 +1075,21 @@ export function CustomerSalesOverview({
                           </th>
                           <th className="text-right py-2 px-4 font-medium text-xs text-orange-600">
                             Billing
+                          </th>
+                          <th className="text-right py-2 px-4 font-medium text-xs text-green-600">
+                            kWh
+                          </th>
+                          <th className="text-right py-2 px-4 font-medium text-xs text-green-600">
+                            Customers
+                          </th>
+                          <th className="text-right py-2 px-4 font-medium text-xs text-green-600">
+                            Value
+                          </th>
+                          <th className="text-right py-2 px-4 font-medium text-xs text-teal-600">
+                            kWh
+                          </th>
+                          <th className="text-right py-2 px-4 font-medium text-xs text-teal-600">
+                            Customers
                           </th>
                           <th className="text-right py-2 px-4 font-medium text-xs text-purple-600">
                             kWh
@@ -1056,26 +1104,30 @@ export function CustomerSalesOverview({
                       </thead>
                       <tbody>
                         {(() => {
-                          // Zeus/AMR and MMS each maintain their own
-                          // independent region-name column, which don't
-                          // always agree exactly (typically just a
-                          // trailing "Region" — e.g. "Accra East" vs
-                          // "Accra East Region"). Keying rows on the raw
-                          // string split what's really one region into two
-                          // separate rows, one per naming convention, each
-                          // showing only that source's numbers. Group by
-                          // the normalized name instead (same
-                          // strip-trailing-"Region" rule as
-                          // useResolvedRegionName) so all three sources
-                          // land in one row per real region, displayed via
+                          // Each source maintains its own independent
+                          // region-name column, which don't always agree
+                          // exactly (typically just a trailing "Region" —
+                          // e.g. "Accra East" vs "Accra East Region").
+                          // Keying rows on the raw string would split what's
+                          // really one region into several rows, one per
+                          // naming convention, each showing only that
+                          // source's numbers. Group by the normalized name
+                          // instead (same strip-trailing-"Region" rule as
+                          // useResolvedRegionName) so every source lands in
+                          // one row per real region, displayed via
                           // shortRegionLabel (always the suffix-free short
                           // form) regardless of which source's naming
                           // convention happened to include it.
                           const labelByKey = new Map<string, string>();
                           [
-                            ...zeusItems.map((z) => z.regionname),
-                            ...zeusAmrItems.map((a) => a.regionname),
+                            ...zeusItems.map((z) => z.regionname || "Unknown"),
+                            ...zeusAmrItems.map((a) => a.regionname || "Unknown"),
+                            ...(zeusPrepaidDedupedRegionData || []).map(
+                              (z) => z.regionname || "Unknown",
+                            ),
                             ...mmsItems.map((m) => m.region || "Unknown"),
+                            ...(botRegionData || []).map((b) => b.region || "Unknown"),
+                            ...(bxcRegionData || []).map((b) => b.region || "Unknown"),
                           ].forEach((raw) => {
                             const key = normalizeRegionName(raw);
                             if (!labelByKey.has(key)) labelByKey.set(key, shortRegionLabel(raw));
@@ -1089,8 +1141,22 @@ export function CustomerSalesOverview({
                             )
                             .map((key, idx) => {
                               const region = labelByKey.get(key) as string;
-                              const zeusData = zeusItems.find(
-                                (z) => normalizeRegionName(z.regionname) === key,
+                              const nonAmrData = zeusItems.find(
+                                (z) => normalizeRegionName(z.regionname || "Unknown") === key,
+                              ) || {
+                                sum_billconsumptionvalue: 0,
+                                customer_count: 0,
+                                sum_billamount: 0,
+                              };
+                              const amrData = zeusAmrItems.find(
+                                (a) => normalizeRegionName(a.regionname || "Unknown") === key,
+                              ) || {
+                                sum_billconsumptionvalue: 0,
+                                customer_count: 0,
+                                sum_billamount: 0,
+                              };
+                              const zeusPrepaidData = (zeusPrepaidDedupedRegionData || []).find(
+                                (z) => normalizeRegionName(z.regionname || "Unknown") === key,
                               ) || {
                                 sum_billconsumptionvalue: 0,
                                 customer_count: 0,
@@ -1105,79 +1171,99 @@ export function CustomerSalesOverview({
                                 customer_count: 0,
                                 sum_last_month_credit_read: 0,
                               };
-                              const amrData = zeusAmrItems.find(
-                                (a) => normalizeRegionName(a.regionname) === key,
-                              ) || {
-                                sum_billconsumptionvalue: 0,
-                                customer_count: 0,
-                                sum_billamount: 0,
-                              };
-                            const totalKwh =
-                              (zeusData.sum_billconsumptionvalue || 0) +
-                              (mmsData.sum_last_month_kwh_read || 0) +
-                              (amrData.sum_billconsumptionvalue || 0);
-                            const totalCustomers =
-                              (zeusData.customer_count || 0) +
-                              (mmsData.customer_count || 0) +
-                              (amrData.customer_count || 0);
-                            const totalValue =
-                              (zeusData.sum_billamount || 0) +
-                              (mmsData.sum_last_month_credit_read || 0) +
-                              (amrData.sum_billamount || 0);
-                            return (
-                              <tr
-                                key={idx}
-                                className="border-b last:border-0 hover:bg-muted/40"
-                              >
-                                <td className="py-2.5 pr-4 font-medium">
-                                  {region}
-                                </td>
-                                <td className="py-2.5 px-4 text-right font-semibold text-blue-700 tabular-nums text-xs">
-                                  {formatKwhRaw(
-                                    zeusData.sum_billconsumptionvalue,
-                                  )}
-                                </td>
-                                <td className="py-2.5 px-4 text-right text-blue-600 tabular-nums text-xs">
-                                  {formatNumber(zeusData.customer_count)}
-                                </td>
-                                <td className="py-2.5 px-4 text-right text-blue-700 tabular-nums text-xs">
-                                  {formatMoney(zeusData.sum_billamount)}
-                                </td>
-                                <td className="py-2.5 px-4 text-right font-semibold text-green-700 tabular-nums text-xs">
-                                  {formatKwhRaw(
-                                    mmsData.sum_last_month_kwh_read,
-                                  )}
-                                </td>
-                                <td className="py-2.5 px-4 text-right text-green-600 tabular-nums text-xs">
-                                  {formatNumber(mmsData.customer_count)}
-                                </td>
-                                <td className="py-2.5 px-4 text-right text-green-700 tabular-nums text-xs">
-                                  {formatMoney(
-                                    mmsData.sum_last_month_credit_read,
-                                  )}
-                                </td>
-                                <td className="py-2.5 px-4 text-right font-semibold text-orange-700 tabular-nums text-xs">
-                                  {formatKwhRaw(
-                                    amrData.sum_billconsumptionvalue,
-                                  )}
-                                </td>
-                                <td className="py-2.5 px-4 text-right text-orange-600 tabular-nums text-xs">
-                                  {formatNumber(amrData.customer_count)}
-                                </td>
-                                <td className="py-2.5 px-4 text-right text-orange-700 tabular-nums text-xs">
-                                  {formatMoney(amrData.sum_billamount)}
-                                </td>
-                                <td className="py-2.5 px-4 text-right font-bold text-purple-700 tabular-nums text-xs">
-                                  {formatKwhRaw(totalKwh)}
-                                </td>
-                                <td className="py-2.5 px-4 text-right font-semibold text-purple-600 tabular-nums text-xs">
-                                  {formatNumber(totalCustomers)}
-                                </td>
-                                <td className="py-2.5 px-4 text-right font-bold text-purple-700 tabular-nums text-xs">
-                                  {formatMoney(totalValue)}
-                                </td>
-                              </tr>
-                            );
+                              const botData = (botRegionData || []).find(
+                                (b) => normalizeRegionName(b.region || "Unknown") === key,
+                              ) || { sum_kwh: 0, customer_count: 0 };
+                              const bxcData = (bxcRegionData || []).find(
+                                (b) => normalizeRegionName(b.region || "Unknown") === key,
+                              ) || { sum_kwh: 0, customer_count: 0 };
+
+                              const prepaidKwh =
+                                (zeusPrepaidData.sum_billconsumptionvalue || 0) +
+                                (mmsData.sum_last_month_kwh_read || 0);
+                              const prepaidCustomers =
+                                (zeusPrepaidData.customer_count || 0) +
+                                (mmsData.customer_count || 0);
+                              const prepaidValue =
+                                (zeusPrepaidData.sum_billamount || 0) +
+                                (mmsData.sum_last_month_credit_read || 0);
+
+                              const legacyKwhRow =
+                                (botData.sum_kwh || 0) + (bxcData.sum_kwh || 0);
+                              const legacyCustomersRow =
+                                (botData.customer_count || 0) +
+                                (bxcData.customer_count || 0);
+
+                              const totalKwh =
+                                (nonAmrData.sum_billconsumptionvalue || 0) +
+                                (amrData.sum_billconsumptionvalue || 0) +
+                                prepaidKwh +
+                                legacyKwhRow;
+                              const totalCustomers =
+                                (nonAmrData.customer_count || 0) +
+                                (amrData.customer_count || 0) +
+                                prepaidCustomers +
+                                legacyCustomersRow;
+                              const totalValue =
+                                (nonAmrData.sum_billamount || 0) +
+                                (amrData.sum_billamount || 0) +
+                                prepaidValue;
+                              return (
+                                <tr
+                                  key={idx}
+                                  className="border-b last:border-0 hover:bg-muted/40"
+                                >
+                                  <td className="py-2.5 pr-4 font-medium">
+                                    {region}
+                                  </td>
+                                  <td className="py-2.5 px-4 text-right font-semibold text-blue-700 tabular-nums text-xs">
+                                    {formatKwhRaw(
+                                      nonAmrData.sum_billconsumptionvalue,
+                                    )}
+                                  </td>
+                                  <td className="py-2.5 px-4 text-right text-blue-600 tabular-nums text-xs">
+                                    {formatNumber(nonAmrData.customer_count)}
+                                  </td>
+                                  <td className="py-2.5 px-4 text-right text-blue-700 tabular-nums text-xs">
+                                    {formatMoney(nonAmrData.sum_billamount)}
+                                  </td>
+                                  <td className="py-2.5 px-4 text-right font-semibold text-orange-700 tabular-nums text-xs">
+                                    {formatKwhRaw(
+                                      amrData.sum_billconsumptionvalue,
+                                    )}
+                                  </td>
+                                  <td className="py-2.5 px-4 text-right text-orange-600 tabular-nums text-xs">
+                                    {formatNumber(amrData.customer_count)}
+                                  </td>
+                                  <td className="py-2.5 px-4 text-right text-orange-700 tabular-nums text-xs">
+                                    {formatMoney(amrData.sum_billamount)}
+                                  </td>
+                                  <td className="py-2.5 px-4 text-right font-semibold text-green-700 tabular-nums text-xs">
+                                    {formatKwhRaw(prepaidKwh)}
+                                  </td>
+                                  <td className="py-2.5 px-4 text-right text-green-600 tabular-nums text-xs">
+                                    {formatNumber(prepaidCustomers)}
+                                  </td>
+                                  <td className="py-2.5 px-4 text-right text-green-700 tabular-nums text-xs">
+                                    {formatMoney(prepaidValue)}
+                                  </td>
+                                  <td className="py-2.5 px-4 text-right font-semibold text-teal-700 tabular-nums text-xs">
+                                    {formatKwhRaw(legacyKwhRow)}
+                                  </td>
+                                  <td className="py-2.5 px-4 text-right text-teal-600 tabular-nums text-xs">
+                                    {formatNumber(legacyCustomersRow)}
+                                  </td>
+                                  <td className="py-2.5 px-4 text-right font-bold text-purple-700 tabular-nums text-xs">
+                                    {formatKwhRaw(totalKwh)}
+                                  </td>
+                                  <td className="py-2.5 px-4 text-right font-semibold text-purple-600 tabular-nums text-xs">
+                                    {formatNumber(totalCustomers)}
+                                  </td>
+                                  <td className="py-2.5 px-4 text-right font-bold text-purple-700 tabular-nums text-xs">
+                                    {formatMoney(totalValue)}
+                                  </td>
+                                </tr>
+                              );
                             });
                         })()}
                       </tbody>
@@ -1193,15 +1279,6 @@ export function CustomerSalesOverview({
                           <td className="py-2.5 px-4 text-right font-semibold text-blue-700 tabular-nums">
                             {formatMoney(zeusStats.totalBilling)}
                           </td>
-                          <td className="py-2.5 px-4 text-right font-bold text-green-700 tabular-nums">
-                            {formatKwhRaw(mmsStats.totalKwh)}
-                          </td>
-                          <td className="py-2.5 px-4 text-right font-semibold text-green-700 tabular-nums">
-                            {formatNumber(mmsStats.totalCustomers)}
-                          </td>
-                          <td className="py-2.5 px-4 text-right font-semibold text-green-700 tabular-nums">
-                            {formatMoney(mmsStats.totalCredit)}
-                          </td>
                           <td className="py-2.5 px-4 text-right font-bold text-orange-700 tabular-nums">
                             {formatKwhRaw(zeusByServiceType.AMR.totalKwh)}
                           </td>
@@ -1213,18 +1290,29 @@ export function CustomerSalesOverview({
                           <td className="py-2.5 px-4 text-right font-semibold text-orange-700 tabular-nums">
                             {formatMoney(zeusByServiceType.AMR.totalBilling)}
                           </td>
+                          <td className="py-2.5 px-4 text-right font-bold text-green-700 tabular-nums">
+                            {formatKwhRaw(regionTablePrepaidKwh)}
+                          </td>
+                          <td className="py-2.5 px-4 text-right font-semibold text-green-700 tabular-nums">
+                            {formatNumber(regionTablePrepaidCustomers)}
+                          </td>
+                          <td className="py-2.5 px-4 text-right font-semibold text-green-700 tabular-nums">
+                            {formatMoney(regionTablePrepaidValue)}
+                          </td>
+                          <td className="py-2.5 px-4 text-right font-bold text-teal-700 tabular-nums">
+                            {formatKwhRaw(regionTableLegacyKwh)}
+                          </td>
+                          <td className="py-2.5 px-4 text-right font-semibold text-teal-700 tabular-nums">
+                            {formatNumber(regionTableLegacyCustomers)}
+                          </td>
                           <td className="py-2.5 px-4 text-right font-bold text-purple-700 tabular-nums">
-                            {formatKwhRaw(combinedKwh)}
+                            {formatKwhRaw(regionTableCombinedKwh)}
                           </td>
                           <td className="py-2.5 px-4 text-right font-semibold text-purple-700 tabular-nums">
-                            {formatNumber(combinedCustomers)}
+                            {formatNumber(regionTableCombinedCustomers)}
                           </td>
                           <td className="py-2.5 px-4 text-right font-bold text-purple-700 tabular-nums">
-                            {formatMoney(
-                              zeusStats.totalBilling +
-                                mmsStats.totalCredit +
-                                zeusByServiceType.AMR.totalBilling,
-                            )}
+                            {formatMoney(regionTableCombinedValue)}
                           </td>
                         </tr>
                       </tfoot>
