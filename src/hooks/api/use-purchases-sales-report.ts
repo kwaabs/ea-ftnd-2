@@ -2,7 +2,6 @@
 
 import { useMemo } from "react"
 import { useQueries, useQuery } from "@tanstack/react-query"
-import { useZeusBillingAggregate } from "@/hooks/api/use-zeus-billing-aggregate-api"
 import { normalizeRegionName, shortRegionLabel } from "@/hooks/use-resolved-region-name"
 import { fetchWithTimeout, formatApiDate } from "@/lib/utils"
 
@@ -108,6 +107,63 @@ function parseBillMonthLabel(raw: string | null | undefined): MonthPoint | null 
 // generation comment below for why that gap isn't worth a backend change
 // just for this page. Kept as plain fetches rather than growing those
 // other hooks' public param types for a shape only this page needs.
+//
+// Zeus is fetched one request per month too (raw, not via
+// useZeusBillingAggregate), for a performance reason confirmed against
+// ea-bknd-3/internal/zeusbilling/service.go's own routing logic, NOT just
+// consistency with MMS: that service's Aggregate() only uses its fast
+// zeus_sales_period_summary/zeus_customer_roster tables for customer_count
+// when groupBy does NOT include billingyear/billingmonth
+// (groupsIncludePeriod()) -- the roster stores one [first,last] active
+// window per customer, not per-period membership, so "distinct customers
+// in period X" structurally can't be answered from it and falls back to
+// scanning the raw 18M-row zeus_sales table instead. A single request
+// spanning the whole window with billingyear/billingmonth in groupBy (the
+// original shape here) hit that fallback on every load -- for a
+// customer_count field this report doesn't even use. Scoping each
+// request's dateFrom/dateTo to exactly one month and dropping
+// billingyear/billingmonth from groupBy entirely (attributing the whole
+// response to that request's own month, same as fetchMmsByRegion below)
+// keeps every request on the fast summary/roster path.
+
+interface ZeusRow {
+  regionname?: string | null
+  districtname?: string | null
+  metermodeltype?: string | null
+  sum_billconsumptionvalue: number
+}
+
+async function fetchZeusPostpaidAmrByMonth(dateFrom: string, dateTo: string): Promise<ZeusRow[]> {
+  const qs = new URLSearchParams({
+    billDateFrom: dateFrom,
+    billDateTo: dateTo,
+    groupBy: "regionname,districtname,metermodeltype",
+  })
+  const res = await fetchWithTimeout(
+    `${API_BASE_URL}/api/v1/meters/consumption/zeus-billing/aggregate?${qs}`,
+    REPORT_FETCH_TIMEOUT_MS,
+  )
+  if (!res.ok) throw new Error(`Failed to fetch zeus billing aggregate: ${res.status}`)
+  const body = await res.json()
+  return body.data ?? []
+}
+
+async function fetchZeusPrepaidDedupedByMonth(dateFrom: string, dateTo: string): Promise<ZeusRow[]> {
+  const qs = new URLSearchParams({
+    billDateFrom: dateFrom,
+    billDateTo: dateTo,
+    groupBy: "regionname,districtname",
+    meterModelType: "Prepaid",
+    excludeMmsDuplicates: "true",
+  })
+  const res = await fetchWithTimeout(
+    `${API_BASE_URL}/api/v1/meters/consumption/zeus-billing/aggregate?${qs}`,
+    REPORT_FETCH_TIMEOUT_MS,
+  )
+  if (!res.ok) throw new Error(`Failed to fetch zeus billing aggregate (prepaid): ${res.status}`)
+  const body = await res.json()
+  return body.data ?? []
+}
 
 interface BotBxcRow {
   region?: string | null
@@ -228,26 +284,37 @@ export function usePurchasesSalesReport(months: MonthPoint[]): PurchasesSalesRep
   const rangeTo = last ? monthBounds(last).dateTo : undefined
   const enabled = Boolean(rangeFrom && rangeTo)
 
-  // Sales: Non-AMR + AMR Postpaid, and deduped Zeus Prepaid, both
-  // region+district+month grouped in one call each (Zeus supports a
-  // multi-dimension groupBy natively) -- same Zeus-Prepaid-precedence-
-  // over-MMS rule already established on the Region Breakdown table.
-  const { data: zeusPostAmrData, isLoading: zeusPostAmrLoading, isError: zeusPostAmrError } =
-    useZeusBillingAggregate({
-      dateFrom: rangeFrom,
-      dateTo: rangeTo,
-      groupBy: ["regionname", "districtname", "metermodeltype", "billingyear", "billingmonth"],
-      enabled,
-    })
-  const { data: zeusPrepaidData, isLoading: zeusPrepaidLoading, isError: zeusPrepaidError } =
-    useZeusBillingAggregate({
-      dateFrom: rangeFrom,
-      dateTo: rangeTo,
-      groupBy: ["regionname", "districtname", "billingyear", "billingmonth"],
-      meterModelType: "Prepaid",
-      excludeMmsDuplicates: true,
-      enabled,
-    })
+  // Sales: Non-AMR + AMR Postpaid, and deduped Zeus Prepaid -- one request
+  // per month for both (see fetchZeusPostpaidAmrByMonth's comment above for
+  // why: keeps every request on Zeus's fast summary/roster path instead of
+  // the 18M-row raw-table fallback that billingyear/billingmonth in a
+  // single whole-window groupBy used to force). Same Zeus-Prepaid-
+  // precedence-over-MMS rule already established on the Region Breakdown
+  // table.
+  const zeusPostAmrQueries = useQueries({
+    queries: months.map((m) => {
+      const { dateFrom, dateTo } = monthBounds(m)
+      return {
+        queryKey: ["report-zeus-postamr", dateFrom, dateTo],
+        queryFn: () => fetchZeusPostpaidAmrByMonth(dateFrom, dateTo),
+        enabled,
+      }
+    }),
+  })
+  const zeusPrepaidQueries = useQueries({
+    queries: months.map((m) => {
+      const { dateFrom, dateTo } = monthBounds(m)
+      return {
+        queryKey: ["report-zeus-prepaid", dateFrom, dateTo],
+        queryFn: () => fetchZeusPrepaidDedupedByMonth(dateFrom, dateTo),
+        enabled,
+      }
+    }),
+  })
+  const zeusPostAmrLoading = zeusPostAmrQueries.some((q) => q.isLoading)
+  const zeusPostAmrError = zeusPostAmrQueries.some((q) => q.isError)
+  const zeusPrepaidLoading = zeusPrepaidQueries.some((q) => q.isLoading)
+  const zeusPrepaidError = zeusPrepaidQueries.some((q) => q.isError)
 
   const {
     data: botData,
@@ -368,28 +435,26 @@ export function usePurchasesSalesReport(months: MonthPoint[]): PurchasesSalesRep
     })
 
     // Sales: Non-AMR + AMR Postpaid (all metermodeltype values except
-    // Prepaid, which comes from the deduped fetch below).
-    ;(zeusPostAmrData || []).forEach((r) => {
-      const type = (r.metermodeltype || "").trim().toLowerCase()
-      if (type !== "postpaid" && type !== "amr") return
-      if (!r.billingyear || !r.billingmonth) return
-      addSale(
-        r.regionname || "Unknown",
-        r.districtname,
-        monthKey({ year: r.billingyear, month: r.billingmonth }),
-        r.sum_billconsumptionvalue || 0,
-      )
+    // Prepaid, which comes from the deduped fetch below). Each query is
+    // already scoped to exactly one month via dateFrom/dateTo, so that
+    // month is attributed directly rather than read back out of the row
+    // (billingyear/billingmonth are no longer requested -- see
+    // fetchZeusPostpaidAmrByMonth's comment).
+    zeusPostAmrQueries.forEach((q, idx) => {
+      const mKey = monthKey(months[idx])
+      ;(q.data || []).forEach((r) => {
+        const type = (r.metermodeltype || "").trim().toLowerCase()
+        if (type !== "postpaid" && type !== "amr") return
+        addSale(r.regionname || "Unknown", r.districtname, mKey, r.sum_billconsumptionvalue || 0)
+      })
     })
     // Sales: Zeus Prepaid (deduped against MMS) + MMS, blended into one
     // Prepaid figure -- MMS takes precedence on any meter it already has.
-    ;(zeusPrepaidData || []).forEach((r) => {
-      if (!r.billingyear || !r.billingmonth) return
-      addSale(
-        r.regionname || "Unknown",
-        r.districtname,
-        monthKey({ year: r.billingyear, month: r.billingmonth }),
-        r.sum_billconsumptionvalue || 0,
-      )
+    zeusPrepaidQueries.forEach((q, idx) => {
+      const mKey = monthKey(months[idx])
+      ;(q.data || []).forEach((r) => {
+        addSale(r.regionname || "Unknown", r.districtname, mKey, r.sum_billconsumptionvalue || 0)
+      })
     })
     mmsQueries.forEach((q, idx) => {
       const mKey = monthKey(months[idx])
@@ -514,7 +579,7 @@ export function usePurchasesSalesReport(months: MonthPoint[]): PurchasesSalesRep
       },
       anomalies,
     }
-  }, [zeusPostAmrData, zeusPrepaidData, botData, bxcData, bspData, mmsQueries, months])
+  }, [zeusPostAmrQueries, zeusPrepaidQueries, botData, bxcData, bspData, mmsQueries, months])
 
   return { ...report, isLoading, isError, erroredSources }
 }
