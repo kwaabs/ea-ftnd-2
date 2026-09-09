@@ -1,6 +1,6 @@
 "use client"
 
-import { Fragment, useEffect, useMemo, useState } from "react"
+import { Fragment, useMemo, useState } from "react"
 import {
   Area,
   AreaChart,
@@ -20,11 +20,8 @@ import {
   ChevronDown,
   ChevronRight,
   Minus,
-  Pause,
-  Play,
   Scale,
   TrendingDown,
-  X,
   Zap,
 } from "lucide-react"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
@@ -32,8 +29,6 @@ import { Skeleton } from "@/components/ui/skeleton"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Badge } from "@/components/ui/badge"
 import { Input } from "@/components/ui/input"
-import { Slider } from "@/components/ui/slider"
-import { Button } from "@/components/ui/button"
 import {
   currentMonthPoint,
   monthKey,
@@ -42,108 +37,20 @@ import {
   parseMonthInputValue,
   trailingMonths,
   usePurchasesSalesReport,
-  type RegionMonthCell,
+  type RegionSeries,
 } from "@/hooks/api/use-purchases-sales-report"
-
-function formatKwh(value: number): string {
-  const abs = Math.abs(value)
-  if (abs >= 1_000_000)
-    return `${(value / 1_000_000).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })} GWh`
-  if (abs >= 1_000)
-    return `${(value / 1_000).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })} MWh`
-  return `${value.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })} kWh`
-}
-
-function formatPct(value: number | null): string {
-  if (value === null) return "—"
-  return `${value.toLocaleString("en-US", { minimumFractionDigits: 1, maximumFractionDigits: 1 })}%`
-}
-
-function formatAxisKwh(v: number): string {
-  return Math.abs(v) >= 1_000_000
-    ? `${(v / 1_000_000).toFixed(0)}M`
-    : Math.abs(v) >= 1_000
-      ? `${(v / 1_000).toFixed(0)}k`
-      : String(v)
-}
-
-/** Severity relative to the network's own average loss % this period, not an
- * asserted industry-standard threshold — a region well above the network's
- * own average is the meaningful "worse than normal for this data" signal. */
-function lossSeverityClass(lossPct: number | null, nationalAvgPct: number | null): string {
-  if (lossPct === null) return "text-muted-foreground"
-  if (nationalAvgPct === null || nationalAvgPct <= 0) return "text-foreground"
-  if (lossPct > nationalAvgPct * 1.25) return "text-red-700 font-semibold"
-  if (lossPct > nationalAvgPct * 0.9) return "text-amber-700 font-medium"
-  return "text-emerald-700"
-}
-
-function mixRgb(a: [number, number, number], b: [number, number, number], t: number): [number, number, number] {
-  return [a[0] + (b[0] - a[0]) * t, a[1] + (b[1] - a[1]) * t, a[2] + (b[2] - a[2]) * t]
-}
-function rgbToCss([r, g, b]: [number, number, number]): string {
-  return `rgb(${Math.round(r)}, ${Math.round(g)}, ${Math.round(b)})`
-}
-
-// Continuous green -> amber -> red ramp for the heat map below, same
-// relative-to-that-month's-own-network-average idea as lossSeverityClass
-// (not an asserted absolute threshold) but as a real color gradient
-// instead of 3 discrete bands, since a heat map's whole point is showing
-// gradation, not just above/below a line. Returns RGB (not a CSS string)
-// so the same value can drive both the cell background and its text-color
-// contrast decision below without re-parsing a string.
-function lossHeatRgb(lossPct: number | null, monthAvgPct: number | null): [number, number, number] {
-  const NO_DATA: [number, number, number] = [241, 245, 249] // slate-100
-  const GREEN: [number, number, number] = [5, 150, 105] // emerald-600
-  const AMBER: [number, number, number] = [245, 158, 11] // amber-500
-  const RED: [number, number, number] = [185, 28, 28] // red-700
-  if (lossPct === null) return NO_DATA
-  if (monthAvgPct === null || monthAvgPct <= 0) return AMBER
-  const ratio = lossPct / monthAvgPct // 1.0 = exactly average that month
-  if (ratio <= 1) return mixRgb(GREEN, AMBER, Math.max(0, Math.min(1, ratio)))
-  return mixRgb(AMBER, RED, Math.max(0, Math.min(1, ratio - 1)))
-}
-
-/** Readable text color (near-black vs near-white) against a given heat
- * cell background, so percentage labels stay legible across the whole
- * green-to-red range instead of assuming one fixed text color works
- * everywhere. */
-function readableTextOn([r, g, b]: [number, number, number]): string {
-  const luminance = (0.299 * r + 0.587 * g + 0.114 * b) / 255
-  return luminance > 0.6 ? "#1e293b" : "#ffffff"
-}
-
-/** Loss % for a single region-month cell — shared by the heat map and the
- * per-region trend indicator so the formula can't drift between them. */
-function cellLossPct(cell: RegionMonthCell | undefined): number | null {
-  if (!cell || cell.purchasesKwh <= 0) return null
-  return ((cell.purchasesKwh - cell.salesKwh) / cell.purchasesKwh) * 100
-}
-
-/** First-half vs second-half average loss % for one region across the
- * selected window — the same "is this getting better or worse" question
- * the page's national narrative already answers, just per region so the
- * ranking table can show it inline instead of making you read the
- * headline sentence for the network as a whole and guess whether it
- * applies to the region you're actually looking at. */
-function regionTrendDelta(byMonth: Record<string, RegionMonthCell>, monthKeys: string[]): number | null {
-  const withLoss = monthKeys.map((k) => cellLossPct(byMonth[k])).filter((v): v is number => v !== null)
-  if (withLoss.length < 2) return null
-  const mid = Math.floor(withLoss.length / 2)
-  const avg = (vals: number[]) => vals.reduce((s, v) => s + v, 0) / vals.length
-  return avg(withLoss.slice(mid)) - avg(withLoss.slice(0, mid))
-}
-
-/** Worst (highest) loss % first — same convention the hook's own region
- * sort uses, duplicated here (not imported) since it's only needed when
- * re-sorting for a single spotlighted month, which the hook itself has no
- * reason to know about. */
-function byWorstLoss<T extends { lossPct: number | null }>(a: T, b: T): number {
-  if (a.lossPct === null && b.lossPct === null) return 0
-  if (a.lossPct === null) return 1
-  if (b.lossPct === null) return -1
-  return b.lossPct - a.lossPct
-}
+import {
+  cellLossPct,
+  formatAxisKwh,
+  formatKwh,
+  formatPct,
+  lossHeatRgb,
+  lossSeverityClass,
+  readableTextOn,
+  regionTrendDelta,
+  rgbToCss,
+} from "@/components/reports/report-format"
+import { PurchasesSalesLossMap } from "@/components/reports/purchases-sales-loss-map"
 
 const MAX_WINDOW_MONTHS = 12
 
@@ -186,6 +93,10 @@ export function PurchasesSalesReportView() {
       return next
     })
   }
+  // Shared with the loss map below -- clicking a region there or a row in
+  // the ranking table highlights the same selection in both, rather than
+  // being two disconnected views of the same data.
+  const [focusedRegionKey, setFocusedRegionKey] = useState<string | null>(null)
 
   // Custom range is clamped, not rejected: picking a span over 12 months
   // keeps the most recent 12 of whatever was selected rather than blocking
@@ -216,52 +127,6 @@ export function PurchasesSalesReportView() {
     lossPct: n.lossPct,
   }))
   const monthKeys = report.months.map((m) => monthKey(m))
-
-  // Spotlight: scrubbing/playing through the window swaps the headline,
-  // heat map column highlight, and region ranking from "totals across the
-  // whole window" to "this one month" -- the thing that actually makes
-  // this feel like watching a story unfold instead of reading one
-  // aggregated snapshot. null = back to the whole-window view.
-  const [spotlightIndex, setSpotlightIndex] = useState<number | null>(null)
-  const [isPlaying, setIsPlaying] = useState(false)
-
-  useEffect(() => {
-    if (!isPlaying || monthKeys.length === 0) return
-    const id = setInterval(() => {
-      setSpotlightIndex((prev) => {
-        const next = (prev === null ? -1 : prev) + 1
-        if (next >= monthKeys.length) {
-          setIsPlaying(false)
-          return prev
-        }
-        return next
-      })
-    }, 1400)
-    return () => clearInterval(id)
-  }, [isPlaying, monthKeys.length])
-
-  const spotlightMonthKey = spotlightIndex !== null ? monthKeys[spotlightIndex] : null
-  const spotlightNational = spotlightIndex !== null ? report.national[spotlightIndex] : null
-
-  // Region ranking re-sorted and re-valued for the spotlighted month when
-  // one is active -- whole-window totals (report.regions, already sorted)
-  // otherwise. District drill-down still shows whole-window district
-  // totals even while spotlighting a month (kept simple deliberately --
-  // the spotlight's job is the region-level story, not a third level of
-  // per-month-per-district recomputation).
-  const rankingRows =
-    spotlightMonthKey === null
-      ? report.regions
-      : [...report.regions]
-          .map((r) => {
-            const c = r.byMonth[spotlightMonthKey]
-            const purchasesKwh = c?.purchasesKwh ?? 0
-            const salesKwh = c?.salesKwh ?? 0
-            const lossKwh = purchasesKwh - salesKwh
-            const lossPct = purchasesKwh > 0 ? (lossKwh / purchasesKwh) * 100 : null
-            return { ...r, totalPurchasesKwh: purchasesKwh, totalSalesKwh: salesKwh, lossKwh, lossPct }
-          })
-          .sort(byWorstLoss)
 
   // Narrative: compare the first vs second half of the window's average
   // loss %, to say whether the network is trending better or worse, not
@@ -335,84 +200,6 @@ export function PurchasesSalesReportView() {
         </div>
       </div>
 
-      {/* Month scrubber — drag, click a tick, or press Play to walk the
-          window month by month; every card/chart below reacts live. */}
-      {!report.isLoading && monthKeys.length > 1 && (
-        <Card className="bg-gradient-to-r from-slate-50 to-slate-100/60 border-slate-200">
-          <CardContent className="pt-5 pb-4">
-            <div className="flex items-center gap-3">
-              <Button
-                type="button"
-                variant={isPlaying ? "default" : "outline"}
-                size="icon"
-                className="shrink-0 rounded-full"
-                onClick={() => {
-                  if (isPlaying) {
-                    setIsPlaying(false)
-                    return
-                  }
-                  // Starting from the end (or with nothing spotlighted) restarts
-                  // from month 0 rather than doing nothing / stepping past the end.
-                  if (spotlightIndex === null || spotlightIndex >= monthKeys.length - 1) {
-                    setSpotlightIndex(0)
-                  }
-                  setIsPlaying(true)
-                }}
-                title={isPlaying ? "Pause" : "Play through the window"}
-              >
-                {isPlaying ? <Pause className="h-4 w-4" /> : <Play className="h-4 w-4 ml-0.5" />}
-              </Button>
-              <div className="flex-1 px-1">
-                <Slider
-                  value={[spotlightIndex ?? -1]}
-                  min={-1}
-                  max={monthKeys.length - 1}
-                  step={1}
-                  onValueChange={([v]) => {
-                    setIsPlaying(false)
-                    setSpotlightIndex(v < 0 ? null : v)
-                  }}
-                />
-                <div className="flex justify-between mt-1.5 px-0.5">
-                  {report.monthLabels.map((label, idx) => (
-                    <button
-                      key={label}
-                      type="button"
-                      onClick={() => {
-                        setIsPlaying(false)
-                        setSpotlightIndex(idx)
-                      }}
-                      className={`text-[10px] whitespace-nowrap ${
-                        idx === spotlightIndex
-                          ? "text-foreground font-semibold"
-                          : "text-muted-foreground hover:text-foreground"
-                      }`}
-                    >
-                      {monthKeys.length > 8 ? label.split(" ")[0] : label}
-                    </button>
-                  ))}
-                </div>
-              </div>
-              {spotlightIndex !== null && (
-                <Button
-                  type="button"
-                  variant="ghost"
-                  size="sm"
-                  className="shrink-0 gap-1 text-xs text-muted-foreground"
-                  onClick={() => {
-                    setIsPlaying(false)
-                    setSpotlightIndex(null)
-                  }}
-                >
-                  <X className="h-3.5 w-3.5" />
-                  Show whole window
-                </Button>
-              )}
-            </div>
-          </CardContent>
-        </Card>
-      )}
-
       {report.isError && (
         <p className="text-sm text-red-600">
           Failed to load: {report.erroredSources.join(", ")} — figures below may be incomplete for that source.
@@ -420,17 +207,7 @@ export function PurchasesSalesReportView() {
         </p>
       )}
 
-      {/* National headline — swaps to the spotlighted month's own figures
-          when the scrubber is active, whole-window totals otherwise. */}
-      <div className="flex items-center gap-2 text-xs text-muted-foreground">
-        <span className={spotlightIndex !== null ? "h-1.5 w-1.5 rounded-full bg-blue-600 animate-pulse" : ""} />
-        Showing:{" "}
-        <span className="font-semibold text-foreground">
-          {spotlightIndex !== null
-            ? report.monthLabels[spotlightIndex]
-            : `whole window (${report.monthLabels[0]} – ${report.monthLabels[report.monthLabels.length - 1]})`}
-        </span>
-      </div>
+      {/* National headline */}
       <div className="grid gap-4 md:grid-cols-3">
         <Card className="border-2 border-blue-200 bg-blue-50/40">
           <CardHeader className="pb-2">
@@ -444,9 +221,7 @@ export function PurchasesSalesReportView() {
             {report.isLoading ? (
               <Skeleton className="h-9 w-40" />
             ) : (
-              <div className="text-3xl font-bold text-blue-700 transition-all">
-                {formatKwh(spotlightNational ? spotlightNational.purchasesKwh : report.nationalTotals.purchasesKwh)}
-              </div>
+              <div className="text-3xl font-bold text-blue-700">{formatKwh(report.nationalTotals.purchasesKwh)}</div>
             )}
           </CardContent>
         </Card>
@@ -462,9 +237,7 @@ export function PurchasesSalesReportView() {
             {report.isLoading ? (
               <Skeleton className="h-9 w-40" />
             ) : (
-              <div className="text-3xl font-bold text-emerald-700 transition-all">
-                {formatKwh(spotlightNational ? spotlightNational.salesKwh : report.nationalTotals.salesKwh)}
-              </div>
+              <div className="text-3xl font-bold text-emerald-700">{formatKwh(report.nationalTotals.salesKwh)}</div>
             )}
           </CardContent>
         </Card>
@@ -481,12 +254,8 @@ export function PurchasesSalesReportView() {
               <Skeleton className="h-9 w-40" />
             ) : (
               <>
-                <div className="text-3xl font-bold text-rose-700 transition-all">
-                  {formatKwh(spotlightNational ? spotlightNational.lossKwh : report.nationalTotals.lossKwh)}
-                </div>
-                <div className="text-sm text-rose-600 mt-1">
-                  {formatPct(spotlightNational ? spotlightNational.lossPct : nationalAvgLossPct)} of purchases
-                </div>
+                <div className="text-3xl font-bold text-rose-700">{formatKwh(report.nationalTotals.lossKwh)}</div>
+                <div className="text-sm text-rose-600 mt-1">{formatPct(nationalAvgLossPct)} of purchases</div>
               </>
             )}
           </CardContent>
@@ -665,17 +434,10 @@ export function PurchasesSalesReportView() {
                     <th className="text-left py-1 pr-3 font-medium text-muted-foreground sticky left-0 bg-card">
                       Region
                     </th>
-                    {report.monthLabels.map((label, idx) => (
+                    {report.monthLabels.map((label) => (
                       <th
                         key={label}
-                        onClick={() => {
-                          setIsPlaying(false)
-                          setSpotlightIndex((prev) => (prev === idx ? null : idx))
-                        }}
-                        className={`text-center px-1 pb-1 font-medium whitespace-nowrap text-xs cursor-pointer ${
-                          idx === spotlightIndex ? "text-foreground font-bold" : "text-muted-foreground"
-                        }`}
-                        title="Click to spotlight this month"
+                        className="text-center px-1 pb-1 font-medium text-muted-foreground whitespace-nowrap text-xs"
                       >
                         {label}
                       </th>
@@ -693,31 +455,33 @@ export function PurchasesSalesReportView() {
                         const monthAvg = report.national[idx]?.lossPct ?? null
                         const rgb = lossHeatRgb(lossPct, monthAvg)
                         const cell = r.byMonth[mKey]
+                        const textColor = readableTextOn(rgb)
                         return (
                           <td
                             key={mKey}
-                            onClick={() => {
-                              setIsPlaying(false)
-                              setSpotlightIndex((prev) => (prev === idx ? null : idx))
-                            }}
-                            className={`text-center text-xs font-medium tabular-nums rounded cursor-pointer transition-opacity ${
-                              spotlightIndex !== null && idx !== spotlightIndex ? "opacity-40" : ""
-                            }`}
-                            style={{
-                              backgroundColor: rgbToCss(rgb),
-                              color: readableTextOn(rgb),
-                              minWidth: 56,
-                              height: 32,
-                              outline: idx === spotlightIndex ? "2px solid #1e293b" : undefined,
-                              outlineOffset: idx === spotlightIndex ? -2 : undefined,
-                            }}
+                            className="text-center rounded align-middle px-1.5 py-1.5"
+                            style={{ backgroundColor: rgbToCss(rgb), color: textColor, minWidth: 92 }}
                             title={
                               cell
-                                ? `${r.region}, ${report.monthLabels[idx]}: purchased ${formatKwh(cell.purchasesKwh)}, sold ${formatKwh(cell.salesKwh)}`
-                                : `${r.region}, ${report.monthLabels[idx]}: no data`
+                                ? `${r.region}, ${report.monthLabels[idx]}: purchased ${formatKwh(cell.purchasesKwh)}, sold ${formatKwh(cell.salesKwh)}, loss ${formatKwh(cell.purchasesKwh - cell.salesKwh)}`
+                                : `${r.region}, ${report.monthLabels[idx]}: no purchases data`
                             }
                           >
-                            {formatPct(lossPct)}
+                            {cell ? (
+                              <>
+                                <div className="text-sm font-bold tabular-nums leading-tight">
+                                  {formatPct(lossPct)}
+                                </div>
+                                <div
+                                  className="text-[10px] leading-tight tabular-nums opacity-90"
+                                  style={{ color: textColor }}
+                                >
+                                  P {formatAxisKwh(cell.purchasesKwh)} · S {formatAxisKwh(cell.salesKwh)}
+                                </div>
+                              </>
+                            ) : (
+                              <div className="text-xs font-medium">—</div>
+                            )}
                           </td>
                         )
                       })}
@@ -730,6 +494,17 @@ export function PurchasesSalesReportView() {
         </CardContent>
       </Card>
 
+      {/* Loss map */}
+      {!report.isLoading && report.regions.length > 0 && (
+        <PurchasesSalesLossMap
+          regions={report.regions}
+          nationalAvgLossPct={nationalAvgLossPct}
+          monthKeys={monthKeys}
+          focusedRegionKey={focusedRegionKey}
+          onFocusRegion={setFocusedRegionKey}
+        />
+      )}
+
       {/* Region ranking */}
       <Card>
         <CardHeader>
@@ -737,11 +512,7 @@ export function PurchasesSalesReportView() {
             <Scale className="h-4 w-4 text-muted-foreground" />
             <CardTitle>Region ranking — highest loss % first</CardTitle>
           </div>
-          <CardDescription>
-            {spotlightIndex !== null
-              ? `${report.monthLabels[spotlightIndex]} only — click the scrubber above or "Show whole window" to go back to totals`
-              : "Totals across the selected window"}
-          </CardDescription>
+          <CardDescription>Totals across the selected window</CardDescription>
         </CardHeader>
         <CardContent>
           {report.isLoading ? (
@@ -750,7 +521,7 @@ export function PurchasesSalesReportView() {
                 <Skeleton key={i} className="h-10 w-full" />
               ))}
             </div>
-          ) : rankingRows.length === 0 ? (
+          ) : report.regions.length === 0 ? (
             <p className="text-sm text-muted-foreground py-8 text-center">No data for this window.</p>
           ) : (
             <div className="overflow-x-auto">
@@ -768,14 +539,18 @@ export function PurchasesSalesReportView() {
                   </tr>
                 </thead>
                 <tbody>
-                  {rankingRows.map((r) => {
+                  {report.regions.map((r: RegionSeries) => {
                     const isExpanded = expandedRegions.has(r.regionKey)
                     const trend = regionTrendDelta(r.byMonth, monthKeys)
+                    const isFocused = r.regionKey === focusedRegionKey
                     return (
                       <Fragment key={r.regionKey}>
                         <tr
-                          className="border-b last:border-0 hover:bg-muted/40 cursor-pointer"
-                          onClick={() => toggleRegion(r.regionKey)}
+                          className={`border-b last:border-0 hover:bg-muted/40 cursor-pointer ${isFocused ? "bg-blue-50/70" : ""}`}
+                          onClick={() => {
+                            toggleRegion(r.regionKey)
+                            setFocusedRegionKey((prev) => (prev === r.regionKey ? null : r.regionKey))
+                          }}
                         >
                           <td className="py-2.5 pr-4 font-medium">
                             <span className="inline-flex items-center gap-1.5">
