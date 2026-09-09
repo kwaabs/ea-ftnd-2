@@ -18,12 +18,13 @@ export function formatPct(value: number | null): string {
   return `${value.toLocaleString("en-US", { minimumFractionDigits: 1, maximumFractionDigits: 1 })}%`
 }
 
+// Explicit unit suffix (GWh/MWh/kWh), not a bare "M"/"k" -- this is
+// electricity data and an unlabeled "89M" doesn't say 89M of what.
 export function formatAxisKwh(v: number): string {
-  return Math.abs(v) >= 1_000_000
-    ? `${(v / 1_000_000).toFixed(0)}M`
-    : Math.abs(v) >= 1_000
-      ? `${(v / 1_000).toFixed(0)}k`
-      : String(v)
+  const abs = Math.abs(v)
+  if (abs >= 1_000_000) return `${(v / 1_000_000).toFixed(1)} GWh`
+  if (abs >= 1_000) return `${(v / 1_000).toFixed(1)} MWh`
+  return `${v.toFixed(0)} kWh`
 }
 
 /** Severity relative to the network's own average loss % this period, not an
@@ -48,21 +49,30 @@ export function rgbToCss([r, g, b]: [number, number, number]): string {
   return `rgb(${Math.round(r)}, ${Math.round(g)}, ${Math.round(b)})`
 }
 
-// Continuous green -> amber -> red ramp, used by the heat map and the loss
-// map, relative to a supplied average (not an asserted absolute threshold)
-// so a network-wide bad period doesn't paint everything red. Returns RGB
-// (not a CSS string) so the same value can drive both a fill color and its
-// text-color contrast decision without re-parsing a string.
-export function lossHeatRgb(lossPct: number | null, avgPct: number | null): [number, number, number] {
+// Absolute loss % bands, used by the heat map and the loss map. This used
+// to be relative to a supplied national average, but that average can
+// itself be zero or negative in a given month (net sales briefly exceeding
+// net purchases network-wide) -- dividing by that collapsed every single
+// cell to one flat color whenever it happened, which is common enough in
+// this data to make the whole table look broken. Fixed reference bands
+// keep showing real region-to-region variation regardless of what any one
+// month's national number does. Returns RGB (not a CSS string) so the same
+// value can drive both a fill color and its text-color contrast decision
+// without re-parsing a string.
+export function lossHeatRgb(lossPct: number | null): [number, number, number] {
   const NO_DATA: [number, number, number] = [241, 245, 249] // slate-100
+  // Sold more than it bought -- a data/timing mismatch between sources
+  // (flagged explicitly in the anomalies card), not genuine over-performance,
+  // so it gets its own color rather than reading as "great, deep green".
+  const ANOMALY: [number, number, number] = [124, 58, 237] // violet-600
   const GREEN: [number, number, number] = [5, 150, 105] // emerald-600
   const AMBER: [number, number, number] = [245, 158, 11] // amber-500
   const RED: [number, number, number] = [185, 28, 28] // red-700
   if (lossPct === null) return NO_DATA
-  if (avgPct === null || avgPct <= 0) return AMBER
-  const ratio = lossPct / avgPct // 1.0 = exactly average
-  if (ratio <= 1) return mixRgb(GREEN, AMBER, Math.max(0, Math.min(1, ratio)))
-  return mixRgb(AMBER, RED, Math.max(0, Math.min(1, ratio - 1)))
+  if (lossPct < 0) return ANOMALY
+  if (lossPct <= 10) return mixRgb(GREEN, AMBER, lossPct / 10)
+  if (lossPct <= 30) return mixRgb(AMBER, RED, (lossPct - 10) / 20)
+  return RED
 }
 
 /** Readable text color (near-black vs near-white) against a given heat

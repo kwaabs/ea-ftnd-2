@@ -91,6 +91,13 @@ export function PurchasesSalesReportView() {
   const [showPurchases, setShowPurchases] = useState(true)
   const [showSales, setShowSales] = useState(true)
   const [showLossPct, setShowLossPct] = useState(true)
+  // Region/district filters live on the page itself, not in the app's
+  // global header Filters popover -- that popover's state (useAppStore)
+  // isn't read anywhere in this page's data hook, so it would just be
+  // dead UI here (see header.tsx's showGlobalFilters). "all" is the
+  // sentinel for "no filter", since shadcn Select can't take "".
+  const [regionFilter, setRegionFilter] = useState<string>("all")
+  const [districtFilter, setDistrictFilter] = useState<string>("all")
   const [expandedRegions, setExpandedRegions] = useState<Set<string>>(new Set())
   const toggleRegion = (regionKey: string) => {
     setExpandedRegions((prev) => {
@@ -126,20 +133,90 @@ export function PurchasesSalesReportView() {
   }, [periodMode, customRange, now])
 
   const report = usePurchasesSalesReport(months)
+  const monthKeys = report.months.map((m) => monthKey(m))
 
-  const chartData = report.national.map((n) => ({
+  const selectedRegion = regionFilter === "all" ? null : report.regions.find((r) => r.regionKey === regionFilter) ?? null
+  const selectedDistrict =
+    districtFilter === "all" || !selectedRegion
+      ? null
+      : selectedRegion.districts.find((d) => d.districtKey === districtFilter) ?? null
+
+  const handleRegionFilterChange = (value: string) => {
+    setRegionFilter(value)
+    setDistrictFilter("all")
+    setFocusedRegionKey(value === "all" ? null : value)
+  }
+
+  // Everything below (headline totals, trend chart, narrative, heat map,
+  // ranking table) is driven off this scoped region list rather than
+  // report.regions/report.national directly, so picking a region or
+  // district actually filters the whole story instead of just the table.
+  // The loss map is the one exception -- it stays national, since a
+  // single-district view has no geometry of its own to draw.
+  const scopeRegions: RegionSeries[] = useMemo(() => {
+    if (!selectedRegion) return report.regions
+    if (!selectedDistrict) return [selectedRegion]
+    return [
+      {
+        region: `${selectedRegion.region} — ${selectedDistrict.district}`,
+        regionKey: `${selectedRegion.regionKey}::${selectedDistrict.districtKey}`,
+        byMonth: selectedDistrict.byMonth,
+        totalPurchasesKwh: selectedDistrict.totalPurchasesKwh,
+        totalSalesKwh: selectedDistrict.totalSalesKwh,
+        lossKwh: selectedDistrict.lossKwh,
+        lossPct: selectedDistrict.lossPct,
+        districts: [],
+      },
+    ]
+  }, [report.regions, selectedRegion, selectedDistrict])
+
+  const scopeNational = useMemo(() => {
+    return report.months.map((m, idx) => {
+      const mKey = monthKeys[idx]
+      let purchases = 0
+      let sales = 0
+      scopeRegions.forEach((r) => {
+        const c = r.byMonth[mKey]
+        if (c) {
+          purchases += c.purchasesKwh
+          sales += c.salesKwh
+        }
+      })
+      const lossKwh = purchases - sales
+      return {
+        month: mKey,
+        label: report.monthLabels[idx],
+        purchasesKwh: purchases,
+        salesKwh: sales,
+        lossKwh,
+        lossPct: purchases > 0 ? (lossKwh / purchases) * 100 : null,
+      }
+    })
+  }, [report.months, report.monthLabels, scopeRegions, monthKeys])
+
+  const scopeTotals = useMemo(() => {
+    const purchases = scopeRegions.reduce((s, r) => s + r.totalPurchasesKwh, 0)
+    const sales = scopeRegions.reduce((s, r) => s + r.totalSalesKwh, 0)
+    const lossKwh = purchases - sales
+    return { purchasesKwh: purchases, salesKwh: sales, lossKwh, lossPct: purchases > 0 ? (lossKwh / purchases) * 100 : null }
+  }, [scopeRegions])
+
+  const scopeAnomalies = selectedRegion
+    ? report.anomalies.filter((a) => a.region === selectedRegion.region)
+    : report.anomalies
+
+  const chartData = scopeNational.map((n) => ({
     label: n.label,
     purchasesKwh: n.purchasesKwh,
     salesKwh: n.salesKwh,
     lossPct: n.lossPct,
   }))
-  const monthKeys = report.months.map((m) => monthKey(m))
 
   // Narrative: compare the first vs second half of the window's average
-  // loss %, to say whether the network is trending better or worse, not
-  // just what the current snapshot is.
+  // loss %, to say whether the network (or the filtered region/district) is
+  // trending better or worse, not just what the current snapshot is.
   const narrative = useMemo(() => {
-    const withLoss = report.national.filter((n) => n.lossPct !== null)
+    const withLoss = scopeNational.filter((n) => n.lossPct !== null)
     if (withLoss.length < 2) return null
     const mid = Math.floor(withLoss.length / 2)
     const firstHalf = withLoss.slice(0, mid)
@@ -148,12 +225,25 @@ export function PurchasesSalesReportView() {
     const firstAvg = avg(firstHalf)
     const secondAvg = avg(secondHalf)
     const delta = secondAvg - firstAvg
-    const worst = report.regions[0]
-    const best = [...report.regions].reverse().find((r) => r.lossPct !== null)
+    // Worst/best-region comparison only means something across multiple
+    // regions -- once filtered down to one region or district there's
+    // nothing to rank against, so it's left out rather than comparing an
+    // entry to itself.
+    const worst = scopeRegions.length > 1 ? scopeRegions[0] : null
+    const best = scopeRegions.length > 1 ? [...scopeRegions].reverse().find((r) => r.lossPct !== null) : null
     return { firstAvg, secondAvg, delta, worst, best }
-  }, [report.national, report.regions])
+  }, [scopeNational, scopeRegions])
 
+  // True national average, not the filtered scope's -- severity coloring
+  // (lossSeverityClass) means "worse than the network as a whole", which
+  // should stay a fixed yardstick regardless of what's currently filtered.
   const nationalAvgLossPct = report.nationalTotals.lossPct
+
+  const scopeLabel = selectedDistrict
+    ? `${selectedRegion!.region} — ${selectedDistrict.district}`
+    : selectedRegion
+      ? selectedRegion.region
+      : null
 
   return (
     <div className="space-y-6">
@@ -207,6 +297,51 @@ export function PurchasesSalesReportView() {
         </div>
       </div>
 
+      {/* Region/district filters -- page-native, not the app's global
+          header filter (which doesn't read this page's data at all). */}
+      <div className="flex items-center gap-2 flex-wrap">
+        <Select value={regionFilter} onValueChange={handleRegionFilterChange}>
+          <SelectTrigger className="w-[200px]">
+            <SelectValue placeholder="All regions" />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="all">All regions</SelectItem>
+            {report.regions.map((r) => (
+              <SelectItem key={r.regionKey} value={r.regionKey}>
+                {r.region}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+        <Select
+          value={districtFilter}
+          onValueChange={setDistrictFilter}
+          disabled={!selectedRegion || selectedRegion.districts.length === 0}
+        >
+          <SelectTrigger className="w-[200px]">
+            <SelectValue placeholder={selectedRegion ? "All districts" : "Select a region first"} />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="all">All districts</SelectItem>
+            {(selectedRegion?.districts ?? []).map((d) => (
+              <SelectItem key={d.districtKey} value={d.districtKey}>
+                {d.district}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+        {scopeLabel && (
+          <Badge
+            variant="outline"
+            className="gap-1.5 cursor-pointer hover:bg-muted"
+            onClick={() => handleRegionFilterChange("all")}
+            title="Clear filter"
+          >
+            Filtered to {scopeLabel} ✕
+          </Badge>
+        )}
+      </div>
+
       {report.isError && (
         <p className="text-sm text-red-600">
           Failed to load: {report.erroredSources.join(", ")} — figures below may be incomplete for that source.
@@ -228,7 +363,7 @@ export function PurchasesSalesReportView() {
             {report.isLoading ? (
               <Skeleton className="h-9 w-40" />
             ) : (
-              <div className="text-3xl font-bold text-blue-700">{formatKwh(report.nationalTotals.purchasesKwh)}</div>
+              <div className="text-3xl font-bold text-blue-700">{formatKwh(scopeTotals.purchasesKwh)}</div>
             )}
           </CardContent>
         </Card>
@@ -244,7 +379,7 @@ export function PurchasesSalesReportView() {
             {report.isLoading ? (
               <Skeleton className="h-9 w-40" />
             ) : (
-              <div className="text-3xl font-bold text-emerald-700">{formatKwh(report.nationalTotals.salesKwh)}</div>
+              <div className="text-3xl font-bold text-emerald-700">{formatKwh(scopeTotals.salesKwh)}</div>
             )}
           </CardContent>
         </Card>
@@ -261,8 +396,8 @@ export function PurchasesSalesReportView() {
               <Skeleton className="h-9 w-40" />
             ) : (
               <>
-                <div className="text-3xl font-bold text-rose-700">{formatKwh(report.nationalTotals.lossKwh)}</div>
-                <div className="text-sm text-rose-600 mt-1">{formatPct(nationalAvgLossPct)} of purchases</div>
+                <div className="text-3xl font-bold text-rose-700">{formatKwh(scopeTotals.lossKwh)}</div>
+                <div className="text-sm text-rose-600 mt-1">{formatPct(scopeTotals.lossPct)} of purchases</div>
               </>
             )}
           </CardContent>
@@ -309,13 +444,13 @@ export function PurchasesSalesReportView() {
       )}
 
       {/* Anomalies */}
-      {!report.isLoading && report.anomalies.length > 0 && (
+      {!report.isLoading && scopeAnomalies.length > 0 && (
         <Card className="border-amber-300 bg-amber-50/40">
           <CardHeader className="pb-2">
             <div className="flex items-center gap-2">
               <AlertTriangle className="h-4 w-4 text-amber-600" />
               <CardTitle className="text-sm font-medium text-amber-900">
-                {report.anomalies.length} region-month{report.anomalies.length === 1 ? "" : "s"} sold more than
+                {scopeAnomalies.length} region-month{scopeAnomalies.length === 1 ? "" : "s"} sold more than
                 purchased
               </CardTitle>
             </div>
@@ -325,7 +460,7 @@ export function PurchasesSalesReportView() {
             </CardDescription>
           </CardHeader>
           <CardContent className="text-xs text-amber-900 space-y-1">
-            {report.anomalies.slice(0, 8).map((a, i) => (
+            {scopeAnomalies.slice(0, 8).map((a, i) => (
               <div key={i} className="flex items-center justify-between gap-3">
                 <span>
                   {a.region} · {a.label}
@@ -335,8 +470,8 @@ export function PurchasesSalesReportView() {
                 </span>
               </div>
             ))}
-            {report.anomalies.length > 8 && (
-              <p className="text-muted-foreground pt-1">…and {report.anomalies.length - 8} more.</p>
+            {scopeAnomalies.length > 8 && (
+              <p className="text-muted-foreground pt-1">…and {scopeAnomalies.length - 8} more.</p>
             )}
           </CardContent>
         </Card>
@@ -348,7 +483,7 @@ export function PurchasesSalesReportView() {
       <Card>
         <CardHeader>
           <CardTitle>Purchases vs Sales vs Loss % — monthly trend</CardTitle>
-          <CardDescription>National totals across the selected window</CardDescription>
+          <CardDescription>{scopeLabel ?? "National"} totals across the selected window</CardDescription>
           <div className="flex items-center gap-5 pt-2 flex-wrap">
             <label className="flex items-center gap-2 text-sm cursor-pointer select-none">
               <Checkbox
@@ -456,14 +591,15 @@ export function PurchasesSalesReportView() {
         <CardHeader>
           <CardTitle>Loss % heat map — region × month</CardTitle>
           <CardDescription>
-            Each cell colored relative to that month&apos;s own network average — deep green is well below
-            average (tight), deep red is well above (leaking), gray is no purchases data that month.
+            Green is tight (≤10% loss), amber is watch (10–30%), red is leaking (30%+). Violet flags a
+            region-month that sold more than it bought — a data mismatch, not real negative loss (see Anomalies
+            above). Gray is no purchases data that month.
           </CardDescription>
         </CardHeader>
         <CardContent>
           {report.isLoading ? (
             <Skeleton className="h-64 w-full" />
-          ) : report.regions.length === 0 ? (
+          ) : scopeRegions.length === 0 ? (
             <p className="text-sm text-muted-foreground py-8 text-center">No data for this window.</p>
           ) : (
             <div className="overflow-x-auto">
@@ -484,15 +620,14 @@ export function PurchasesSalesReportView() {
                   </tr>
                 </thead>
                 <tbody>
-                  {report.regions.map((r) => (
+                  {scopeRegions.map((r) => (
                     <tr key={r.regionKey}>
                       <td className="text-left pr-3 font-medium whitespace-nowrap sticky left-0 bg-card">
                         {r.region}
                       </td>
                       {monthKeys.map((mKey, idx) => {
                         const lossPct = cellLossPct(r.byMonth[mKey])
-                        const monthAvg = report.national[idx]?.lossPct ?? null
-                        const rgb = lossHeatRgb(lossPct, monthAvg)
+                        const rgb = lossHeatRgb(lossPct)
                         const cell = r.byMonth[mKey]
                         const textColor = readableTextOn(rgb)
                         return (
@@ -533,11 +668,12 @@ export function PurchasesSalesReportView() {
         </CardContent>
       </Card>
 
-      {/* Loss map */}
+      {/* Loss map -- stays national regardless of the region/district filter
+          above, since a single district has no geometry of its own to draw;
+          focusedRegionKey still tracks the filter to highlight it. */}
       {!report.isLoading && report.regions.length > 0 && (
         <PurchasesSalesLossMap
           regions={report.regions}
-          nationalAvgLossPct={nationalAvgLossPct}
           monthKeys={monthKeys}
           focusedRegionKey={focusedRegionKey}
           onFocusRegion={setFocusedRegionKey}
@@ -551,7 +687,7 @@ export function PurchasesSalesReportView() {
             <Scale className="h-4 w-4 text-muted-foreground" />
             <CardTitle>Region ranking — highest loss % first</CardTitle>
           </div>
-          <CardDescription>Totals across the selected window</CardDescription>
+          <CardDescription>{scopeLabel ?? "Totals"} across the selected window</CardDescription>
         </CardHeader>
         <CardContent>
           {report.isLoading ? (
@@ -560,7 +696,7 @@ export function PurchasesSalesReportView() {
                 <Skeleton key={i} className="h-10 w-full" />
               ))}
             </div>
-          ) : report.regions.length === 0 ? (
+          ) : scopeRegions.length === 0 ? (
             <p className="text-sm text-muted-foreground py-8 text-center">No data for this window.</p>
           ) : (
             <div className="overflow-x-auto">
@@ -578,7 +714,7 @@ export function PurchasesSalesReportView() {
                   </tr>
                 </thead>
                 <tbody>
-                  {report.regions.map((r: RegionSeries) => {
+                  {scopeRegions.map((r: RegionSeries) => {
                     const isExpanded = expandedRegions.has(r.regionKey)
                     const trend = regionTrendDelta(r.byMonth, monthKeys)
                     const isFocused = r.regionKey === focusedRegionKey
@@ -599,9 +735,11 @@ export function PurchasesSalesReportView() {
                                 <ChevronRight className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
                               )}
                               {r.region}
-                              <span className="text-xs text-muted-foreground font-normal">
-                                ({r.districts.length} district{r.districts.length === 1 ? "" : "s"})
-                              </span>
+                              {r.districts.length > 0 && (
+                                <span className="text-xs text-muted-foreground font-normal">
+                                  ({r.districts.length} district{r.districts.length === 1 ? "" : "s"})
+                                </span>
+                              )}
                             </span>
                           </td>
                           <td className="py-2.5 px-4 text-right tabular-nums text-blue-700">

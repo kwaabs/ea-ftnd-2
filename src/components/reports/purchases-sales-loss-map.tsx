@@ -14,7 +14,6 @@ import { formatKwh, formatPct, lossHeatRgb, regionTrendDelta, rgbToCss } from "@
 
 interface PurchasesSalesLossMapProps {
   regions: RegionSeries[]
-  nationalAvgLossPct: number | null
   monthKeys: string[]
   /** Lifted to the parent so clicking a region here and clicking a region
    * row in the Region ranking table below highlight each other -- two
@@ -32,7 +31,6 @@ interface PurchasesSalesLossMapProps {
  */
 export function PurchasesSalesLossMap({
   regions,
-  nationalAvgLossPct,
   monthKeys,
   focusedRegionKey,
   onFocusRegion,
@@ -66,7 +64,7 @@ export function PurchasesSalesLossMap({
     const feats = (geometryData?.data?.regions ?? []).map((g) => {
       const regionKey = geometryKeyToRegionKey.get(g.region)
       const series = regionKey ? regionByKey.get(regionKey) : undefined
-      const rgb = lossHeatRgb(series?.lossPct ?? null, nationalAvgLossPct)
+      const rgb = lossHeatRgb(series?.lossPct ?? null)
       return {
         ...g.geojson,
         properties: {
@@ -77,7 +75,7 @@ export function PurchasesSalesLossMap({
       }
     })
     return { type: "FeatureCollection" as const, features: feats }
-  }, [geometryData, geometryKeyToRegionKey, regionByKey, nationalAvgLossPct])
+  }, [geometryData, geometryKeyToRegionKey, regionByKey])
 
   // Init map, with a retry loop -- same reason and shape as
   // choropleth-map.tsx's own "Initialize map with retry mechanism" effect:
