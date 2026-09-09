@@ -43,7 +43,6 @@ import {
   TrendingUp,
   DollarSign,
   BatteryCharging,
-  Wallet,
   ArrowRight,
 } from "lucide-react";
 
@@ -1910,25 +1909,6 @@ export function CustomerSalesOverview({
                   </div>
                 </CardContent>
               </Card>
-              <Card className="border-dashed">
-                <CardContent className="pt-4 pb-4">
-                  <div className="flex items-center justify-between">
-                    <div className="flex items-center gap-2">
-                      <Wallet className="h-4 w-4 text-muted-foreground" />
-                      <span className="text-sm text-muted-foreground font-medium">
-                        Credit Balance
-                      </span>
-                    </div>
-                    {mmsLoading ? (
-                      <Skeleton className="h-5 w-28" />
-                    ) : (
-                      <span className="text-base font-semibold text-emerald-700">
-                        {formatMoney(mmsStats.totalBalance)}
-                      </span>
-                    )}
-                  </div>
-                </CardContent>
-              </Card>
             </div>
 
             <div className="grid gap-4 md:grid-cols-2">
@@ -2063,11 +2043,8 @@ export function CustomerSalesOverview({
                           <th className="text-right py-2 px-4 font-medium text-muted-foreground">
                             Customers
                           </th>
-                          <th className="text-right py-2 px-4 font-medium text-muted-foreground">
-                            Credit Purchased
-                          </th>
                           <th className="text-right py-2 pl-4 font-medium text-muted-foreground">
-                            Credit Balance
+                            Credit Purchased
                           </th>
                         </tr>
                       </thead>
@@ -2079,12 +2056,6 @@ export function CustomerSalesOverview({
                               (a.sum_last_month_kwh_read || 0),
                           )
                           .map((item, idx) => {
-                            const pct =
-                              mmsStats.totalKwh > 0
-                                ? ((item.sum_last_month_kwh_read || 0) /
-                                    mmsStats.totalKwh) *
-                                  100
-                                : 0;
                             const avgKwh =
                               item.customer_count > 0
                                 ? (item.sum_last_month_kwh_read || 0) /
@@ -2107,20 +2078,8 @@ export function CustomerSalesOverview({
                                 <td className="py-2.5 px-4 text-right tabular-nums">
                                   {formatNumber(item.customer_count)}
                                 </td>
-                                <td className="py-2.5 px-4 text-right text-green-700 tabular-nums">
+                                <td className="py-2.5 pl-4 text-right text-green-700 tabular-nums">
                                   {formatMoney(item.sum_last_month_credit_read)}
-                                </td>
-                                <td className="py-2.5 pl-4 text-right">
-                                  <div className="flex items-center justify-end gap-2">
-                                    <span className="text-emerald-700 font-medium tabular-nums">
-                                      {formatMoney(
-                                        item.sum_credit_balance_remaining,
-                                      )}
-                                    </span>
-                                    <span className="text-xs text-muted-foreground">
-                                      ({pct.toFixed(1)}%)
-                                    </span>
-                                  </div>
                                 </td>
                               </tr>
                             );
@@ -2138,11 +2097,8 @@ export function CustomerSalesOverview({
                           <td className="py-2.5 px-4 text-right font-semibold tabular-nums">
                             {formatNumber(mmsStats.totalCustomers)}
                           </td>
-                          <td className="py-2.5 px-4 text-right font-semibold text-green-700 tabular-nums">
+                          <td className="py-2.5 pl-4 text-right font-semibold text-green-700 tabular-nums">
                             {formatMoney(mmsStats.totalCredit)}
-                          </td>
-                          <td className="py-2.5 pl-4 text-right font-semibold text-emerald-700 tabular-nums">
-                            {formatMoney(mmsStats.totalBalance)}
                           </td>
                         </tr>
                       </tfoot>
