@@ -57,6 +57,31 @@ export function trailingMonths(end: MonthPoint, count: number): MonthPoint[] {
   return out
 }
 
+/** Every month from `from` to `to` inclusive, oldest first. Order-agnostic
+ * (swaps if `to` is actually earlier than `from`) since this only ever
+ * feeds a user-editable custom-range picker, where either end can be
+ * changed independently. */
+export function monthsInRange(from: MonthPoint, to: MonthPoint): MonthPoint[] {
+  const fromIdx = from.year * 12 + from.month
+  const toIdx = to.year * 12 + to.month
+  const [startIdx, endIdx] = fromIdx <= toIdx ? [fromIdx, toIdx] : [toIdx, fromIdx]
+  const out: MonthPoint[] = []
+  for (let idx = startIdx; idx <= endIdx; idx++) {
+    out.push({ year: Math.floor((idx - 1) / 12), month: ((idx - 1) % 12) + 1 })
+  }
+  return out
+}
+
+/** Parses an `<input type="month">` value ("2026-01") into a MonthPoint. */
+export function parseMonthInputValue(value: string): MonthPoint | null {
+  const m = /^(\d{4})-(\d{2})$/.exec(value.trim())
+  if (!m) return null
+  const year = parseInt(m[1], 10)
+  const month = parseInt(m[2], 10)
+  if (month < 1 || month > 12) return null
+  return { year, month }
+}
+
 export function currentMonthPoint(): MonthPoint {
   const now = new Date()
   return { year: now.getFullYear(), month: now.getMonth() + 1 }
