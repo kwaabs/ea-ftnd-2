@@ -79,35 +79,62 @@ export function PurchasesSalesLossMap({
     return { type: "FeatureCollection" as const, features: feats }
   }, [geometryData, geometryKeyToRegionKey, regionByKey, nationalAvgLossPct])
 
-  // Init map once.
+  // Init map, with a retry loop -- same reason and shape as
+  // choropleth-map.tsx's own "Initialize map with retry mechanism" effect:
+  // mapContainer only actually exists in the DOM once isLoadingGeometry
+  // flips to false and the real layout (not the Skeleton) renders, but
+  // this effect only runs once (mount), so a single `if (!mapContainer.current)
+  // return` -- what this file had before -- can permanently miss the
+  // container if geometry is still loading on first render, which is the
+  // common case. Retries on a short backoff instead of giving up once.
   useEffect(() => {
-    if (!mapContainer.current || map.current) return
-    map.current = new maplibregl.Map({
-      container: mapContainer.current,
-      style: {
-        version: 8,
-        sources: {
-          "google-street": {
-            type: "raster",
-            tiles: [
-              "https://mt0.google.com/vt/lyrs=m&x={x}&y={y}&z={z}",
-              "https://mt1.google.com/vt/lyrs=m&x={x}&y={y}&z={z}",
-              "https://mt2.google.com/vt/lyrs=m&x={x}&y={y}&z={z}",
-              "https://mt3.google.com/vt/lyrs=m&x={x}&y={y}&z={z}",
-            ],
-            tileSize: 256,
-            attribution: '&copy; <a href="https://www.google.com/maps">Google Maps</a>',
+    if (map.current) return
+    let attempt = 0
+    const maxAttempts = 5
+    let retryTimer: ReturnType<typeof setTimeout> | undefined
+
+    const tryInit = () => {
+      if (!mapContainer.current) {
+        attempt++
+        if (attempt < maxAttempts) retryTimer = setTimeout(tryInit, 100 * attempt)
+        return
+      }
+      map.current = new maplibregl.Map({
+        container: mapContainer.current,
+        style: {
+          version: 8,
+          sources: {
+            "google-street": {
+              type: "raster",
+              tiles: [
+                "https://mt0.google.com/vt/lyrs=m&x={x}&y={y}&z={z}",
+                "https://mt1.google.com/vt/lyrs=m&x={x}&y={y}&z={z}",
+                "https://mt2.google.com/vt/lyrs=m&x={x}&y={y}&z={z}",
+                "https://mt3.google.com/vt/lyrs=m&x={x}&y={y}&z={z}",
+              ],
+              tileSize: 256,
+              attribution: '&copy; <a href="https://www.google.com/maps">Google Maps</a>',
+            },
           },
+          layers: [{ id: "google-street-layer", type: "raster", source: "google-street" }],
         },
-        layers: [{ id: "google-street-layer", type: "raster", source: "google-street" }],
-      },
-      center: [-1.5, 7.5], // Ghana
-      zoom: 6,
-    })
-    map.current.addControl(new maplibregl.NavigationControl(), "top-left")
-    map.current.on("load", () => setMapLoaded(true))
+        center: [-1.5, 7.5], // Ghana
+        zoom: 6,
+      })
+      map.current.addControl(new maplibregl.NavigationControl(), "top-left")
+      map.current.on("load", () => {
+        setMapLoaded(true)
+        // Canvas can size itself off a stale (pre-layout) container rect --
+        // one more resize once tiles/layout have settled fixes a map that
+        // rendered but painted blank/mis-sized.
+        setTimeout(() => map.current?.resize(), 100)
+      })
+    }
+
+    tryInit()
 
     return () => {
+      clearTimeout(retryTimer)
       map.current?.remove()
       map.current = null
       setMapLoaded(false)
