@@ -3,11 +3,9 @@
 import { Fragment, useMemo, useState } from "react"
 import {
   Area,
-  AreaChart,
   CartesianGrid,
-  Legend,
+  ComposedChart,
   Line,
-  LineChart,
   ResponsiveContainer,
   Tooltip,
   XAxis,
@@ -29,6 +27,7 @@ import { Skeleton } from "@/components/ui/skeleton"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Badge } from "@/components/ui/badge"
 import { Input } from "@/components/ui/input"
+import { Checkbox } from "@/components/ui/checkbox"
 import {
   currentMonthPoint,
   monthKey,
@@ -84,6 +83,14 @@ export function PurchasesSalesReportView() {
   // "Custom range" starts from something sane rather than two empty fields.
   const [customFrom, setCustomFrom] = useState(monthKey(trailingMonths(now, MAX_WINDOW_MONTHS)[0]))
   const [customTo, setCustomTo] = useState(monthKey(now))
+  // Combined trend chart's per-series visibility -- Purchases/Sales share
+  // the left (kWh) axis, Loss % gets its own right (%) axis, since the two
+  // are on completely different scales (hundreds of millions vs a
+  // percentage) and forcing them onto one axis would flatten whichever one
+  // lost the scale fight.
+  const [showPurchases, setShowPurchases] = useState(true)
+  const [showSales, setShowSales] = useState(true)
+  const [showLossPct, setShowLossPct] = useState(true)
   const [expandedRegions, setExpandedRegions] = useState<Set<string>>(new Set())
   const toggleRegion = (regionKey: string) => {
     setExpandedRegions((prev) => {
@@ -335,78 +342,110 @@ export function PurchasesSalesReportView() {
         </Card>
       )}
 
-      {/* Monthly trend */}
+      {/* Monthly trend — Purchases + Sales (left axis, kWh) and Loss %
+          (right axis, %) combined into one chart, each series toggleable
+          via the checkboxes instead of split across two charts. */}
       <Card>
         <CardHeader>
-          <CardTitle>Purchases vs Sales — monthly trend</CardTitle>
+          <CardTitle>Purchases vs Sales vs Loss % — monthly trend</CardTitle>
           <CardDescription>National totals across the selected window</CardDescription>
+          <div className="flex items-center gap-5 pt-2 flex-wrap">
+            <label className="flex items-center gap-2 text-sm cursor-pointer select-none">
+              <Checkbox
+                checked={showPurchases}
+                onCheckedChange={(v) => setShowPurchases(v === true)}
+              />
+              <span className="inline-block h-2.5 w-2.5 rounded-full" style={{ backgroundColor: "#1d4ed8" }} />
+              Purchases
+            </label>
+            <label className="flex items-center gap-2 text-sm cursor-pointer select-none">
+              <Checkbox checked={showSales} onCheckedChange={(v) => setShowSales(v === true)} />
+              <span className="inline-block h-2.5 w-2.5 rounded-full" style={{ backgroundColor: "#059669" }} />
+              Sales
+            </label>
+            <label className="flex items-center gap-2 text-sm cursor-pointer select-none">
+              <Checkbox checked={showLossPct} onCheckedChange={(v) => setShowLossPct(v === true)} />
+              <span className="inline-block h-2.5 w-2.5 rounded-full" style={{ backgroundColor: "#dc2626" }} />
+              Loss %
+            </label>
+          </div>
         </CardHeader>
         <CardContent>
           {report.isLoading ? (
-            <Skeleton className="h-[300px] w-full" />
+            <Skeleton className="h-[320px] w-full" />
+          ) : !showPurchases && !showSales && !showLossPct ? (
+            <p className="text-sm text-muted-foreground py-24 text-center">
+              Nothing selected — check a box above to show a series.
+            </p>
           ) : (
-            <ResponsiveContainer width="100%" height={300}>
-              <AreaChart data={chartData} margin={{ top: 10, right: 8, left: 8, bottom: 20 }}>
+            <ResponsiveContainer width="100%" height={320}>
+              <ComposedChart data={chartData} margin={{ top: 10, right: 8, left: 8, bottom: 20 }}>
                 <CartesianGrid strokeDasharray="3 3" vertical={false} />
                 <XAxis dataKey="label" tick={{ fontSize: 11 }} />
-                <YAxis tickFormatter={formatAxisKwh} tick={{ fontSize: 11 }} />
-                <Tooltip formatter={(v: number, name: string) => [formatKwh(v), name]} />
-                <Legend />
-                <Area
-                  type="monotone"
-                  dataKey="purchasesKwh"
-                  name="Purchases"
-                  stroke="#1d4ed8"
-                  fill="#1d4ed8"
-                  fillOpacity={0.15}
-                  strokeWidth={2}
-                  isAnimationActive={false}
-                />
-                <Area
-                  type="monotone"
-                  dataKey="salesKwh"
-                  name="Sales"
-                  stroke="#059669"
-                  fill="#059669"
-                  fillOpacity={0.15}
-                  strokeWidth={2}
-                  isAnimationActive={false}
-                />
-              </AreaChart>
-            </ResponsiveContainer>
-          )}
-        </CardContent>
-      </Card>
-
-      {/* Loss % trend */}
-      <Card>
-        <CardHeader>
-          <CardTitle>Network loss % — monthly trend</CardTitle>
-          <CardDescription>(Purchases − Sales) ÷ Purchases, nationally, per month</CardDescription>
-        </CardHeader>
-        <CardContent>
-          {report.isLoading ? (
-            <Skeleton className="h-[220px] w-full" />
-          ) : (
-            <ResponsiveContainer width="100%" height={220}>
-              <LineChart data={chartData} margin={{ top: 10, right: 8, left: 8, bottom: 20 }}>
-                <CartesianGrid strokeDasharray="3 3" vertical={false} />
-                <XAxis dataKey="label" tick={{ fontSize: 11 }} />
-                <YAxis tickFormatter={(v) => `${v}%`} tick={{ fontSize: 11 }} />
+                {(showPurchases || showSales) && (
+                  <YAxis
+                    yAxisId="kwh"
+                    tickFormatter={formatAxisKwh}
+                    tick={{ fontSize: 11 }}
+                    label={{ value: "kWh", angle: -90, position: "insideLeft", style: { fontSize: 11 } }}
+                  />
+                )}
+                {showLossPct && (
+                  <YAxis
+                    yAxisId="pct"
+                    orientation="right"
+                    tickFormatter={(v) => `${v}%`}
+                    tick={{ fontSize: 11 }}
+                    label={{ value: "Loss %", angle: 90, position: "insideRight", style: { fontSize: 11 } }}
+                  />
+                )}
                 <Tooltip
-                  formatter={(v) => [formatPct(typeof v === "number" ? v : null), "Loss %"]}
+                  formatter={(v, name) =>
+                    name === "Loss %"
+                      ? [formatPct(typeof v === "number" ? v : null), name]
+                      : [formatKwh(typeof v === "number" ? v : 0), name]
+                  }
                 />
-                <Line
-                  type="monotone"
-                  dataKey="lossPct"
-                  name="Loss %"
-                  stroke="#dc2626"
-                  strokeWidth={2}
-                  dot={{ r: 3, fill: "#dc2626" }}
-                  isAnimationActive={false}
-                  connectNulls
-                />
-              </LineChart>
+                {showPurchases && (
+                  <Area
+                    yAxisId="kwh"
+                    type="monotone"
+                    dataKey="purchasesKwh"
+                    name="Purchases"
+                    stroke="#1d4ed8"
+                    fill="#1d4ed8"
+                    fillOpacity={0.15}
+                    strokeWidth={2}
+                    isAnimationActive={false}
+                  />
+                )}
+                {showSales && (
+                  <Area
+                    yAxisId="kwh"
+                    type="monotone"
+                    dataKey="salesKwh"
+                    name="Sales"
+                    stroke="#059669"
+                    fill="#059669"
+                    fillOpacity={0.15}
+                    strokeWidth={2}
+                    isAnimationActive={false}
+                  />
+                )}
+                {showLossPct && (
+                  <Line
+                    yAxisId="pct"
+                    type="monotone"
+                    dataKey="lossPct"
+                    name="Loss %"
+                    stroke="#dc2626"
+                    strokeWidth={2}
+                    dot={{ r: 3, fill: "#dc2626" }}
+                    isAnimationActive={false}
+                    connectNulls
+                  />
+                )}
+              </ComposedChart>
             </ResponsiveContainer>
           )}
         </CardContent>
