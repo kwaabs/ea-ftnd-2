@@ -37,6 +37,7 @@ import {
   parseMonthInputValue,
   trailingMonths,
   usePurchasesSalesReport,
+  type RegionMonthCell,
   type RegionSeries,
 } from "@/hooks/api/use-purchases-sales-report"
 
@@ -71,6 +72,62 @@ function lossSeverityClass(lossPct: number | null, nationalAvgPct: number | null
   if (lossPct > nationalAvgPct * 1.25) return "text-red-700 font-semibold"
   if (lossPct > nationalAvgPct * 0.9) return "text-amber-700 font-medium"
   return "text-emerald-700"
+}
+
+function mixRgb(a: [number, number, number], b: [number, number, number], t: number): [number, number, number] {
+  return [a[0] + (b[0] - a[0]) * t, a[1] + (b[1] - a[1]) * t, a[2] + (b[2] - a[2]) * t]
+}
+function rgbToCss([r, g, b]: [number, number, number]): string {
+  return `rgb(${Math.round(r)}, ${Math.round(g)}, ${Math.round(b)})`
+}
+
+// Continuous green -> amber -> red ramp for the heat map below, same
+// relative-to-that-month's-own-network-average idea as lossSeverityClass
+// (not an asserted absolute threshold) but as a real color gradient
+// instead of 3 discrete bands, since a heat map's whole point is showing
+// gradation, not just above/below a line. Returns RGB (not a CSS string)
+// so the same value can drive both the cell background and its text-color
+// contrast decision below without re-parsing a string.
+function lossHeatRgb(lossPct: number | null, monthAvgPct: number | null): [number, number, number] {
+  const NO_DATA: [number, number, number] = [241, 245, 249] // slate-100
+  const GREEN: [number, number, number] = [5, 150, 105] // emerald-600
+  const AMBER: [number, number, number] = [245, 158, 11] // amber-500
+  const RED: [number, number, number] = [185, 28, 28] // red-700
+  if (lossPct === null) return NO_DATA
+  if (monthAvgPct === null || monthAvgPct <= 0) return AMBER
+  const ratio = lossPct / monthAvgPct // 1.0 = exactly average that month
+  if (ratio <= 1) return mixRgb(GREEN, AMBER, Math.max(0, Math.min(1, ratio)))
+  return mixRgb(AMBER, RED, Math.max(0, Math.min(1, ratio - 1)))
+}
+
+/** Readable text color (near-black vs near-white) against a given heat
+ * cell background, so percentage labels stay legible across the whole
+ * green-to-red range instead of assuming one fixed text color works
+ * everywhere. */
+function readableTextOn([r, g, b]: [number, number, number]): string {
+  const luminance = (0.299 * r + 0.587 * g + 0.114 * b) / 255
+  return luminance > 0.6 ? "#1e293b" : "#ffffff"
+}
+
+/** Loss % for a single region-month cell — shared by the heat map and the
+ * per-region trend indicator so the formula can't drift between them. */
+function cellLossPct(cell: RegionMonthCell | undefined): number | null {
+  if (!cell || cell.purchasesKwh <= 0) return null
+  return ((cell.purchasesKwh - cell.salesKwh) / cell.purchasesKwh) * 100
+}
+
+/** First-half vs second-half average loss % for one region across the
+ * selected window — the same "is this getting better or worse" question
+ * the page's national narrative already answers, just per region so the
+ * ranking table can show it inline instead of making you read the
+ * headline sentence for the network as a whole and guess whether it
+ * applies to the region you're actually looking at. */
+function regionTrendDelta(byMonth: Record<string, RegionMonthCell>, monthKeys: string[]): number | null {
+  const withLoss = monthKeys.map((k) => cellLossPct(byMonth[k])).filter((v): v is number => v !== null)
+  if (withLoss.length < 2) return null
+  const mid = Math.floor(withLoss.length / 2)
+  const avg = (vals: number[]) => vals.reduce((s, v) => s + v, 0) / vals.length
+  return avg(withLoss.slice(mid)) - avg(withLoss.slice(0, mid))
 }
 
 const MAX_WINDOW_MONTHS = 12
@@ -143,6 +200,7 @@ export function PurchasesSalesReportView() {
     salesKwh: n.salesKwh,
     lossPct: n.lossPct,
   }))
+  const monthKeys = report.months.map((m) => monthKey(m))
 
   // Narrative: compare the first vs second half of the window's average
   // loss %, to say whether the network is trending better or worse, not
@@ -428,6 +486,78 @@ export function PurchasesSalesReportView() {
         </CardContent>
       </Card>
 
+      {/* Loss % heat map — region x month */}
+      <Card>
+        <CardHeader>
+          <CardTitle>Loss % heat map — region × month</CardTitle>
+          <CardDescription>
+            Each cell colored relative to that month&apos;s own network average — deep green is well below
+            average (tight), deep red is well above (leaking), gray is no purchases data that month.
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          {report.isLoading ? (
+            <Skeleton className="h-64 w-full" />
+          ) : report.regions.length === 0 ? (
+            <p className="text-sm text-muted-foreground py-8 text-center">No data for this window.</p>
+          ) : (
+            <div className="overflow-x-auto">
+              <table className="text-sm border-separate" style={{ borderSpacing: 2 }}>
+                <thead>
+                  <tr>
+                    <th className="text-left py-1 pr-3 font-medium text-muted-foreground sticky left-0 bg-card">
+                      Region
+                    </th>
+                    {report.monthLabels.map((label) => (
+                      <th
+                        key={label}
+                        className="text-center px-1 pb-1 font-medium text-muted-foreground whitespace-nowrap text-xs"
+                      >
+                        {label}
+                      </th>
+                    ))}
+                  </tr>
+                </thead>
+                <tbody>
+                  {report.regions.map((r) => (
+                    <tr key={r.regionKey}>
+                      <td className="text-left pr-3 font-medium whitespace-nowrap sticky left-0 bg-card">
+                        {r.region}
+                      </td>
+                      {monthKeys.map((mKey, idx) => {
+                        const lossPct = cellLossPct(r.byMonth[mKey])
+                        const monthAvg = report.national[idx]?.lossPct ?? null
+                        const rgb = lossHeatRgb(lossPct, monthAvg)
+                        const cell = r.byMonth[mKey]
+                        return (
+                          <td
+                            key={mKey}
+                            className="text-center text-xs font-medium tabular-nums rounded"
+                            style={{
+                              backgroundColor: rgbToCss(rgb),
+                              color: readableTextOn(rgb),
+                              minWidth: 56,
+                              height: 32,
+                            }}
+                            title={
+                              cell
+                                ? `${r.region}, ${report.monthLabels[idx]}: purchased ${formatKwh(cell.purchasesKwh)}, sold ${formatKwh(cell.salesKwh)}`
+                                : `${r.region}, ${report.monthLabels[idx]}: no data`
+                            }
+                          >
+                            {formatPct(lossPct)}
+                          </td>
+                        )
+                      })}
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </CardContent>
+      </Card>
+
       {/* Region ranking */}
       <Card>
         <CardHeader>
@@ -455,12 +585,16 @@ export function PurchasesSalesReportView() {
                     <th className="text-right py-2 px-4 font-medium text-muted-foreground">Purchases</th>
                     <th className="text-right py-2 px-4 font-medium text-muted-foreground">Sales</th>
                     <th className="text-right py-2 px-4 font-medium text-muted-foreground">Loss</th>
-                    <th className="text-right py-2 pl-4 font-medium text-muted-foreground">Loss %</th>
+                    <th className="text-right py-2 px-4 font-medium text-muted-foreground">Loss %</th>
+                    <th className="text-center py-2 pl-4 font-medium text-muted-foreground" title="First half vs second half of the window's average loss %">
+                      Trend
+                    </th>
                   </tr>
                 </thead>
                 <tbody>
                   {report.regions.map((r: RegionSeries) => {
                     const isExpanded = expandedRegions.has(r.regionKey)
+                    const trend = regionTrendDelta(r.byMonth, monthKeys)
                     return (
                       <Fragment key={r.regionKey}>
                         <tr
@@ -487,7 +621,7 @@ export function PurchasesSalesReportView() {
                             {formatKwh(r.totalSalesKwh)}
                           </td>
                           <td className="py-2.5 px-4 text-right tabular-nums">{formatKwh(r.lossKwh)}</td>
-                          <td className="py-2.5 pl-4 text-right tabular-nums">
+                          <td className="py-2.5 px-4 text-right tabular-nums">
                             <Badge
                               variant="outline"
                               className={`text-xs font-normal border-0 bg-transparent ${lossSeverityClass(r.lossPct, nationalAvgLossPct)}`}
@@ -495,10 +629,36 @@ export function PurchasesSalesReportView() {
                               {formatPct(r.lossPct)}
                             </Badge>
                           </td>
+                          <td className="py-2.5 pl-4 text-center">
+                            {trend === null ? (
+                              <Minus className="h-3.5 w-3.5 text-muted-foreground inline-block" />
+                            ) : trend > 0.5 ? (
+                              <span
+                                className="inline-flex items-center gap-0.5 text-red-700"
+                                title={`Loss % worsened ${trend.toFixed(1)} points, first half vs second half of this window`}
+                              >
+                                <ArrowUp className="h-3.5 w-3.5" />
+                                <span className="text-xs tabular-nums">{trend.toFixed(1)}</span>
+                              </span>
+                            ) : trend < -0.5 ? (
+                              <span
+                                className="inline-flex items-center gap-0.5 text-emerald-700"
+                                title={`Loss % improved ${Math.abs(trend).toFixed(1)} points, first half vs second half of this window`}
+                              >
+                                <ArrowDown className="h-3.5 w-3.5" />
+                                <span className="text-xs tabular-nums">{Math.abs(trend).toFixed(1)}</span>
+                              </span>
+                            ) : (
+                              <Minus
+                                className="h-3.5 w-3.5 text-muted-foreground inline-block"
+                                aria-label="Essentially flat"
+                              />
+                            )}
+                          </td>
                         </tr>
                         {isExpanded && (
                           <tr className="border-b last:border-0 bg-muted/20">
-                            <td colSpan={5} className="py-2 pl-8 pr-4">
+                            <td colSpan={6} className="py-2 pl-8 pr-4">
                               {r.districts.length === 0 ? (
                                 <p className="text-xs text-muted-foreground py-2">
                                   No district-level data for this region.
