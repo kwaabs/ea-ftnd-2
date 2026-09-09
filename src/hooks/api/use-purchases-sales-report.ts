@@ -215,13 +215,20 @@ async function fetchBotBxcByRegionMonth(
 interface BspRow {
   system_name: "import_kwh" | "export_kwh"
   region: string
-  district?: string | null
+  station?: string | null
   group_period: string // month-truncated ISO date when groupBy=month
   total_consumption: number
 }
 
+// BSP incomer meters are grouped by station, not district -- a purchase
+// happens at a physical substation, and that substation's own `district`
+// column on app.meters is almost always blank (unlike district on
+// customer-sales meters, which is populated). Grouping by district here
+// used to dump nearly every kWh into a single "Unknown" district bucket.
+// Station is the real, populated dimension purchases naturally break down
+// by, so that's what's requested and shown instead.
 async function fetchBspPurchasesByRegionMonth(dateFrom: string, dateTo: string): Promise<BspRow[]> {
-  const qs = new URLSearchParams({ dateFrom, dateTo, groupBy: "month", group: "region,district" })
+  const qs = new URLSearchParams({ dateFrom, dateTo, groupBy: "month", group: "region,station" })
   const res = await fetchWithTimeout(
     `${API_BASE_URL}/api/v1/meters/consumption/aggregate/bsp?${qs}`,
     REPORT_FETCH_TIMEOUT_MS,
@@ -254,14 +261,20 @@ export interface RegionMonthCell {
   salesKwh: number
 }
 
+// Sales-only -- purchases (BSP) aren't tracked at district granularity, only
+// down to station (see StationSeries below), so a district has no honest
+// purchases/loss figure of its own.
 export interface DistrictSeries {
   district: string // display label
   districtKey: string
-  byMonth: Record<string, RegionMonthCell>
-  totalPurchasesKwh: number
+  byMonth: Record<string, RegionMonthCell> // salesKwh only; purchasesKwh always 0 here
   totalSalesKwh: number
-  lossKwh: number
-  lossPct: number | null
+}
+
+export interface StationSeries {
+  station: string // display label
+  stationKey: string
+  totalPurchasesKwh: number
 }
 
 export interface RegionSeries {
@@ -272,7 +285,8 @@ export interface RegionSeries {
   totalSalesKwh: number
   lossKwh: number
   lossPct: number | null // null when purchases is 0 (undefined loss %, not a real 0%)
-  districts: DistrictSeries[] // sorted worst loss % first, same convention as regions
+  districts: DistrictSeries[] // sorted highest sales first
+  stations: StationSeries[] // sorted highest purchases first
 }
 
 export interface NationalMonthPoint {
@@ -406,11 +420,17 @@ export function usePurchasesSalesReport(months: MonthPoint[]): PurchasesSalesRep
       districtKey: string
       byMonth: Record<string, RegionMonthCell>
     }
+    interface WorkingStation {
+      station: string
+      stationKey: string
+      byMonth: Record<string, RegionMonthCell>
+    }
     interface WorkingRegion {
       region: string
       regionKey: string
       byMonth: Record<string, RegionMonthCell>
       districts: Map<string, WorkingDistrict>
+      stations: Map<string, WorkingStation>
     }
 
     const seriesByKey = new Map<string, WorkingRegion>()
@@ -422,6 +442,7 @@ export function usePurchasesSalesReport(months: MonthPoint[]): PurchasesSalesRep
           regionKey: key,
           byMonth: {},
           districts: new Map(),
+          stations: new Map(),
         })
       }
       return seriesByKey.get(key)!
@@ -433,6 +454,14 @@ export function usePurchasesSalesReport(months: MonthPoint[]): PurchasesSalesRep
         region.districts.set(key, { district: shortRegionLabel(label), districtKey: key, byMonth: {} })
       }
       return region.districts.get(key)!
+    }
+    const ensureStation = (region: WorkingRegion, rawStation: string | null | undefined): WorkingStation => {
+      const label = rawStation && rawStation.trim() ? rawStation.trim() : "Unknown"
+      const key = normalizeRegionName(label)
+      if (!region.stations.has(key)) {
+        region.stations.set(key, { station: shortRegionLabel(label), stationKey: key, byMonth: {} })
+      }
+      return region.stations.get(key)!
     }
     const cell = (byMonth: Record<string, RegionMonthCell>, mKey: string): RegionMonthCell => {
       if (!byMonth[mKey]) byMonth[mKey] = { purchasesKwh: 0, salesKwh: 0 }
@@ -448,10 +477,13 @@ export function usePurchasesSalesReport(months: MonthPoint[]): PurchasesSalesRep
       cell(series.byMonth, mKey).salesKwh += kwh
       cell(ensureDistrict(series, districtRaw).byMonth, mKey).salesKwh += kwh
     }
-    const addPurchase = (regionRaw: string, districtRaw: string | null | undefined, mKey: string, kwh: number) => {
+    // Purchases break down by station, not district (see
+    // fetchBspPurchasesByRegionMonth's comment) -- same shape as addSale,
+    // just against the station map instead of the district one.
+    const addPurchase = (regionRaw: string, stationRaw: string | null | undefined, mKey: string, kwh: number) => {
       const series = ensure(regionRaw)
       cell(series.byMonth, mKey).purchasesKwh += kwh
-      cell(ensureDistrict(series, districtRaw).byMonth, mKey).purchasesKwh += kwh
+      cell(ensureStation(series, stationRaw).byMonth, mKey).purchasesKwh += kwh
     }
 
     // Purchases (BSP): net = import - export, same convention use-bsp-api.ts
@@ -459,7 +491,7 @@ export function usePurchasesSalesReport(months: MonthPoint[]): PurchasesSalesRep
     ;(bspData || []).forEach((r) => {
       const mp = { year: new Date(r.group_period).getUTCFullYear(), month: new Date(r.group_period).getUTCMonth() + 1 }
       const delta = r.system_name === "import_kwh" ? r.total_consumption : -r.total_consumption
-      addPurchase(r.region, r.district, monthKey(mp), delta || 0)
+      addPurchase(r.region, r.station, monthKey(mp), delta || 0)
     })
 
     // Sales: Non-AMR + AMR Postpaid (all metermodeltype values except
@@ -527,18 +559,24 @@ export function usePurchasesSalesReport(months: MonthPoint[]): PurchasesSalesRep
     const regions = [...seriesByKey.values()]
       .map((series) => {
         const t = totalsFor(series.byMonth)
+        // Sales-only, so there's no loss % to rank by -- highest sales
+        // first is the closest equivalent ("biggest first") for a table
+        // that no longer has a severity dimension of its own.
         const districts = [...series.districts.values()]
-          .map((d) => {
-            const dt = totalsFor(d.byMonth)
-            return {
-              ...d,
-              totalPurchasesKwh: dt.purchases,
-              totalSalesKwh: dt.sales,
-              lossKwh: dt.lossKwh,
-              lossPct: dt.lossPct,
-            }
-          })
-          .sort(byWorstLoss)
+          .map((d) => ({
+            district: d.district,
+            districtKey: d.districtKey,
+            byMonth: d.byMonth,
+            totalSalesKwh: totalsFor(d.byMonth).sales,
+          }))
+          .sort((a, b) => b.totalSalesKwh - a.totalSalesKwh)
+        const stations = [...series.stations.values()]
+          .map((s) => ({
+            station: s.station,
+            stationKey: s.stationKey,
+            totalPurchasesKwh: totalsFor(s.byMonth).purchases,
+          }))
+          .sort((a, b) => b.totalPurchasesKwh - a.totalPurchasesKwh)
         return {
           region: series.region,
           regionKey: series.regionKey,
@@ -548,6 +586,7 @@ export function usePurchasesSalesReport(months: MonthPoint[]): PurchasesSalesRep
           lossKwh: t.lossKwh,
           lossPct: t.lossPct,
           districts,
+          stations,
         }
       })
       .sort(byWorstLoss)

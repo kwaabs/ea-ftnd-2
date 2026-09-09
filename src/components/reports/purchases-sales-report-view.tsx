@@ -153,6 +153,16 @@ export function PurchasesSalesReportView() {
   // district actually filters the whole story instead of just the table.
   // The loss map is the one exception -- it stays national, since a
   // single-district view has no geometry of its own to draw.
+  // Purchases (BSP) aren't tracked below region level -- only down to
+  // station, which belongs to the region, not any one district within it
+  // (see use-purchases-sales-report.ts). So a district-scoped row has no
+  // honest purchases/loss figure of its own; those are left as 0/null
+  // placeholders here and the UI shows "—" for them wherever
+  // purchasesAvailable is false, rather than rendering a fabricated number.
+  const purchasesAvailable = !selectedDistrict
+  const effShowPurchases = showPurchases && purchasesAvailable
+  const effShowLossPct = showLossPct && purchasesAvailable
+
   const scopeRegions: RegionSeries[] = useMemo(() => {
     if (!selectedRegion) return report.regions
     if (!selectedDistrict) return [selectedRegion]
@@ -161,11 +171,12 @@ export function PurchasesSalesReportView() {
         region: `${selectedRegion.region} — ${selectedDistrict.district}`,
         regionKey: `${selectedRegion.regionKey}::${selectedDistrict.districtKey}`,
         byMonth: selectedDistrict.byMonth,
-        totalPurchasesKwh: selectedDistrict.totalPurchasesKwh,
+        totalPurchasesKwh: 0,
         totalSalesKwh: selectedDistrict.totalSalesKwh,
-        lossKwh: selectedDistrict.lossKwh,
-        lossPct: selectedDistrict.lossPct,
+        lossKwh: 0,
+        lossPct: null,
         districts: [],
+        stations: [],
       },
     ]
   }, [report.regions, selectedRegion, selectedDistrict])
@@ -357,13 +368,17 @@ export function PurchasesSalesReportView() {
               <Zap className="h-4 w-4 text-blue-600" />
               <CardTitle className="text-sm font-medium text-muted-foreground">Total Purchases</CardTitle>
             </div>
-            <CardDescription className="text-[11px]">BSP incomer imports (net)</CardDescription>
+            <CardDescription className="text-[11px]">
+              {purchasesAvailable ? "BSP incomer imports (net)" : "Not tracked below region level"}
+            </CardDescription>
           </CardHeader>
           <CardContent>
             {report.isLoading ? (
               <Skeleton className="h-9 w-40" />
-            ) : (
+            ) : purchasesAvailable ? (
               <div className="text-3xl font-bold text-blue-700">{formatKwh(scopeTotals.purchasesKwh)}</div>
+            ) : (
+              <div className="text-3xl font-bold text-muted-foreground">—</div>
             )}
           </CardContent>
         </Card>
@@ -389,16 +404,20 @@ export function PurchasesSalesReportView() {
               <TrendingDown className="h-4 w-4 text-rose-600" />
               <CardTitle className="text-sm font-medium text-muted-foreground">Losses</CardTitle>
             </div>
-            <CardDescription className="text-[11px]">Purchases − Sales</CardDescription>
+            <CardDescription className="text-[11px]">
+              {purchasesAvailable ? "Purchases − Sales" : "Not tracked below region level"}
+            </CardDescription>
           </CardHeader>
           <CardContent>
             {report.isLoading ? (
               <Skeleton className="h-9 w-40" />
-            ) : (
+            ) : purchasesAvailable ? (
               <>
                 <div className="text-3xl font-bold text-rose-700">{formatKwh(scopeTotals.lossKwh)}</div>
                 <div className="text-sm text-rose-600 mt-1">{formatPct(scopeTotals.lossPct)} of purchases</div>
               </>
+            ) : (
+              <div className="text-3xl font-bold text-muted-foreground">—</div>
             )}
           </CardContent>
         </Card>
@@ -488,9 +507,13 @@ export function PurchasesSalesReportView() {
           <CardTitle>Purchases vs Sales vs Loss % — monthly trend</CardTitle>
           <CardDescription>{scopeLabel ?? "National"} totals across the selected window</CardDescription>
           <div className="flex items-center gap-5 pt-2 flex-wrap">
-            <label className="flex items-center gap-2 text-sm cursor-pointer select-none">
+            <label
+              className={`flex items-center gap-2 text-sm select-none ${purchasesAvailable ? "cursor-pointer" : "cursor-not-allowed opacity-50"}`}
+              title={purchasesAvailable ? undefined : "Purchases aren't tracked below region level"}
+            >
               <Checkbox
-                checked={showPurchases}
+                checked={effShowPurchases}
+                disabled={!purchasesAvailable}
                 onCheckedChange={(v) => setShowPurchases(v === true)}
               />
               <span className="inline-block h-2.5 w-2.5 rounded-full" style={{ backgroundColor: "#1d4ed8" }} />
@@ -501,8 +524,11 @@ export function PurchasesSalesReportView() {
               <span className="inline-block h-2.5 w-2.5 rounded-full" style={{ backgroundColor: "#059669" }} />
               Sales
             </label>
-            <label className="flex items-center gap-2 text-sm cursor-pointer select-none">
-              <Checkbox checked={showLossPct} onCheckedChange={(v) => setShowLossPct(v === true)} />
+            <label
+              className={`flex items-center gap-2 text-sm select-none ${purchasesAvailable ? "cursor-pointer" : "cursor-not-allowed opacity-50"}`}
+              title={purchasesAvailable ? undefined : "Loss % needs purchases, not tracked below region level"}
+            >
+              <Checkbox checked={effShowLossPct} disabled={!purchasesAvailable} onCheckedChange={(v) => setShowLossPct(v === true)} />
               <span className="inline-block h-2.5 w-2.5 rounded-full" style={{ backgroundColor: "#dc2626" }} />
               Loss %
             </label>
@@ -511,7 +537,7 @@ export function PurchasesSalesReportView() {
         <CardContent>
           {report.isLoading ? (
             <Skeleton className="h-[320px] w-full" />
-          ) : !showPurchases && !showSales && !showLossPct ? (
+          ) : !effShowPurchases && !showSales && !effShowLossPct ? (
             <p className="text-sm text-muted-foreground py-24 text-center">
               Nothing selected — check a box above to show a series.
             </p>
@@ -520,7 +546,7 @@ export function PurchasesSalesReportView() {
               <ComposedChart data={chartData} margin={{ top: 10, right: 8, left: 8, bottom: 20 }}>
                 <CartesianGrid strokeDasharray="3 3" vertical={false} />
                 <XAxis dataKey="label" tick={{ fontSize: 11 }} />
-                {(showPurchases || showSales) && (
+                {(effShowPurchases || showSales) && (
                   <YAxis
                     yAxisId="kwh"
                     tickFormatter={formatAxisKwh}
@@ -528,7 +554,7 @@ export function PurchasesSalesReportView() {
                     label={{ value: "kWh", angle: -90, position: "insideLeft", style: { fontSize: 11 } }}
                   />
                 )}
-                {showLossPct && (
+                {effShowLossPct && (
                   <YAxis
                     yAxisId="pct"
                     orientation="right"
@@ -544,7 +570,7 @@ export function PurchasesSalesReportView() {
                       : [formatKwh(typeof v === "number" ? v : 0), name]
                   }
                 />
-                {showPurchases && (
+                {effShowPurchases && (
                   <Area
                     yAxisId="kwh"
                     type="monotone"
@@ -570,7 +596,7 @@ export function PurchasesSalesReportView() {
                     isAnimationActive={false}
                   />
                 )}
-                {showLossPct && (
+                {effShowLossPct && (
                   <Line
                     yAxisId="pct"
                     type="monotone"
@@ -746,19 +772,25 @@ export function PurchasesSalesReportView() {
                             </span>
                           </td>
                           <td className="py-2.5 px-4 text-right tabular-nums text-blue-700">
-                            {formatKwh(r.totalPurchasesKwh)}
+                            {purchasesAvailable ? formatKwh(r.totalPurchasesKwh) : "—"}
                           </td>
                           <td className="py-2.5 px-4 text-right tabular-nums text-emerald-700">
                             {formatKwh(r.totalSalesKwh)}
                           </td>
-                          <td className="py-2.5 px-4 text-right tabular-nums">{formatKwh(r.lossKwh)}</td>
                           <td className="py-2.5 px-4 text-right tabular-nums">
-                            <Badge
-                              variant="outline"
-                              className={`text-xs font-normal border-0 bg-transparent ${lossSeverityClass(r.lossPct, nationalAvgLossPct)}`}
-                            >
-                              {formatPct(r.lossPct)}
-                            </Badge>
+                            {purchasesAvailable ? formatKwh(r.lossKwh) : "—"}
+                          </td>
+                          <td className="py-2.5 px-4 text-right tabular-nums">
+                            {purchasesAvailable ? (
+                              <Badge
+                                variant="outline"
+                                className={`text-xs font-normal border-0 bg-transparent ${lossSeverityClass(r.lossPct, nationalAvgLossPct)}`}
+                              >
+                                {formatPct(r.lossPct)}
+                              </Badge>
+                            ) : (
+                              "—"
+                            )}
                           </td>
                           <td className="py-2.5 pl-4 text-center">
                             {trend === null ? (
@@ -789,58 +821,77 @@ export function PurchasesSalesReportView() {
                         </tr>
                         {isExpanded && (
                           <tr className="border-b last:border-0 bg-muted/20">
-                            <td colSpan={6} className="py-2 pl-8 pr-4">
-                              {r.districts.length === 0 ? (
-                                <p className="text-xs text-muted-foreground py-2">
-                                  No district-level data for this region.
-                                </p>
-                              ) : (
-                                <table className="w-full text-xs">
-                                  <thead>
-                                    <tr className="border-b border-dashed">
-                                      <th className="text-left py-1.5 pr-4 font-medium text-muted-foreground">
-                                        District
-                                      </th>
-                                      <th className="text-right py-1.5 px-4 font-medium text-muted-foreground">
-                                        Purchases
-                                      </th>
-                                      <th className="text-right py-1.5 px-4 font-medium text-muted-foreground">
-                                        Sales
-                                      </th>
-                                      <th className="text-right py-1.5 px-4 font-medium text-muted-foreground">
-                                        Loss
-                                      </th>
-                                      <th className="text-right py-1.5 pl-4 font-medium text-muted-foreground">
-                                        Loss %
-                                      </th>
-                                    </tr>
-                                  </thead>
-                                  <tbody>
-                                    {r.districts.map((d) => (
-                                      <tr key={d.districtKey} className="border-b border-dashed last:border-0">
-                                        <td className="py-1.5 pr-4">{d.district}</td>
-                                        <td className="py-1.5 px-4 text-right tabular-nums text-blue-700">
-                                          {formatKwh(d.totalPurchasesKwh)}
-                                        </td>
-                                        <td className="py-1.5 px-4 text-right tabular-nums text-emerald-700">
-                                          {formatKwh(d.totalSalesKwh)}
-                                        </td>
-                                        <td className="py-1.5 px-4 text-right tabular-nums">
-                                          {formatKwh(d.lossKwh)}
-                                        </td>
-                                        <td className="py-1.5 pl-4 text-right tabular-nums">
-                                          <Badge
-                                            variant="outline"
-                                            className={`text-xs font-normal border-0 bg-transparent ${lossSeverityClass(d.lossPct, nationalAvgLossPct)}`}
-                                          >
-                                            {formatPct(d.lossPct)}
-                                          </Badge>
-                                        </td>
-                                      </tr>
-                                    ))}
-                                  </tbody>
-                                </table>
-                              )}
+                            <td colSpan={6} className="py-3 pl-8 pr-4">
+                              {/* Districts (sales) and stations (purchases) are two
+                                  separate breakdowns, not one merged table -- sales are
+                                  tracked by district, purchases (BSP) by station, and
+                                  the two aren't the same physical unit, so forcing
+                                  purchases into a district row just produced a bogus
+                                  "Unknown" district holding every kWh. */}
+                              <div className="grid gap-4 md:grid-cols-2">
+                                <div>
+                                  <p className="text-[11px] font-medium text-muted-foreground mb-1.5">
+                                    Districts (sales)
+                                  </p>
+                                  {r.districts.length === 0 ? (
+                                    <p className="text-xs text-muted-foreground py-2">No district-level sales data.</p>
+                                  ) : (
+                                    <table className="w-full text-xs">
+                                      <thead>
+                                        <tr className="border-b border-dashed">
+                                          <th className="text-left py-1.5 pr-4 font-medium text-muted-foreground">
+                                            District
+                                          </th>
+                                          <th className="text-right py-1.5 pl-4 font-medium text-muted-foreground">
+                                            Sales
+                                          </th>
+                                        </tr>
+                                      </thead>
+                                      <tbody>
+                                        {r.districts.map((d) => (
+                                          <tr key={d.districtKey} className="border-b border-dashed last:border-0">
+                                            <td className="py-1.5 pr-4">{d.district}</td>
+                                            <td className="py-1.5 pl-4 text-right tabular-nums text-emerald-700">
+                                              {formatKwh(d.totalSalesKwh)}
+                                            </td>
+                                          </tr>
+                                        ))}
+                                      </tbody>
+                                    </table>
+                                  )}
+                                </div>
+                                <div>
+                                  <p className="text-[11px] font-medium text-muted-foreground mb-1.5">
+                                    Stations (purchases)
+                                  </p>
+                                  {r.stations.length === 0 ? (
+                                    <p className="text-xs text-muted-foreground py-2">No station-level purchase data.</p>
+                                  ) : (
+                                    <table className="w-full text-xs">
+                                      <thead>
+                                        <tr className="border-b border-dashed">
+                                          <th className="text-left py-1.5 pr-4 font-medium text-muted-foreground">
+                                            Station
+                                          </th>
+                                          <th className="text-right py-1.5 pl-4 font-medium text-muted-foreground">
+                                            Purchased
+                                          </th>
+                                        </tr>
+                                      </thead>
+                                      <tbody>
+                                        {r.stations.map((s) => (
+                                          <tr key={s.stationKey} className="border-b border-dashed last:border-0">
+                                            <td className="py-1.5 pr-4">{s.station}</td>
+                                            <td className="py-1.5 pl-4 text-right tabular-nums text-blue-700">
+                                              {formatKwh(s.totalPurchasesKwh)}
+                                            </td>
+                                          </tr>
+                                        ))}
+                                      </tbody>
+                                    </table>
+                                  )}
+                                </div>
+                              </div>
                             </td>
                           </tr>
                         )}
