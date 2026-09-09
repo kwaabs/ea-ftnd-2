@@ -4,9 +4,17 @@ import { useMemo } from "react"
 import { useQueries, useQuery } from "@tanstack/react-query"
 import { useZeusBillingAggregate } from "@/hooks/api/use-zeus-billing-aggregate-api"
 import { normalizeRegionName, shortRegionLabel } from "@/hooks/use-resolved-region-name"
-import { formatApiDate } from "@/lib/utils"
+import { fetchWithTimeout, formatApiDate } from "@/lib/utils"
 
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8780"
+
+// Same timeout every other aggregate hook in this codebase uses for a
+// multi-dimension groupBy against a source with no pre-aggregated summary
+// (see use-zeus-billing-aggregate-api.ts's own comment on this exact
+// tradeoff) -- these raw fetches had none at all until a real hang was
+// reported live, which a plain fetch() with no AbortController turns into
+// "the page never finishes loading" instead of a bounded, visible error.
+const REPORT_FETCH_TIMEOUT_MS = 100000
 
 // ── Month range ──────────────────────────────────────────────────────────
 // The Reports page's own date control operates in whole calendar months
@@ -103,6 +111,7 @@ function parseBillMonthLabel(raw: string | null | undefined): MonthPoint | null 
 
 interface BotBxcRow {
   region?: string | null
+  district?: string | null
   bill_month?: string | null
   sum_kwh: number
 }
@@ -112,8 +121,11 @@ async function fetchBotBxcByRegionMonth(
   dateFrom: string,
   dateTo: string,
 ): Promise<BotBxcRow[]> {
-  const qs = new URLSearchParams({ dateFrom, dateTo, groupBy: "region,billmonth" })
-  const res = await fetch(`${API_BASE_URL}/api/v1/meters/consumption/${source}/aggregate?${qs}`)
+  const qs = new URLSearchParams({ dateFrom, dateTo, groupBy: "region,district,billmonth" })
+  const res = await fetchWithTimeout(
+    `${API_BASE_URL}/api/v1/meters/consumption/${source}/aggregate?${qs}`,
+    REPORT_FETCH_TIMEOUT_MS,
+  )
   if (!res.ok) throw new Error(`Failed to fetch ${source} aggregate: ${res.status}`)
   const body = await res.json()
   return body.data ?? []
@@ -122,25 +134,33 @@ async function fetchBotBxcByRegionMonth(
 interface BspRow {
   system_name: "import_kwh" | "export_kwh"
   region: string
+  district?: string | null
   group_period: string // month-truncated ISO date when groupBy=month
   total_consumption: number
 }
 
 async function fetchBspPurchasesByRegionMonth(dateFrom: string, dateTo: string): Promise<BspRow[]> {
-  const qs = new URLSearchParams({ dateFrom, dateTo, groupBy: "month", group: "region" })
-  const res = await fetch(`${API_BASE_URL}/api/v1/meters/consumption/aggregate/bsp?${qs}`)
+  const qs = new URLSearchParams({ dateFrom, dateTo, groupBy: "month", group: "region,district" })
+  const res = await fetchWithTimeout(
+    `${API_BASE_URL}/api/v1/meters/consumption/aggregate/bsp?${qs}`,
+    REPORT_FETCH_TIMEOUT_MS,
+  )
   if (!res.ok) throw new Error(`Failed to fetch BSP aggregate: ${res.status}`)
   return res.json()
 }
 
 interface MmsRow {
   region?: string | null
+  district?: string | null
   sum_last_month_kwh_read: number | null
 }
 
 async function fetchMmsByRegion(dateFrom: string, dateTo: string): Promise<MmsRow[]> {
-  const qs = new URLSearchParams({ dateFrom, dateTo, groupBy: "region" })
-  const res = await fetch(`${API_BASE_URL}/api/v1/meters/consumption/mms-customer-sales/aggregate?${qs}`)
+  const qs = new URLSearchParams({ dateFrom, dateTo, groupBy: "region,district" })
+  const res = await fetchWithTimeout(
+    `${API_BASE_URL}/api/v1/meters/consumption/mms-customer-sales/aggregate?${qs}`,
+    REPORT_FETCH_TIMEOUT_MS,
+  )
   if (!res.ok) throw new Error(`Failed to fetch MMS aggregate: ${res.status}`)
   const body = await res.json()
   return body.data ?? []
@@ -153,6 +173,16 @@ export interface RegionMonthCell {
   salesKwh: number
 }
 
+export interface DistrictSeries {
+  district: string // display label
+  districtKey: string
+  byMonth: Record<string, RegionMonthCell>
+  totalPurchasesKwh: number
+  totalSalesKwh: number
+  lossKwh: number
+  lossPct: number | null
+}
+
 export interface RegionSeries {
   region: string // display label
   regionKey: string
@@ -161,6 +191,7 @@ export interface RegionSeries {
   totalSalesKwh: number
   lossKwh: number
   lossPct: number | null // null when purchases is 0 (undefined loss %, not a real 0%)
+  districts: DistrictSeries[] // sorted worst loss % first, same convention as regions
 }
 
 export interface NationalMonthPoint {
@@ -175,6 +206,11 @@ export interface NationalMonthPoint {
 export interface PurchasesSalesReport {
   isLoading: boolean
   isError: boolean
+  /** Which source(s) actually failed (timed out or errored) — named
+   * explicitly rather than folded into one flat boolean, so a failure is
+   * self-diagnosable from the UI instead of needing a console/network
+   * inspection every time. */
+  erroredSources: string[]
   months: MonthPoint[]
   monthLabels: string[]
   regions: RegionSeries[] // sorted worst loss % first
@@ -193,21 +229,21 @@ export function usePurchasesSalesReport(months: MonthPoint[]): PurchasesSalesRep
   const enabled = Boolean(rangeFrom && rangeTo)
 
   // Sales: Non-AMR + AMR Postpaid, and deduped Zeus Prepaid, both
-  // region+month grouped in one call each (Zeus supports a 4-way groupBy
-  // natively) -- same Zeus-Prepaid-precedence-over-MMS rule already
-  // established on the Region Breakdown table.
+  // region+district+month grouped in one call each (Zeus supports a
+  // multi-dimension groupBy natively) -- same Zeus-Prepaid-precedence-
+  // over-MMS rule already established on the Region Breakdown table.
   const { data: zeusPostAmrData, isLoading: zeusPostAmrLoading, isError: zeusPostAmrError } =
     useZeusBillingAggregate({
       dateFrom: rangeFrom,
       dateTo: rangeTo,
-      groupBy: ["regionname", "metermodeltype", "billingyear", "billingmonth"],
+      groupBy: ["regionname", "districtname", "metermodeltype", "billingyear", "billingmonth"],
       enabled,
     })
   const { data: zeusPrepaidData, isLoading: zeusPrepaidLoading, isError: zeusPrepaidError } =
     useZeusBillingAggregate({
       dateFrom: rangeFrom,
       dateTo: rangeTo,
-      groupBy: ["regionname", "billingyear", "billingmonth"],
+      groupBy: ["regionname", "districtname", "billingyear", "billingmonth"],
       meterModelType: "Prepaid",
       excludeMmsDuplicates: true,
       enabled,
@@ -259,39 +295,76 @@ export function usePurchasesSalesReport(months: MonthPoint[]): PurchasesSalesRep
 
   const isLoading =
     zeusPostAmrLoading || zeusPrepaidLoading || botLoading || bxcLoading || bspLoading || mmsLoading
-  const isError = zeusPostAmrError || zeusPrepaidError || botError || bxcError || bspError || mmsError
+  const erroredSources = [
+    zeusPostAmrError && "Zeus (Postpaid/AMR)",
+    zeusPrepaidError && "Zeus (Prepaid, deduped)",
+    botError && "BOT",
+    bxcError && "BXC",
+    bspError && "BSP",
+    mmsError && "MMS",
+  ].filter((s): s is string => Boolean(s))
+  const isError = erroredSources.length > 0
 
   const report = useMemo(() => {
-    const seriesByKey = new Map<string, RegionSeries>()
-    const ensure = (raw: string): RegionSeries => {
+    interface WorkingDistrict {
+      district: string
+      districtKey: string
+      byMonth: Record<string, RegionMonthCell>
+    }
+    interface WorkingRegion {
+      region: string
+      regionKey: string
+      byMonth: Record<string, RegionMonthCell>
+      districts: Map<string, WorkingDistrict>
+    }
+
+    const seriesByKey = new Map<string, WorkingRegion>()
+    const ensure = (raw: string): WorkingRegion => {
       const key = normalizeRegionName(raw || "Unknown")
       if (!seriesByKey.has(key)) {
         seriesByKey.set(key, {
           region: shortRegionLabel(raw || "Unknown"),
           regionKey: key,
           byMonth: {},
-          totalPurchasesKwh: 0,
-          totalSalesKwh: 0,
-          lossKwh: 0,
-          lossPct: null,
+          districts: new Map(),
         })
       }
       return seriesByKey.get(key)!
     }
-    const cell = (series: RegionSeries, mKey: string): RegionMonthCell => {
-      if (!series.byMonth[mKey]) series.byMonth[mKey] = { purchasesKwh: 0, salesKwh: 0 }
-      return series.byMonth[mKey]
+    const ensureDistrict = (region: WorkingRegion, rawDistrict: string | null | undefined): WorkingDistrict => {
+      const label = rawDistrict && rawDistrict.trim() ? rawDistrict.trim() : "Unknown"
+      const key = normalizeRegionName(label)
+      if (!region.districts.has(key)) {
+        region.districts.set(key, { district: shortRegionLabel(label), districtKey: key, byMonth: {} })
+      }
+      return region.districts.get(key)!
+    }
+    const cell = (byMonth: Record<string, RegionMonthCell>, mKey: string): RegionMonthCell => {
+      if (!byMonth[mKey]) byMonth[mKey] = { purchasesKwh: 0, salesKwh: 0 }
+      return byMonth[mKey]
+    }
+    // Adds to both the region's own total and its district breakdown in one
+    // call -- region totals stay a direct sum of every raw row regardless
+    // of whether that row's district was recognized, while districts is an
+    // independent, additional drill-down (an unrecognized/blank district
+    // lands in an "Unknown" bucket rather than being silently dropped).
+    const addSale = (regionRaw: string, districtRaw: string | null | undefined, mKey: string, kwh: number) => {
+      const series = ensure(regionRaw)
+      cell(series.byMonth, mKey).salesKwh += kwh
+      cell(ensureDistrict(series, districtRaw).byMonth, mKey).salesKwh += kwh
+    }
+    const addPurchase = (regionRaw: string, districtRaw: string | null | undefined, mKey: string, kwh: number) => {
+      const series = ensure(regionRaw)
+      cell(series.byMonth, mKey).purchasesKwh += kwh
+      cell(ensureDistrict(series, districtRaw).byMonth, mKey).purchasesKwh += kwh
     }
 
     // Purchases (BSP): net = import - export, same convention use-bsp-api.ts
     // already uses for "net supply" elsewhere in the app.
     ;(bspData || []).forEach((r) => {
       const mp = { year: new Date(r.group_period).getUTCFullYear(), month: new Date(r.group_period).getUTCMonth() + 1 }
-      const mKey = monthKey(mp)
-      const series = ensure(r.region)
-      const c = cell(series, mKey)
       const delta = r.system_name === "import_kwh" ? r.total_consumption : -r.total_consumption
-      c.purchasesKwh += delta || 0
+      addPurchase(r.region, r.district, monthKey(mp), delta || 0)
     })
 
     // Sales: Non-AMR + AMR Postpaid (all metermodeltype values except
@@ -300,23 +373,28 @@ export function usePurchasesSalesReport(months: MonthPoint[]): PurchasesSalesRep
       const type = (r.metermodeltype || "").trim().toLowerCase()
       if (type !== "postpaid" && type !== "amr") return
       if (!r.billingyear || !r.billingmonth) return
-      const mKey = monthKey({ year: r.billingyear, month: r.billingmonth })
-      const series = ensure(r.regionname || "Unknown")
-      cell(series, mKey).salesKwh += r.sum_billconsumptionvalue || 0
+      addSale(
+        r.regionname || "Unknown",
+        r.districtname,
+        monthKey({ year: r.billingyear, month: r.billingmonth }),
+        r.sum_billconsumptionvalue || 0,
+      )
     })
     // Sales: Zeus Prepaid (deduped against MMS) + MMS, blended into one
     // Prepaid figure -- MMS takes precedence on any meter it already has.
     ;(zeusPrepaidData || []).forEach((r) => {
       if (!r.billingyear || !r.billingmonth) return
-      const mKey = monthKey({ year: r.billingyear, month: r.billingmonth })
-      const series = ensure(r.regionname || "Unknown")
-      cell(series, mKey).salesKwh += r.sum_billconsumptionvalue || 0
+      addSale(
+        r.regionname || "Unknown",
+        r.districtname,
+        monthKey({ year: r.billingyear, month: r.billingmonth }),
+        r.sum_billconsumptionvalue || 0,
+      )
     })
     mmsQueries.forEach((q, idx) => {
       const mKey = monthKey(months[idx])
       ;(q.data || []).forEach((r) => {
-        const series = ensure(r.region || "Unknown")
-        cell(series, mKey).salesKwh += r.sum_last_month_kwh_read || 0
+        addSale(r.region || "Unknown", r.district, mKey, r.sum_last_month_kwh_read || 0)
       })
     })
     // Sales: Legacy (BOT + BXC) -- PNS excluded, same reason as the Region
@@ -325,37 +403,61 @@ export function usePurchasesSalesReport(months: MonthPoint[]): PurchasesSalesRep
     ;[...(botData || []), ...(bxcData || [])].forEach((r) => {
       const mp = parseBillMonthLabel(r.bill_month)
       if (!mp) return
-      const mKey = monthKey(mp)
-      const series = ensure(r.region || "Unknown")
-      cell(series, mKey).salesKwh += r.sum_kwh || 0
+      addSale(r.region || "Unknown", r.district, monthKey(mp), r.sum_kwh || 0)
     })
 
     const monthLabels = months.map((m) => monthLabel(m))
     const monthKeys = months.map((m) => monthKey(m))
 
+    const totalsFor = (byMonth: Record<string, RegionMonthCell>) => {
+      let purchases = 0
+      let sales = 0
+      monthKeys.forEach((mKey) => {
+        const c = byMonth[mKey]
+        if (c) {
+          purchases += c.purchasesKwh
+          sales += c.salesKwh
+        }
+      })
+      const lossKwh = purchases - sales
+      return { purchases, sales, lossKwh, lossPct: purchases > 0 ? (lossKwh / purchases) * 100 : null }
+    }
+    // Worst (highest) loss % first -- entries with no purchases data
+    // (lossPct === null) sort last rather than masquerading as 0% loss.
+    const byWorstLoss = <T extends { lossPct: number | null }>(a: T, b: T) => {
+      if (a.lossPct === null && b.lossPct === null) return 0
+      if (a.lossPct === null) return 1
+      if (b.lossPct === null) return -1
+      return b.lossPct - a.lossPct
+    }
+
     const regions = [...seriesByKey.values()]
       .map((series) => {
-        let totalPurchases = 0
-        let totalSales = 0
-        monthKeys.forEach((mKey) => {
-          const c = series.byMonth[mKey]
-          if (c) {
-            totalPurchases += c.purchasesKwh
-            totalSales += c.salesKwh
-          }
-        })
-        const lossKwh = totalPurchases - totalSales
-        const lossPct = totalPurchases > 0 ? (lossKwh / totalPurchases) * 100 : null
-        return { ...series, totalPurchasesKwh: totalPurchases, totalSalesKwh: totalSales, lossKwh, lossPct }
+        const t = totalsFor(series.byMonth)
+        const districts = [...series.districts.values()]
+          .map((d) => {
+            const dt = totalsFor(d.byMonth)
+            return {
+              ...d,
+              totalPurchasesKwh: dt.purchases,
+              totalSalesKwh: dt.sales,
+              lossKwh: dt.lossKwh,
+              lossPct: dt.lossPct,
+            }
+          })
+          .sort(byWorstLoss)
+        return {
+          region: series.region,
+          regionKey: series.regionKey,
+          byMonth: series.byMonth,
+          totalPurchasesKwh: t.purchases,
+          totalSalesKwh: t.sales,
+          lossKwh: t.lossKwh,
+          lossPct: t.lossPct,
+          districts,
+        }
       })
-      // Worst (highest) loss % first -- regions with no purchases data
-      // (lossPct === null) sort last rather than masquerading as 0% loss.
-      .sort((a, b) => {
-        if (a.lossPct === null && b.lossPct === null) return 0
-        if (a.lossPct === null) return 1
-        if (b.lossPct === null) return -1
-        return b.lossPct - a.lossPct
-      })
+      .sort(byWorstLoss)
 
     const national: NationalMonthPoint[] = months.map((m, idx) => {
       const mKey = monthKeys[idx]
@@ -414,5 +516,5 @@ export function usePurchasesSalesReport(months: MonthPoint[]): PurchasesSalesRep
     }
   }, [zeusPostAmrData, zeusPrepaidData, botData, bxcData, bspData, mmsQueries, months])
 
-  return { ...report, isLoading, isError }
+  return { ...report, isLoading, isError, erroredSources }
 }
