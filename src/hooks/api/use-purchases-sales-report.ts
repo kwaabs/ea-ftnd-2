@@ -297,9 +297,12 @@ export interface PurchasesSalesReport {
   regions: RegionSeries[] // sorted worst loss % first
   national: NationalMonthPoint[]
   nationalTotals: { purchasesKwh: number; salesKwh: number; lossKwh: number; lossPct: number | null }
-  /** Regions where sales exceeded purchases in at least one month — a data-quality
-   * flag (a region can't sell more than it bought), not a real negative loss. */
-  anomalies: { region: string; month: string; label: string; purchasesKwh: number; salesKwh: number }[]
+  /** Regions where sales exceeded purchases across the selected window as a
+   * whole — a data-quality flag (a region can't sell more than it bought),
+   * not a real negative loss. One entry per region (see the anomalies
+   * computation below for why), with monthsAffected saying how many months
+   * within the window contributed to it. */
+  anomalies: { region: string; purchasesKwh: number; salesKwh: number; monthsAffected: number }[]
 }
 
 export function usePurchasesSalesReport(months: MonthPoint[]): PurchasesSalesReport {
@@ -575,20 +578,26 @@ export function usePurchasesSalesReport(months: MonthPoint[]): PurchasesSalesRep
     const nationalSales = national.reduce((s, n) => s + n.salesKwh, 0)
     const nationalLoss = nationalPurchases - nationalSales
 
+    // One entry per REGION, not per region-month -- a region is the same
+    // region regardless of how many months it shows this issue in, so it's
+    // evaluated (and counted) once, on its own window totals, same as every
+    // other figure this report shows for a region. monthsAffected says how
+    // many of the selected months contributed, without turning this back
+    // into a per-month list.
     const anomalies: PurchasesSalesReport["anomalies"] = []
     regions.forEach((series) => {
-      monthKeys.forEach((mKey, idx) => {
-        const c = series.byMonth[mKey]
-        if (c && c.purchasesKwh > 0 && c.salesKwh > c.purchasesKwh) {
-          anomalies.push({
-            region: series.region,
-            month: mKey,
-            label: monthLabels[idx],
-            purchasesKwh: c.purchasesKwh,
-            salesKwh: c.salesKwh,
-          })
-        }
-      })
+      if (series.totalPurchasesKwh > 0 && series.totalSalesKwh > series.totalPurchasesKwh) {
+        const monthsAffected = monthKeys.filter((mKey) => {
+          const c = series.byMonth[mKey]
+          return c && c.purchasesKwh > 0 && c.salesKwh > c.purchasesKwh
+        }).length
+        anomalies.push({
+          region: series.region,
+          purchasesKwh: series.totalPurchasesKwh,
+          salesKwh: series.totalSalesKwh,
+          monthsAffected,
+        })
+      }
     })
 
     return {
