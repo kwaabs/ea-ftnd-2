@@ -1,6 +1,6 @@
 "use client"
 
-import { Fragment, useEffect, useMemo, useState } from "react"
+import { Fragment, useMemo, useState } from "react"
 import {
   Area,
   AreaChart,
@@ -20,11 +20,8 @@ import {
   ChevronDown,
   ChevronRight,
   Minus,
-  Pause,
-  Play,
   Scale,
   TrendingDown,
-  X,
   Zap,
 } from "lucide-react"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
@@ -32,8 +29,6 @@ import { Skeleton } from "@/components/ui/skeleton"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Badge } from "@/components/ui/badge"
 import { Input } from "@/components/ui/input"
-import { Slider } from "@/components/ui/slider"
-import { Button } from "@/components/ui/button"
 import {
   currentMonthPoint,
   monthKey,
@@ -43,6 +38,7 @@ import {
   trailingMonths,
   usePurchasesSalesReport,
   type RegionMonthCell,
+  type RegionSeries,
 } from "@/hooks/api/use-purchases-sales-report"
 
 function formatKwh(value: number): string {
@@ -134,17 +130,6 @@ function regionTrendDelta(byMonth: Record<string, RegionMonthCell>, monthKeys: s
   return avg(withLoss.slice(mid)) - avg(withLoss.slice(0, mid))
 }
 
-/** Worst (highest) loss % first — same convention the hook's own region
- * sort uses, duplicated here (not imported) since it's only needed when
- * re-sorting for a single spotlighted month, which the hook itself has no
- * reason to know about. */
-function byWorstLoss<T extends { lossPct: number | null }>(a: T, b: T): number {
-  if (a.lossPct === null && b.lossPct === null) return 0
-  if (a.lossPct === null) return 1
-  if (b.lossPct === null) return -1
-  return b.lossPct - a.lossPct
-}
-
 const MAX_WINDOW_MONTHS = 12
 
 type PeriodMode = "3" | "6" | "12" | "year" | "custom"
@@ -216,52 +201,6 @@ export function PurchasesSalesReportView() {
     lossPct: n.lossPct,
   }))
   const monthKeys = report.months.map((m) => monthKey(m))
-
-  // Spotlight: scrubbing/playing through the window swaps the headline,
-  // heat map column highlight, and region ranking from "totals across the
-  // whole window" to "this one month" -- the thing that actually makes
-  // this feel like watching a story unfold instead of reading one
-  // aggregated snapshot. null = back to the whole-window view.
-  const [spotlightIndex, setSpotlightIndex] = useState<number | null>(null)
-  const [isPlaying, setIsPlaying] = useState(false)
-
-  useEffect(() => {
-    if (!isPlaying || monthKeys.length === 0) return
-    const id = setInterval(() => {
-      setSpotlightIndex((prev) => {
-        const next = (prev === null ? -1 : prev) + 1
-        if (next >= monthKeys.length) {
-          setIsPlaying(false)
-          return prev
-        }
-        return next
-      })
-    }, 1400)
-    return () => clearInterval(id)
-  }, [isPlaying, monthKeys.length])
-
-  const spotlightMonthKey = spotlightIndex !== null ? monthKeys[spotlightIndex] : null
-  const spotlightNational = spotlightIndex !== null ? report.national[spotlightIndex] : null
-
-  // Region ranking re-sorted and re-valued for the spotlighted month when
-  // one is active -- whole-window totals (report.regions, already sorted)
-  // otherwise. District drill-down still shows whole-window district
-  // totals even while spotlighting a month (kept simple deliberately --
-  // the spotlight's job is the region-level story, not a third level of
-  // per-month-per-district recomputation).
-  const rankingRows =
-    spotlightMonthKey === null
-      ? report.regions
-      : [...report.regions]
-          .map((r) => {
-            const c = r.byMonth[spotlightMonthKey]
-            const purchasesKwh = c?.purchasesKwh ?? 0
-            const salesKwh = c?.salesKwh ?? 0
-            const lossKwh = purchasesKwh - salesKwh
-            const lossPct = purchasesKwh > 0 ? (lossKwh / purchasesKwh) * 100 : null
-            return { ...r, totalPurchasesKwh: purchasesKwh, totalSalesKwh: salesKwh, lossKwh, lossPct }
-          })
-          .sort(byWorstLoss)
 
   // Narrative: compare the first vs second half of the window's average
   // loss %, to say whether the network is trending better or worse, not
@@ -335,84 +274,6 @@ export function PurchasesSalesReportView() {
         </div>
       </div>
 
-      {/* Month scrubber — drag, click a tick, or press Play to walk the
-          window month by month; every card/chart below reacts live. */}
-      {!report.isLoading && monthKeys.length > 1 && (
-        <Card className="bg-gradient-to-r from-slate-50 to-slate-100/60 border-slate-200">
-          <CardContent className="pt-5 pb-4">
-            <div className="flex items-center gap-3">
-              <Button
-                type="button"
-                variant={isPlaying ? "default" : "outline"}
-                size="icon"
-                className="shrink-0 rounded-full"
-                onClick={() => {
-                  if (isPlaying) {
-                    setIsPlaying(false)
-                    return
-                  }
-                  // Starting from the end (or with nothing spotlighted) restarts
-                  // from month 0 rather than doing nothing / stepping past the end.
-                  if (spotlightIndex === null || spotlightIndex >= monthKeys.length - 1) {
-                    setSpotlightIndex(0)
-                  }
-                  setIsPlaying(true)
-                }}
-                title={isPlaying ? "Pause" : "Play through the window"}
-              >
-                {isPlaying ? <Pause className="h-4 w-4" /> : <Play className="h-4 w-4 ml-0.5" />}
-              </Button>
-              <div className="flex-1 px-1">
-                <Slider
-                  value={[spotlightIndex ?? -1]}
-                  min={-1}
-                  max={monthKeys.length - 1}
-                  step={1}
-                  onValueChange={([v]) => {
-                    setIsPlaying(false)
-                    setSpotlightIndex(v < 0 ? null : v)
-                  }}
-                />
-                <div className="flex justify-between mt-1.5 px-0.5">
-                  {report.monthLabels.map((label, idx) => (
-                    <button
-                      key={label}
-                      type="button"
-                      onClick={() => {
-                        setIsPlaying(false)
-                        setSpotlightIndex(idx)
-                      }}
-                      className={`text-[10px] whitespace-nowrap ${
-                        idx === spotlightIndex
-                          ? "text-foreground font-semibold"
-                          : "text-muted-foreground hover:text-foreground"
-                      }`}
-                    >
-                      {monthKeys.length > 8 ? label.split(" ")[0] : label}
-                    </button>
-                  ))}
-                </div>
-              </div>
-              {spotlightIndex !== null && (
-                <Button
-                  type="button"
-                  variant="ghost"
-                  size="sm"
-                  className="shrink-0 gap-1 text-xs text-muted-foreground"
-                  onClick={() => {
-                    setIsPlaying(false)
-                    setSpotlightIndex(null)
-                  }}
-                >
-                  <X className="h-3.5 w-3.5" />
-                  Show whole window
-                </Button>
-              )}
-            </div>
-          </CardContent>
-        </Card>
-      )}
-
       {report.isError && (
         <p className="text-sm text-red-600">
           Failed to load: {report.erroredSources.join(", ")} — figures below may be incomplete for that source.
@@ -420,17 +281,7 @@ export function PurchasesSalesReportView() {
         </p>
       )}
 
-      {/* National headline — swaps to the spotlighted month's own figures
-          when the scrubber is active, whole-window totals otherwise. */}
-      <div className="flex items-center gap-2 text-xs text-muted-foreground">
-        <span className={spotlightIndex !== null ? "h-1.5 w-1.5 rounded-full bg-blue-600 animate-pulse" : ""} />
-        Showing:{" "}
-        <span className="font-semibold text-foreground">
-          {spotlightIndex !== null
-            ? report.monthLabels[spotlightIndex]
-            : `whole window (${report.monthLabels[0]} – ${report.monthLabels[report.monthLabels.length - 1]})`}
-        </span>
-      </div>
+      {/* National headline */}
       <div className="grid gap-4 md:grid-cols-3">
         <Card className="border-2 border-blue-200 bg-blue-50/40">
           <CardHeader className="pb-2">
@@ -444,9 +295,7 @@ export function PurchasesSalesReportView() {
             {report.isLoading ? (
               <Skeleton className="h-9 w-40" />
             ) : (
-              <div className="text-3xl font-bold text-blue-700 transition-all">
-                {formatKwh(spotlightNational ? spotlightNational.purchasesKwh : report.nationalTotals.purchasesKwh)}
-              </div>
+              <div className="text-3xl font-bold text-blue-700">{formatKwh(report.nationalTotals.purchasesKwh)}</div>
             )}
           </CardContent>
         </Card>
@@ -462,9 +311,7 @@ export function PurchasesSalesReportView() {
             {report.isLoading ? (
               <Skeleton className="h-9 w-40" />
             ) : (
-              <div className="text-3xl font-bold text-emerald-700 transition-all">
-                {formatKwh(spotlightNational ? spotlightNational.salesKwh : report.nationalTotals.salesKwh)}
-              </div>
+              <div className="text-3xl font-bold text-emerald-700">{formatKwh(report.nationalTotals.salesKwh)}</div>
             )}
           </CardContent>
         </Card>
@@ -481,12 +328,8 @@ export function PurchasesSalesReportView() {
               <Skeleton className="h-9 w-40" />
             ) : (
               <>
-                <div className="text-3xl font-bold text-rose-700 transition-all">
-                  {formatKwh(spotlightNational ? spotlightNational.lossKwh : report.nationalTotals.lossKwh)}
-                </div>
-                <div className="text-sm text-rose-600 mt-1">
-                  {formatPct(spotlightNational ? spotlightNational.lossPct : nationalAvgLossPct)} of purchases
-                </div>
+                <div className="text-3xl font-bold text-rose-700">{formatKwh(report.nationalTotals.lossKwh)}</div>
+                <div className="text-sm text-rose-600 mt-1">{formatPct(nationalAvgLossPct)} of purchases</div>
               </>
             )}
           </CardContent>
@@ -665,17 +508,10 @@ export function PurchasesSalesReportView() {
                     <th className="text-left py-1 pr-3 font-medium text-muted-foreground sticky left-0 bg-card">
                       Region
                     </th>
-                    {report.monthLabels.map((label, idx) => (
+                    {report.monthLabels.map((label) => (
                       <th
                         key={label}
-                        onClick={() => {
-                          setIsPlaying(false)
-                          setSpotlightIndex((prev) => (prev === idx ? null : idx))
-                        }}
-                        className={`text-center px-1 pb-1 font-medium whitespace-nowrap text-xs cursor-pointer ${
-                          idx === spotlightIndex ? "text-foreground font-bold" : "text-muted-foreground"
-                        }`}
-                        title="Click to spotlight this month"
+                        className="text-center px-1 pb-1 font-medium text-muted-foreground whitespace-nowrap text-xs"
                       >
                         {label}
                       </th>
@@ -693,31 +529,33 @@ export function PurchasesSalesReportView() {
                         const monthAvg = report.national[idx]?.lossPct ?? null
                         const rgb = lossHeatRgb(lossPct, monthAvg)
                         const cell = r.byMonth[mKey]
+                        const textColor = readableTextOn(rgb)
                         return (
                           <td
                             key={mKey}
-                            onClick={() => {
-                              setIsPlaying(false)
-                              setSpotlightIndex((prev) => (prev === idx ? null : idx))
-                            }}
-                            className={`text-center text-xs font-medium tabular-nums rounded cursor-pointer transition-opacity ${
-                              spotlightIndex !== null && idx !== spotlightIndex ? "opacity-40" : ""
-                            }`}
-                            style={{
-                              backgroundColor: rgbToCss(rgb),
-                              color: readableTextOn(rgb),
-                              minWidth: 56,
-                              height: 32,
-                              outline: idx === spotlightIndex ? "2px solid #1e293b" : undefined,
-                              outlineOffset: idx === spotlightIndex ? -2 : undefined,
-                            }}
+                            className="text-center rounded align-middle px-1.5 py-1.5"
+                            style={{ backgroundColor: rgbToCss(rgb), color: textColor, minWidth: 92 }}
                             title={
                               cell
-                                ? `${r.region}, ${report.monthLabels[idx]}: purchased ${formatKwh(cell.purchasesKwh)}, sold ${formatKwh(cell.salesKwh)}`
-                                : `${r.region}, ${report.monthLabels[idx]}: no data`
+                                ? `${r.region}, ${report.monthLabels[idx]}: purchased ${formatKwh(cell.purchasesKwh)}, sold ${formatKwh(cell.salesKwh)}, loss ${formatKwh(cell.purchasesKwh - cell.salesKwh)}`
+                                : `${r.region}, ${report.monthLabels[idx]}: no purchases data`
                             }
                           >
-                            {formatPct(lossPct)}
+                            {cell ? (
+                              <>
+                                <div className="text-sm font-bold tabular-nums leading-tight">
+                                  {formatPct(lossPct)}
+                                </div>
+                                <div
+                                  className="text-[10px] leading-tight tabular-nums opacity-90"
+                                  style={{ color: textColor }}
+                                >
+                                  P {formatAxisKwh(cell.purchasesKwh)} · S {formatAxisKwh(cell.salesKwh)}
+                                </div>
+                              </>
+                            ) : (
+                              <div className="text-xs font-medium">—</div>
+                            )}
                           </td>
                         )
                       })}
@@ -737,11 +575,7 @@ export function PurchasesSalesReportView() {
             <Scale className="h-4 w-4 text-muted-foreground" />
             <CardTitle>Region ranking — highest loss % first</CardTitle>
           </div>
-          <CardDescription>
-            {spotlightIndex !== null
-              ? `${report.monthLabels[spotlightIndex]} only — click the scrubber above or "Show whole window" to go back to totals`
-              : "Totals across the selected window"}
-          </CardDescription>
+          <CardDescription>Totals across the selected window</CardDescription>
         </CardHeader>
         <CardContent>
           {report.isLoading ? (
@@ -750,7 +584,7 @@ export function PurchasesSalesReportView() {
                 <Skeleton key={i} className="h-10 w-full" />
               ))}
             </div>
-          ) : rankingRows.length === 0 ? (
+          ) : report.regions.length === 0 ? (
             <p className="text-sm text-muted-foreground py-8 text-center">No data for this window.</p>
           ) : (
             <div className="overflow-x-auto">
@@ -768,7 +602,7 @@ export function PurchasesSalesReportView() {
                   </tr>
                 </thead>
                 <tbody>
-                  {rankingRows.map((r) => {
+                  {report.regions.map((r: RegionSeries) => {
                     const isExpanded = expandedRegions.has(r.regionKey)
                     const trend = regionTrendDelta(r.byMonth, monthKeys)
                     return (
