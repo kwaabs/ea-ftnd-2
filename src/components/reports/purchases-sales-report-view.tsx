@@ -1,6 +1,6 @@
 "use client"
 
-import { useMemo, useState } from "react"
+import { Fragment, useMemo, useState } from "react"
 import {
   Area,
   AreaChart,
@@ -13,7 +13,17 @@ import {
   XAxis,
   YAxis,
 } from "recharts"
-import { AlertTriangle, ArrowDown, ArrowUp, Minus, Scale, TrendingDown, Zap } from "lucide-react"
+import {
+  AlertTriangle,
+  ArrowDown,
+  ArrowUp,
+  ChevronDown,
+  ChevronRight,
+  Minus,
+  Scale,
+  TrendingDown,
+  Zap,
+} from "lucide-react"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Skeleton } from "@/components/ui/skeleton"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
@@ -79,6 +89,15 @@ const WINDOW_OPTIONS = [
  */
 export function PurchasesSalesReportView() {
   const [windowMonths, setWindowMonths] = useState(12)
+  const [expandedRegions, setExpandedRegions] = useState<Set<string>>(new Set())
+  const toggleRegion = (regionKey: string) => {
+    setExpandedRegions((prev) => {
+      const next = new Set(prev)
+      if (next.has(regionKey)) next.delete(regionKey)
+      else next.add(regionKey)
+      return next
+    })
+  }
   const months = useMemo(() => trailingMonths(currentMonthPoint(), windowMonths), [windowMonths])
   const report = usePurchasesSalesReport(months)
 
@@ -134,7 +153,8 @@ export function PurchasesSalesReportView() {
 
       {report.isError && (
         <p className="text-sm text-red-600">
-          Some sources failed to load — figures below may be incomplete. Check the console for details.
+          Failed to load: {report.erroredSources.join(", ")} — figures below may be incomplete for that source.
+          This usually means that source&apos;s query timed out; try a shorter window.
         </p>
       )}
 
@@ -374,26 +394,103 @@ export function PurchasesSalesReportView() {
                   </tr>
                 </thead>
                 <tbody>
-                  {report.regions.map((r: RegionSeries) => (
-                    <tr key={r.regionKey} className="border-b last:border-0 hover:bg-muted/40">
-                      <td className="py-2.5 pr-4 font-medium">{r.region}</td>
-                      <td className="py-2.5 px-4 text-right tabular-nums text-blue-700">
-                        {formatKwh(r.totalPurchasesKwh)}
-                      </td>
-                      <td className="py-2.5 px-4 text-right tabular-nums text-emerald-700">
-                        {formatKwh(r.totalSalesKwh)}
-                      </td>
-                      <td className="py-2.5 px-4 text-right tabular-nums">{formatKwh(r.lossKwh)}</td>
-                      <td className="py-2.5 pl-4 text-right tabular-nums">
-                        <Badge
-                          variant="outline"
-                          className={`text-xs font-normal border-0 bg-transparent ${lossSeverityClass(r.lossPct, nationalAvgLossPct)}`}
+                  {report.regions.map((r: RegionSeries) => {
+                    const isExpanded = expandedRegions.has(r.regionKey)
+                    return (
+                      <Fragment key={r.regionKey}>
+                        <tr
+                          className="border-b last:border-0 hover:bg-muted/40 cursor-pointer"
+                          onClick={() => toggleRegion(r.regionKey)}
                         >
-                          {formatPct(r.lossPct)}
-                        </Badge>
-                      </td>
-                    </tr>
-                  ))}
+                          <td className="py-2.5 pr-4 font-medium">
+                            <span className="inline-flex items-center gap-1.5">
+                              {isExpanded ? (
+                                <ChevronDown className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
+                              ) : (
+                                <ChevronRight className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
+                              )}
+                              {r.region}
+                              <span className="text-xs text-muted-foreground font-normal">
+                                ({r.districts.length} district{r.districts.length === 1 ? "" : "s"})
+                              </span>
+                            </span>
+                          </td>
+                          <td className="py-2.5 px-4 text-right tabular-nums text-blue-700">
+                            {formatKwh(r.totalPurchasesKwh)}
+                          </td>
+                          <td className="py-2.5 px-4 text-right tabular-nums text-emerald-700">
+                            {formatKwh(r.totalSalesKwh)}
+                          </td>
+                          <td className="py-2.5 px-4 text-right tabular-nums">{formatKwh(r.lossKwh)}</td>
+                          <td className="py-2.5 pl-4 text-right tabular-nums">
+                            <Badge
+                              variant="outline"
+                              className={`text-xs font-normal border-0 bg-transparent ${lossSeverityClass(r.lossPct, nationalAvgLossPct)}`}
+                            >
+                              {formatPct(r.lossPct)}
+                            </Badge>
+                          </td>
+                        </tr>
+                        {isExpanded && (
+                          <tr className="border-b last:border-0 bg-muted/20">
+                            <td colSpan={5} className="py-2 pl-8 pr-4">
+                              {r.districts.length === 0 ? (
+                                <p className="text-xs text-muted-foreground py-2">
+                                  No district-level data for this region.
+                                </p>
+                              ) : (
+                                <table className="w-full text-xs">
+                                  <thead>
+                                    <tr className="border-b border-dashed">
+                                      <th className="text-left py-1.5 pr-4 font-medium text-muted-foreground">
+                                        District
+                                      </th>
+                                      <th className="text-right py-1.5 px-4 font-medium text-muted-foreground">
+                                        Purchases
+                                      </th>
+                                      <th className="text-right py-1.5 px-4 font-medium text-muted-foreground">
+                                        Sales
+                                      </th>
+                                      <th className="text-right py-1.5 px-4 font-medium text-muted-foreground">
+                                        Loss
+                                      </th>
+                                      <th className="text-right py-1.5 pl-4 font-medium text-muted-foreground">
+                                        Loss %
+                                      </th>
+                                    </tr>
+                                  </thead>
+                                  <tbody>
+                                    {r.districts.map((d) => (
+                                      <tr key={d.districtKey} className="border-b border-dashed last:border-0">
+                                        <td className="py-1.5 pr-4">{d.district}</td>
+                                        <td className="py-1.5 px-4 text-right tabular-nums text-blue-700">
+                                          {formatKwh(d.totalPurchasesKwh)}
+                                        </td>
+                                        <td className="py-1.5 px-4 text-right tabular-nums text-emerald-700">
+                                          {formatKwh(d.totalSalesKwh)}
+                                        </td>
+                                        <td className="py-1.5 px-4 text-right tabular-nums">
+                                          {formatKwh(d.lossKwh)}
+                                        </td>
+                                        <td className="py-1.5 pl-4 text-right tabular-nums">
+                                          <Badge
+                                            variant="outline"
+                                            className={`text-xs font-normal border-0 bg-transparent ${lossSeverityClass(d.lossPct, nationalAvgLossPct)}`}
+                                          >
+                                            {formatPct(d.lossPct)}
+                                          </Badge>
+                                        </td>
+                                      </tr>
+                                    ))}
+                                  </tbody>
+                                </table>
+                              )}
+                            </td>
+                          </tr>
+                        )}
+                      </Fragment>
+                    )
+                  })}
                 </tbody>
               </table>
             </div>
