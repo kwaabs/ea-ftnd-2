@@ -28,8 +28,13 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Skeleton } from "@/components/ui/skeleton"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Badge } from "@/components/ui/badge"
+import { Input } from "@/components/ui/input"
 import {
   currentMonthPoint,
+  monthKey,
+  monthLabel,
+  monthsInRange,
+  parseMonthInputValue,
   trailingMonths,
   usePurchasesSalesReport,
   type RegionSeries,
@@ -68,10 +73,16 @@ function lossSeverityClass(lossPct: number | null, nationalAvgPct: number | null
   return "text-emerald-700"
 }
 
-const WINDOW_OPTIONS = [
+const MAX_WINDOW_MONTHS = 12
+
+type PeriodMode = "3" | "6" | "12" | "year" | "custom"
+
+const PERIOD_MODE_OPTIONS: { value: PeriodMode; label: string }[] = [
+  { value: "3", label: "Last 3 months" },
   { value: "6", label: "Last 6 months" },
   { value: "12", label: "Last 12 months" },
-  { value: "24", label: "Last 24 months" },
+  { value: "year", label: "Current year" },
+  { value: "custom", label: "Custom range" },
 ]
 
 /**
@@ -88,7 +99,12 @@ const WINDOW_OPTIONS = [
  * this page the way it does elsewhere.
  */
 export function PurchasesSalesReportView() {
-  const [windowMonths, setWindowMonths] = useState(12)
+  const now = currentMonthPoint()
+  const [periodMode, setPeriodMode] = useState<PeriodMode>("12")
+  // Defaults for the custom-range inputs: last 12 months, so switching into
+  // "Custom range" starts from something sane rather than two empty fields.
+  const [customFrom, setCustomFrom] = useState(monthKey(trailingMonths(now, MAX_WINDOW_MONTHS)[0]))
+  const [customTo, setCustomTo] = useState(monthKey(now))
   const [expandedRegions, setExpandedRegions] = useState<Set<string>>(new Set())
   const toggleRegion = (regionKey: string) => {
     setExpandedRegions((prev) => {
@@ -98,7 +114,27 @@ export function PurchasesSalesReportView() {
       return next
     })
   }
-  const months = useMemo(() => trailingMonths(currentMonthPoint(), windowMonths), [windowMonths])
+
+  // Custom range is clamped, not rejected: picking a span over 12 months
+  // keeps the most recent 12 of whatever was selected rather than blocking
+  // submission or silently overwriting what the user typed into the
+  // inputs. customRangeClampedFrom is only set (and shown) when a clamp
+  // actually happened.
+  const customRange = useMemo(() => {
+    const from = parseMonthInputValue(customFrom)
+    const to = parseMonthInputValue(customTo)
+    if (!from || !to) return { months: trailingMonths(now, MAX_WINDOW_MONTHS), clamped: false }
+    const full = monthsInRange(from, to)
+    if (full.length <= MAX_WINDOW_MONTHS) return { months: full, clamped: false }
+    return { months: full.slice(full.length - MAX_WINDOW_MONTHS), clamped: true }
+  }, [customFrom, customTo, now])
+
+  const months = useMemo(() => {
+    if (periodMode === "custom") return customRange.months
+    if (periodMode === "year") return monthsInRange({ year: now.year, month: 1 }, now)
+    return trailingMonths(now, Number(periodMode))
+  }, [periodMode, customRange, now])
+
   const report = usePurchasesSalesReport(months)
 
   const chartData = report.national.map((n) => ({
@@ -137,18 +173,47 @@ export function PurchasesSalesReportView() {
             Purchases (BSP incomer imports) vs Sales (Zeus + MMS + Legacy) by region, monthly
           </p>
         </div>
-        <Select value={String(windowMonths)} onValueChange={(v) => setWindowMonths(Number(v))}>
-          <SelectTrigger className="w-[180px]">
-            <SelectValue />
-          </SelectTrigger>
-          <SelectContent>
-            {WINDOW_OPTIONS.map((o) => (
-              <SelectItem key={o.value} value={o.value}>
-                {o.label}
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
+        <div className="flex items-start gap-2 flex-wrap">
+          <Select value={periodMode} onValueChange={(v) => setPeriodMode(v as PeriodMode)}>
+            <SelectTrigger className="w-[180px]">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              {PERIOD_MODE_OPTIONS.map((o) => (
+                <SelectItem key={o.value} value={o.value}>
+                  {o.label}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+          {periodMode === "custom" && (
+            <div className="flex flex-col gap-1">
+              <div className="flex items-center gap-2">
+                <Input
+                  type="month"
+                  value={customFrom}
+                  max={monthKey(now)}
+                  onChange={(e) => setCustomFrom(e.target.value)}
+                  className="w-[150px]"
+                />
+                <span className="text-sm text-muted-foreground">to</span>
+                <Input
+                  type="month"
+                  value={customTo}
+                  max={monthKey(now)}
+                  onChange={(e) => setCustomTo(e.target.value)}
+                  className="w-[150px]"
+                />
+              </div>
+              {customRange.clamped && (
+                <p className="text-xs text-amber-700">
+                  Capped at {MAX_WINDOW_MONTHS} months — showing {monthLabel(customRange.months[0])} to{" "}
+                  {monthLabel(customRange.months[customRange.months.length - 1])}.
+                </p>
+              )}
+            </div>
+          )}
+        </div>
       </div>
 
       {report.isError && (
