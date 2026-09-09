@@ -450,20 +450,23 @@ export function PurchasesSalesReportView() {
             <div className="flex items-center gap-2">
               <AlertTriangle className="h-4 w-4 text-amber-600" />
               <CardTitle className="text-sm font-medium text-amber-900">
-                {scopeAnomalies.length} region-month{scopeAnomalies.length === 1 ? "" : "s"} sold more than
-                purchased
+                {scopeAnomalies.length} region{scopeAnomalies.length === 1 ? "" : "s"} sold more than purchased
               </CardTitle>
             </div>
             <CardDescription className="text-[11px] text-amber-800">
               A region can&apos;t sell more than it bought — this points at a data or timing mismatch between
-              sources for that period, not a real negative loss.
+              sources over the selected window, not a real negative loss. One row per region, on its own totals
+              for the whole window — not once per month it happened in.
             </CardDescription>
           </CardHeader>
           <CardContent className="text-xs text-amber-900 space-y-1">
             {scopeAnomalies.slice(0, 8).map((a, i) => (
               <div key={i} className="flex items-center justify-between gap-3">
                 <span>
-                  {a.region} · {a.label}
+                  {a.region}{" "}
+                  <span className="text-amber-700">
+                    ({a.monthsAffected} month{a.monthsAffected === 1 ? "" : "s"})
+                  </span>
                 </span>
                 <span className="font-mono">
                   purchased {formatKwh(a.purchasesKwh)}, sold {formatKwh(a.salesKwh)}
