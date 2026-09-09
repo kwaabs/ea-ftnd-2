@@ -100,7 +100,7 @@ const PERIOD_MODE_OPTIONS: { value: PeriodMode; label: string }[] = [
  */
 export function PurchasesSalesReportView() {
   const now = currentMonthPoint()
-  const [periodMode, setPeriodMode] = useState<PeriodMode>("12")
+  const [periodMode, setPeriodMode] = useState<PeriodMode>("3")
   // Defaults for the custom-range inputs: last 12 months, so switching into
   // "Custom range" starts from something sane rather than two empty fields.
   const [customFrom, setCustomFrom] = useState(monthKey(trailingMonths(now, MAX_WINDOW_MONTHS)[0]))
