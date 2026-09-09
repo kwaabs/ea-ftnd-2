@@ -32,8 +32,12 @@ export function Header() {
     const pathname = usePathname()
     // Login activity has its own fixed "last 30 days" range from the API
     // response (see admin/logins/page.tsx) — the global filter date range
-    // doesn't apply to it and would be misleading here.
-    const showDateRange = !pathname?.startsWith("/admin/logins")
+    // doesn't apply to it and would be misleading here. /reports has its
+    // own independent month-granularity window control
+    // (purchases-sales-report-view.tsx) — the global filter isn't read by
+    // that page at all, so showing it here would suggest it does something
+    // it doesn't.
+    const showDateRange = !pathname?.startsWith("/admin/logins") && !pathname?.startsWith("/reports")
     const { filters, setFilters } = useAppStore()
     const { user } = useUserStore()
     const userEmail = user?.email || user?.username || ""
