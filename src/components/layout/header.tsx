@@ -38,6 +38,12 @@ export function Header() {
     // that page at all, so showing it here would suggest it does something
     // it doesn't.
     const showDateRange = !pathname?.startsWith("/admin/logins") && !pathname?.startsWith("/reports")
+    // The whole global Filters popover (date range + region/district/etc,
+    // all backed by useAppStore) is a no-op on /reports -- that page reads
+    // none of it, it runs its own month window plus its own region/district
+    // selects that actually filter its data. Showing the global one here
+    // just looks like an unrelated date filter reappearing on the page.
+    const showGlobalFilters = !pathname?.startsWith("/reports")
     const { filters, setFilters } = useAppStore()
     const { user } = useUserStore()
     const userEmail = user?.email || user?.username || ""
@@ -151,30 +157,32 @@ export function Header() {
 
                     {canSeeNotifications && <NotificationBell userEmail={userEmail} />}
 
-                    <Popover open={isFilterOpen} onOpenChange={setIsFilterOpen}>
-                        <PopoverTrigger asChild>
-                            <Button
-                                variant="outline"
-                                size="sm"
-                                className="gap-2 bg-transparent"
+                    {showGlobalFilters && (
+                        <Popover open={isFilterOpen} onOpenChange={setIsFilterOpen}>
+                            <PopoverTrigger asChild>
+                                <Button
+                                    variant="outline"
+                                    size="sm"
+                                    className="gap-2 bg-transparent"
+                                >
+                                    <Filter className="h-4 w-4"/>
+                                    Filters
+                                </Button>
+                            </PopoverTrigger>
+                            {/* 🔥 FIXED: Removed max-h and overflow-y-auto to allow react-select dropdowns to escape */}
+                            <PopoverContent
+                                className="w-auto p-0"
+                                align="end"
+                                side="bottom"
+                                sideOffset={8}
                             >
-                                <Filter className="h-4 w-4"/>
-                                Filters
-                            </Button>
-                        </PopoverTrigger>
-                        {/* 🔥 FIXED: Removed max-h and overflow-y-auto to allow react-select dropdowns to escape */}
-                        <PopoverContent
-                            className="w-auto p-0"
-                            align="end"
-                            side="bottom"
-                            sideOffset={8}
-                        >
-                            {/* 🔥 FIXED: Added wrapper with max-height and overflow for just the content, not the dropdowns */}
-                            <div className="max-h-[80vh] overflow-y-auto">
-                                <HeaderFilterDropdown/>
-                            </div>
-                        </PopoverContent>
-                    </Popover>
+                                {/* 🔥 FIXED: Added wrapper with max-height and overflow for just the content, not the dropdowns */}
+                                <div className="max-h-[80vh] overflow-y-auto">
+                                    <HeaderFilterDropdown/>
+                                </div>
+                            </PopoverContent>
+                        </Popover>
+                    )}
                 </div>
             </div>
         </header>
