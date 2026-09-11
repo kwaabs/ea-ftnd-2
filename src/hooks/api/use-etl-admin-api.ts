@@ -15,7 +15,7 @@ const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8780"
 export type EtlSourceKind = "oracle" | "mssql" | "postgres" | "http_api"
 export type EtlJobMode = "full_refresh" | "incremental"
 export type EtlWatermarkType = "timestamp" | "integer" | "string"
-export type EtlRunStatus = "running" | "success" | "failed"
+export type EtlRunStatus = "running" | "success" | "failed" | "cancelled"
 
 export interface EtlSourceInput {
   name: string
@@ -119,6 +119,16 @@ export interface EtlTestQueryResult {
 export interface EtlDestColumnInfo {
   name: string
   data_type: string
+}
+
+/** One currently in-flight run, across every job — see useEtlRunningJobs. */
+export interface EtlRunningJob {
+  run_id: number
+  job_id: string
+  job_name: string
+  started_at: string
+  rows_extracted: number
+  rows_loaded: number
 }
 
 /** Same pattern as use-meters-admin-api.ts / use-express-feeders-admin-api.ts. */
@@ -282,6 +292,37 @@ export function useEtlJobRuns(jobId: string | null, options?: { refetchInterval?
     },
     enabled: Boolean(jobId),
     refetchInterval: options?.refetchInterval,
+  })
+}
+
+/** Stops one in-flight run — genuinely interrupts the underlying query on
+ * the source (see Engine.Cancel's comment on the Go side for how), not
+ * just gives up on waiting for it. Throws if the run isn't currently
+ * running (already finished, or a stale/invalid id). */
+export async function cancelEtlRun(runId: number): Promise<void> {
+  const response = await fetch(`${API_BASE_URL}/api/v1/etl/admin/runs/${runId}/cancel`, {
+    method: "POST",
+    headers: authHeaders(),
+  })
+  if (!response.ok) throw new Error(await readError(response))
+}
+
+/** Every currently in-flight run, across every job — the "what's running
+ * right now" view the main jobs table itself doesn't show (that table's
+ * own Status column is the enabled/disabled toggle, not run state).
+ * Polls by default since this is exactly the kind of thing that goes
+ * stale the moment you stop watching it. */
+export function useEtlRunningJobs(options?: { refetchInterval?: number | false }) {
+  return useQuery<{ data: EtlRunningJob[] }>({
+    queryKey: ["etl-running-jobs"],
+    queryFn: async () => {
+      const response = await fetch(`${API_BASE_URL}/api/v1/etl/admin/runs/running`, {
+        headers: authHeaders(),
+      })
+      if (!response.ok) throw new Error(await readError(response))
+      return response.json()
+    },
+    refetchInterval: options?.refetchInterval ?? 5000,
   })
 }
 
