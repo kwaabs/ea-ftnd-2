@@ -415,6 +415,14 @@ export function usePurchasesSalesReport(months: MonthPoint[]): PurchasesSalesRep
   const isError = erroredSources.length > 0
 
   const report = useMemo(() => {
+    // Sources store region/district/station names in inconsistent case
+    // ("ashanti west", "ASHANTI WEST", "Ashanti West"...) -- shortRegionLabel
+    // deliberately preserves whatever case it's given (see its own docs),
+    // so this report proper-cases on top of it for a display label that
+    // reads consistently everywhere it shows up (ranking table, heat map,
+    // trend chart, loss map, filter dropdowns).
+    const properCase = (name: string): string => name.toLowerCase().replace(/\b\w/g, (c) => c.toUpperCase())
+
     interface WorkingDistrict {
       district: string
       districtKey: string
@@ -438,7 +446,7 @@ export function usePurchasesSalesReport(months: MonthPoint[]): PurchasesSalesRep
       const key = normalizeRegionName(raw || "Unknown")
       if (!seriesByKey.has(key)) {
         seriesByKey.set(key, {
-          region: shortRegionLabel(raw || "Unknown"),
+          region: properCase(shortRegionLabel(raw || "Unknown")),
           regionKey: key,
           byMonth: {},
           districts: new Map(),
@@ -451,7 +459,7 @@ export function usePurchasesSalesReport(months: MonthPoint[]): PurchasesSalesRep
       const label = rawDistrict && rawDistrict.trim() ? rawDistrict.trim() : "Unknown"
       const key = normalizeRegionName(label)
       if (!region.districts.has(key)) {
-        region.districts.set(key, { district: shortRegionLabel(label), districtKey: key, byMonth: {} })
+        region.districts.set(key, { district: properCase(shortRegionLabel(label)), districtKey: key, byMonth: {} })
       }
       return region.districts.get(key)!
     }
@@ -459,7 +467,7 @@ export function usePurchasesSalesReport(months: MonthPoint[]): PurchasesSalesRep
       const label = rawStation && rawStation.trim() ? rawStation.trim() : "Unknown"
       const key = normalizeRegionName(label)
       if (!region.stations.has(key)) {
-        region.stations.set(key, { station: shortRegionLabel(label), stationKey: key, byMonth: {} })
+        region.stations.set(key, { station: properCase(shortRegionLabel(label)), stationKey: key, byMonth: {} })
       }
       return region.stations.get(key)!
     }
