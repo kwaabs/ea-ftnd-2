@@ -31,9 +31,10 @@ import {
   AlertDialogTitle,
   AlertDialogTrigger,
 } from "@/components/ui/alert-dialog"
-import { CheckCircle2, Clock, Loader2, Pencil, Play, Plus, Trash2, XCircle } from "lucide-react"
+import { CheckCircle2, Clock, Loader2, Pencil, Play, Plus, Square, Trash2, XCircle } from "lucide-react"
 import { EtlQueryConsole } from "@/components/admin/etl-query-console"
 import {
+  cancelEtlRun,
   createEtlJob,
   deleteEtlJob,
   runEtlJobNow,
@@ -43,6 +44,7 @@ import {
   useEtlJobRuns,
   useEtlJobState,
   useEtlJobs,
+  useEtlRunningJobs,
   useEtlSources,
   type EtlJobInput,
   type EtlJobRecord,
@@ -133,11 +135,32 @@ function statusBadge(status: string) {
       </Badge>
     )
   }
+  if (status === "cancelled") {
+    return (
+      <Badge variant="outline" className="text-xs font-normal text-muted-foreground gap-1">
+        <XCircle className="h-3 w-3" /> stopped
+      </Badge>
+    )
+  }
   return (
     <Badge variant="outline" className="text-xs font-normal text-amber-700 border-amber-300 gap-1">
       <Clock className="h-3 w-3" /> running
     </Badge>
   )
+}
+
+/** "1h 23m" / "4m 12s" / "38s" -- elapsed since a run started, for the
+ * Running now list. Deliberately coarse (no ms) since this is a glance
+ * indicator, not a stopwatch. */
+function formatElapsed(startedAt: string): string {
+  const ms = Date.now() - new Date(startedAt).getTime()
+  const totalSeconds = Math.max(0, Math.floor(ms / 1000))
+  const hours = Math.floor(totalSeconds / 3600)
+  const minutes = Math.floor((totalSeconds % 3600) / 60)
+  const seconds = totalSeconds % 60
+  if (hours > 0) return `${hours}h ${minutes}m`
+  if (minutes > 0) return `${minutes}m ${seconds}s`
+  return `${seconds}s`
 }
 
 export function EtlJobsTab() {
@@ -161,6 +184,29 @@ export function EtlJobsTab() {
   const [deletingId, setDeletingId] = useState<string | null>(null)
   const [runningId, setRunningId] = useState<string | null>(null)
   const [runFeedback, setRunFeedback] = useState<Record<string, string>>({})
+
+  // "What's running right now" -- across every job, unlike the per-job
+  // Runs dialog below. Polls on its own since nothing else here refreshes
+  // it, and this is exactly the kind of thing that's stale the moment you
+  // look away.
+  const { data: runningData } = useEtlRunningJobs()
+  const runningJobs = runningData?.data ?? []
+  const [cancelingRunId, setCancelingRunId] = useState<number | null>(null)
+  const [cancelError, setCancelError] = useState<string | null>(null)
+
+  const handleCancelRun = async (runId: number) => {
+    setCancelingRunId(runId)
+    setCancelError(null)
+    try {
+      await cancelEtlRun(runId)
+      await queryClient.invalidateQueries({ queryKey: ["etl-running-jobs"] })
+      await queryClient.invalidateQueries({ queryKey: ["etl-job-runs"] })
+    } catch (err) {
+      setCancelError(err instanceof Error ? err.message : "Failed to stop run")
+    } finally {
+      setCancelingRunId(null)
+    }
+  }
 
   // ---- Job wizard state -------------------------------------------------
   // Step 4 (column mapping) needs the source query's actual result columns
@@ -1031,6 +1077,54 @@ export function EtlJobsTab() {
         <p className="text-xs text-amber-700">Register a source first (Sources tab) before adding a job.</p>
       )}
 
+      {/* Running now -- across every job, unlike the per-job Runs dialog
+          below (which only shows one job's own history). The main table's
+          Status column is enabled/disabled, not run state, so this is the
+          only place an in-flight run is actually visible. */}
+      {runningJobs.length > 0 && (
+        <Card className="border-amber-300 bg-amber-50/40">
+          <CardHeader className="pb-2">
+            <div className="flex items-center gap-2">
+              <Clock className="h-4 w-4 text-amber-600" />
+              <CardTitle className="text-sm font-medium text-amber-900">
+                {runningJobs.length} job{runningJobs.length === 1 ? "" : "s"} running now
+              </CardTitle>
+            </div>
+          </CardHeader>
+          <CardContent className="space-y-2">
+            {cancelError && <p className="text-xs text-red-600">{cancelError}</p>}
+            {runningJobs.map((r) => (
+              <div
+                key={r.run_id}
+                className="flex items-center justify-between gap-3 rounded-md border border-amber-200 bg-card px-3 py-2 text-sm"
+              >
+                <div className="min-w-0">
+                  <p className="font-medium truncate">{r.job_name}</p>
+                  <p className="text-xs text-muted-foreground">
+                    running {formatElapsed(r.started_at)} — {r.rows_extracted.toLocaleString()} extracted,{" "}
+                    {r.rows_loaded.toLocaleString()} loaded
+                  </p>
+                </div>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="h-8 px-2.5 text-xs text-red-700 border-red-300 hover:bg-red-50 shrink-0"
+                  disabled={cancelingRunId === r.run_id}
+                  onClick={() => handleCancelRun(r.run_id)}
+                >
+                  {cancelingRunId === r.run_id ? (
+                    <Loader2 className="h-3.5 w-3.5 mr-1 animate-spin" />
+                  ) : (
+                    <Square className="h-3 w-3 mr-1" />
+                  )}
+                  Stop
+                </Button>
+              </div>
+            ))}
+          </CardContent>
+        </Card>
+      )}
+
       <Card>
         <CardHeader>
           <CardTitle>Jobs</CardTitle>
@@ -1248,13 +1342,14 @@ export function EtlJobsTab() {
                   <th className="text-left py-2 px-4 font-medium text-muted-foreground">Status</th>
                   <th className="text-right py-2 px-4 font-medium text-muted-foreground">Extracted</th>
                   <th className="text-right py-2 px-4 font-medium text-muted-foreground">Loaded</th>
-                  <th className="text-left py-2 pl-4 font-medium text-muted-foreground">Error</th>
+                  <th className="text-left py-2 px-4 font-medium text-muted-foreground">Error</th>
+                  <th className="text-right py-2 pl-4 font-medium text-muted-foreground">Actions</th>
                 </tr>
               </thead>
               <tbody>
                 {!runsData || runsData.data.length === 0 ? (
                   <tr>
-                    <td colSpan={5} className="text-center text-muted-foreground py-8">
+                    <td colSpan={6} className="text-center text-muted-foreground py-8">
                       No runs yet.
                     </td>
                   </tr>
@@ -1267,8 +1362,25 @@ export function EtlJobsTab() {
                       <td className="py-2 px-4">{statusBadge(run.status)}</td>
                       <td className="py-2 px-4 text-right tabular-nums">{run.rows_extracted.toLocaleString()}</td>
                       <td className="py-2 px-4 text-right tabular-nums">{run.rows_loaded.toLocaleString()}</td>
-                      <td className="py-2 pl-4 text-xs text-red-600 max-w-[220px] truncate" title={run.error_message ?? ""}>
+                      <td className="py-2 px-4 text-xs text-red-600 max-w-[220px] truncate" title={run.error_message ?? ""}>
                         {run.error_message ?? "—"}
+                      </td>
+                      <td className="py-2 pl-4 text-right">
+                        {run.status === "running" && (
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            className="h-7 px-2 text-xs text-red-700 border-red-300 hover:bg-red-50"
+                            disabled={cancelingRunId === run.id}
+                            onClick={() => handleCancelRun(run.id)}
+                          >
+                            {cancelingRunId === run.id ? (
+                              <Loader2 className="h-3 w-3 animate-spin" />
+                            ) : (
+                              <Square className="h-3 w-3" />
+                            )}
+                          </Button>
+                        )}
                       </td>
                     </tr>
                   ))
