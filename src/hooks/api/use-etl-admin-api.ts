@@ -90,6 +90,11 @@ export interface EtlJobRun {
   rows_extracted: number
   rows_loaded: number
   error_message: string | null
+  /** The actual query/request sent for this run, {{WATERMARK}}/{{FILTER}}
+   * already substituted with the real values used -- not job.source_query's
+   * raw template. Written before execution, so it's populated even for a
+   * run that's still running or stuck, not just after it finishes. */
+  query_text: string | null
 }
 
 export interface EtlJobState {
@@ -129,6 +134,9 @@ export interface EtlRunningJob {
   started_at: string
   rows_extracted: number
   rows_loaded: number
+  /** See EtlJobRun.query_text -- the actual query this run sent, real
+   * watermark/filter values already substituted in. */
+  query_text: string | null
 }
 
 /** Same pattern as use-meters-admin-api.ts / use-express-feeders-admin-api.ts. */
