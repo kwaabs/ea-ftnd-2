@@ -250,6 +250,29 @@ export function PurchasesSalesReportView() {
   // should stay a fixed yardstick regardless of what's currently filtered.
   const nationalAvgLossPct = report.nationalTotals.lossPct
 
+  // One rendering for every heat map "total" cell (the new right-hand Total
+  // column per region, the new bottom Total row per month, and their
+  // corner) -- unlike a normal region-month cell, a total is always a real
+  // number (a sum), never "no data for that one month", so it always shows
+  // the figures rather than falling back to a dash.
+  const heatTotalCell = (key: string, purchasesKwh: number, salesKwh: number, lossPct: number | null, title: string) => {
+    const rgb = lossHeatRgb(lossPct)
+    const textColor = readableTextOn(rgb)
+    return (
+      <td
+        key={key}
+        className="text-center rounded align-middle px-1.5 py-1.5"
+        style={{ backgroundColor: rgbToCss(rgb), color: textColor, minWidth: 92 }}
+        title={title}
+      >
+        <div className="text-sm font-bold tabular-nums leading-tight">{formatPct(lossPct)}</div>
+        <div className="text-[10px] leading-tight tabular-nums opacity-90" style={{ color: textColor }}>
+          P {formatAxisKwh(purchasesKwh)} · S {formatAxisKwh(salesKwh)}
+        </div>
+      </td>
+    )
+  }
+
   const scopeLabel = selectedDistrict
     ? `${selectedRegion!.region} — ${selectedDistrict.district}`
     : selectedRegion
@@ -804,6 +827,44 @@ export function PurchasesSalesReportView() {
                       </Fragment>
                     )
                   })}
+                  <tr className="border-t-2 font-semibold">
+                    <td className="py-2.5 pr-4">Total</td>
+                    <td className="py-2.5 px-4 text-right tabular-nums text-blue-700">
+                      {purchasesAvailable ? formatKwh(scopeTotals.purchasesKwh) : "—"}
+                    </td>
+                    <td className="py-2.5 px-4 text-right tabular-nums text-emerald-700">
+                      {formatKwh(scopeTotals.salesKwh)}
+                    </td>
+                    <td className="py-2.5 px-4 text-right tabular-nums">
+                      {purchasesAvailable ? formatKwh(scopeTotals.lossKwh) : "—"}
+                    </td>
+                    <td className="py-2.5 px-4 text-right tabular-nums">
+                      {purchasesAvailable ? formatPct(scopeTotals.lossPct) : "—"}
+                    </td>
+                    <td className="py-2.5 pl-4 text-center">
+                      {!narrative ? (
+                        <Minus className="h-3.5 w-3.5 text-muted-foreground inline-block" />
+                      ) : narrative.delta > 0.5 ? (
+                        <span
+                          className="inline-flex items-center gap-0.5 text-red-700"
+                          title={`Loss % worsened ${narrative.delta.toFixed(1)} points, first half vs second half of this window`}
+                        >
+                          <ArrowUp className="h-3.5 w-3.5" />
+                          <span className="text-xs tabular-nums">{narrative.delta.toFixed(1)}</span>
+                        </span>
+                      ) : narrative.delta < -0.5 ? (
+                        <span
+                          className="inline-flex items-center gap-0.5 text-emerald-700"
+                          title={`Loss % improved ${Math.abs(narrative.delta).toFixed(1)} points, first half vs second half of this window`}
+                        >
+                          <ArrowDown className="h-3.5 w-3.5" />
+                          <span className="text-xs tabular-nums">{Math.abs(narrative.delta).toFixed(1)}</span>
+                        </span>
+                      ) : (
+                        <Minus className="h-3.5 w-3.5 text-muted-foreground inline-block" aria-label="Essentially flat" />
+                      )}
+                    </td>
+                  </tr>
                 </tbody>
               </table>
             </div>
@@ -842,6 +903,9 @@ export function PurchasesSalesReportView() {
                         {label}
                       </th>
                     ))}
+                    <th className="text-center px-1 pb-1 font-medium text-muted-foreground whitespace-nowrap text-xs border-l">
+                      Total
+                    </th>
                   </tr>
                 </thead>
                 <tbody>
@@ -884,8 +948,39 @@ export function PurchasesSalesReportView() {
                           </td>
                         )
                       })}
+                      <td className="border-l p-0">
+                        {heatTotalCell(
+                          `${r.regionKey}-total`,
+                          r.totalPurchasesKwh,
+                          r.totalSalesKwh,
+                          r.lossPct,
+                          `${r.region}, whole window: purchased ${formatKwh(r.totalPurchasesKwh)}, sold ${formatKwh(r.totalSalesKwh)}, loss ${formatKwh(r.lossKwh)}`,
+                        )}
+                      </td>
                     </tr>
                   ))}
+                  <tr className="border-t-2">
+                    <td className="text-left pr-3 font-semibold whitespace-nowrap sticky left-0 bg-card">Total</td>
+                    {monthKeys.map((mKey, idx) => {
+                      const n = scopeNational[idx]
+                      return heatTotalCell(
+                        `total-${mKey}`,
+                        n?.purchasesKwh ?? 0,
+                        n?.salesKwh ?? 0,
+                        n?.lossPct ?? null,
+                        `${report.monthLabels[idx]}, all regions: purchased ${formatKwh(n?.purchasesKwh ?? 0)}, sold ${formatKwh(n?.salesKwh ?? 0)}, loss ${formatKwh(n?.lossKwh ?? 0)}`,
+                      )
+                    })}
+                    <td className="border-l p-0">
+                      {heatTotalCell(
+                        "grand-total",
+                        scopeTotals.purchasesKwh,
+                        scopeTotals.salesKwh,
+                        scopeTotals.lossPct,
+                        `Whole window, all regions: purchased ${formatKwh(scopeTotals.purchasesKwh)}, sold ${formatKwh(scopeTotals.salesKwh)}, loss ${formatKwh(scopeTotals.lossKwh)}`,
+                      )}
+                    </td>
+                  </tr>
                 </tbody>
               </table>
             </div>
