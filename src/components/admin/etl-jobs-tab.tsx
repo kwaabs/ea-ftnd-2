@@ -1094,31 +1094,40 @@ export function EtlJobsTab() {
           <CardContent className="space-y-2">
             {cancelError && <p className="text-xs text-red-600">{cancelError}</p>}
             {runningJobs.map((r) => (
-              <div
-                key={r.run_id}
-                className="flex items-center justify-between gap-3 rounded-md border border-amber-200 bg-card px-3 py-2 text-sm"
-              >
-                <div className="min-w-0">
-                  <p className="font-medium truncate">{r.job_name}</p>
-                  <p className="text-xs text-muted-foreground">
-                    running {formatElapsed(r.started_at)} — {r.rows_extracted.toLocaleString()} extracted,{" "}
-                    {r.rows_loaded.toLocaleString()} loaded
-                  </p>
+              <div key={r.run_id} className="rounded-md border border-amber-200 bg-card px-3 py-2 text-sm space-y-1.5">
+                <div className="flex items-center justify-between gap-3">
+                  <div className="min-w-0">
+                    <p className="font-medium truncate">{r.job_name}</p>
+                    <p className="text-xs text-muted-foreground">
+                      running {formatElapsed(r.started_at)} — {r.rows_extracted.toLocaleString()} extracted,{" "}
+                      {r.rows_loaded.toLocaleString()} loaded
+                    </p>
+                  </div>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className="h-8 px-2.5 text-xs text-red-700 border-red-300 hover:bg-red-50 shrink-0"
+                    disabled={cancelingRunId === r.run_id}
+                    onClick={() => handleCancelRun(r.run_id)}
+                  >
+                    {cancelingRunId === r.run_id ? (
+                      <Loader2 className="h-3.5 w-3.5 mr-1 animate-spin" />
+                    ) : (
+                      <Square className="h-3 w-3 mr-1" />
+                    )}
+                    Stop
+                  </Button>
                 </div>
-                <Button
-                  variant="outline"
-                  size="sm"
-                  className="h-8 px-2.5 text-xs text-red-700 border-red-300 hover:bg-red-50 shrink-0"
-                  disabled={cancelingRunId === r.run_id}
-                  onClick={() => handleCancelRun(r.run_id)}
-                >
-                  {cancelingRunId === r.run_id ? (
-                    <Loader2 className="h-3.5 w-3.5 mr-1 animate-spin" />
-                  ) : (
-                    <Square className="h-3 w-3 mr-1" />
-                  )}
-                  Stop
-                </Button>
+                {r.query_text && (
+                  <details className="text-xs">
+                    <summary className="cursor-pointer text-muted-foreground hover:text-foreground w-fit">
+                      View query sent
+                    </summary>
+                    <pre className="mt-1.5 max-h-64 overflow-auto rounded bg-muted p-2 font-mono text-[11px] whitespace-pre-wrap break-all">
+                      {r.query_text}
+                    </pre>
+                  </details>
+                )}
               </div>
             ))}
           </CardContent>
@@ -1362,8 +1371,20 @@ export function EtlJobsTab() {
                       <td className="py-2 px-4">{statusBadge(run.status)}</td>
                       <td className="py-2 px-4 text-right tabular-nums">{run.rows_extracted.toLocaleString()}</td>
                       <td className="py-2 px-4 text-right tabular-nums">{run.rows_loaded.toLocaleString()}</td>
-                      <td className="py-2 px-4 text-xs text-red-600 max-w-[220px] truncate" title={run.error_message ?? ""}>
-                        {run.error_message ?? "—"}
+                      <td className="py-2 px-4 text-xs max-w-[220px]">
+                        <p className="text-red-600 truncate" title={run.error_message ?? ""}>
+                          {run.error_message ?? "—"}
+                        </p>
+                        {run.query_text && (
+                          <details>
+                            <summary className="cursor-pointer text-muted-foreground hover:text-foreground w-fit">
+                              query
+                            </summary>
+                            <pre className="mt-1 max-h-48 w-[420px] overflow-auto rounded bg-muted p-2 font-mono text-[11px] whitespace-pre-wrap break-all">
+                              {run.query_text}
+                            </pre>
+                          </details>
+                        )}
                       </td>
                       <td className="py-2 pl-4 text-right">
                         {run.status === "running" && (
