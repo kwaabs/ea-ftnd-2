@@ -5,6 +5,8 @@ import { Megaphone, Plus, Trash2, Loader2 } from "lucide-react";
 import { Marquee, MarqueeItem } from "@/components/ui/marquee";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
+import { Switch } from "@/components/ui/switch";
+import { Label } from "@/components/ui/label";
 import {
   Dialog,
   DialogContent,
@@ -27,6 +29,7 @@ import {
 } from "@/hooks/api/use-announcements-api";
 import { useUserStore } from "@/stores/user-store";
 import { useIsNotifyEmail } from "@/hooks/api/use-notify-email-api";
+import { SpecialAnnouncementsDialog } from "@/components/dashboard/special-announcements-dialog";
 
 /** Alternate sales figures vs announcements so the ticker stays readable. */
 const MARQUEE_PHASE_MS = 2 * 60 * 1000;
@@ -99,14 +102,26 @@ export function RegionalSummaryMarquee({
 
   const [composeOpen, setComposeOpen] = useState(false);
   const [draft, setDraft] = useState("");
+  const [draftIsSpecial, setDraftIsSpecial] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [composeError, setComposeError] = useState<string | null>(null);
   const [deletingId, setDeletingId] = useState<string | null>(null);
   const [phase, setPhase] = useState<MarqueePhase>("figures");
 
-  const { announcements, mutate: mutateAnnouncements } = useAnnouncements({
+  const { announcements: allAnnouncements, mutate: mutateAnnouncements } = useAnnouncements({
     refreshInterval: 30_000,
   });
+
+  // Special announcements are dialog-only — kept out of the marquee
+  // rotation entirely so they can't get buried among regular notices.
+  const announcements = useMemo(
+    () => allAnnouncements.filter((a) => a.kind !== "special"),
+    [allAnnouncements],
+  );
+  const specialAnnouncements = useMemo(
+    () => allAnnouncements.filter((a) => a.kind === "special"),
+    [allAnnouncements],
+  );
 
   const hasAnnouncements = announcements.length > 0;
   // Stay on figures when there is nothing to announce.
@@ -280,8 +295,10 @@ export function RegionalSummaryMarquee({
         body: draft.trim(),
         author_email: userEmail,
         author_name: user?.name || user?.username,
+        kind: draftIsSpecial ? "special" : "regular",
       });
       setDraft("");
+      setDraftIsSpecial(false);
       setComposeOpen(false);
       await mutateAnnouncements();
     } catch (err) {
@@ -344,15 +361,33 @@ export function RegionalSummaryMarquee({
               {composeError && <span className="text-red-600">{composeError}</span>}
             </div>
 
-            {announcements.length > 0 && (
+            <div className="flex items-center gap-2">
+              <Switch
+                id="announcement-is-special"
+                checked={draftIsSpecial}
+                onCheckedChange={setDraftIsSpecial}
+              />
+              <Label htmlFor="announcement-is-special" className="text-xs font-normal">
+                Special — show in the alerts dialog instead of the marquee
+              </Label>
+            </div>
+
+            {allAnnouncements.length > 0 && (
               <div className="border-t pt-3 space-y-2 max-h-40 overflow-y-auto">
                 <p className="text-xs font-medium text-muted-foreground">Active announcements</p>
-                {announcements.map((a) => (
+                {allAnnouncements.map((a) => (
                   <div
                     key={a.id}
                     className="flex items-start justify-between gap-2 text-xs rounded-md bg-muted/50 px-2 py-1.5"
                   >
-                    <span className="line-clamp-2">{a.body}</span>
+                    <span className="line-clamp-2 flex items-center gap-1.5">
+                      {a.kind === "special" && (
+                        <span className="shrink-0 rounded bg-amber-100 px-1 py-0.5 text-[10px] font-semibold uppercase text-amber-800 dark:bg-amber-950 dark:text-amber-300">
+                          Special
+                        </span>
+                      )}
+                      {a.body}
+                    </span>
                     <Button
                       type="button"
                       variant="ghost"
@@ -392,6 +427,8 @@ export function RegionalSummaryMarquee({
           </DialogContent>
         </Dialog>
       )}
+
+      <SpecialAnnouncementsDialog announcements={specialAnnouncements} compact={compact} />
 
       <div className="min-w-0 flex-1 flex items-center gap-2">
         {hasAnnouncements && (

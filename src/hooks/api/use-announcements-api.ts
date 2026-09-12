@@ -4,11 +4,15 @@ import useSWR from "swr"
 
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8780"
 
+export type AnnouncementKind = "regular" | "special"
+
 export interface Announcement {
   id: string
   body: string
   author_email: string
   author_name?: string | null
+  /** "regular" rolls on the marquee; "special" shows only in the announcements dialog. */
+  kind: AnnouncementKind
   active: boolean
   created_at: string
   updated_at: string
@@ -52,6 +56,8 @@ export async function createAnnouncement(payload: {
   body: string
   author_email: string
   author_name?: string
+  /** Omit for a regular marquee announcement. */
+  kind?: AnnouncementKind
 }): Promise<MutationResponse> {
   const response = await fetch(`${API_BASE_URL}/api/v1/announcements`, {
     method: "POST",
