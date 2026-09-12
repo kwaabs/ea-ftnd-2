@@ -145,7 +145,7 @@ export function SpecialAnnouncementsDialog({
                 <span className="mb-1.5 inline-block rounded bg-[#ed1c24] px-1.5 py-0.5 text-[10px] font-bold tracking-wide text-white uppercase">
                   Alert
                 </span>
-                <div className="text-[#241f04]">
+                <div className="text-black">
                   <RichAnnouncementBody body={a.body} />
                 </div>
                 <p className="mt-1.5 text-xs text-[#8a7f3f]">
