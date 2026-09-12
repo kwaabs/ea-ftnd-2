@@ -163,16 +163,17 @@ export function Header() {
                         same trigger (useCommentsSheetStore's open action),
                         just relocated for one-click access instead of two
                         clicks through the account menu. Placed immediately
-                        before Filters per request. */}
+                        before Filters per request. Icon-only with a title
+                        tooltip, same pattern as the Login activity button
+                        above. */}
                     {user && (
                         <Button
                             variant="outline"
-                            size="sm"
-                            className="gap-2 bg-transparent"
+                            size="icon"
+                            title="Comments"
                             onClick={openCommentsSheet}
                         >
                             <MessageSquare className="h-4 w-4" />
-                            Comments
                         </Button>
                     )}
 
