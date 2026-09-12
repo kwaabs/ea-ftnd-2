@@ -30,6 +30,11 @@ import {
 import { useUserStore } from "@/stores/user-store";
 import { useIsNotifyEmail } from "@/hooks/api/use-notify-email-api";
 import { SpecialAnnouncementsDialog } from "@/components/dashboard/special-announcements-dialog";
+import {
+  RichAnnouncementEditor,
+  RICH_ANNOUNCEMENT_MAX_CHARS,
+  richAnnouncementPreviewText,
+} from "@/components/dashboard/rich-announcement-editor";
 
 /** Alternate sales figures vs announcements so the ticker stays readable. */
 const MARQUEE_PHASE_MS = 2 * 60 * 1000;
@@ -103,6 +108,8 @@ export function RegionalSummaryMarquee({
   const [composeOpen, setComposeOpen] = useState(false);
   const [draft, setDraft] = useState("");
   const [draftIsSpecial, setDraftIsSpecial] = useState(false);
+  const [richDraftJson, setRichDraftJson] = useState("");
+  const [richDraftText, setRichDraftText] = useState("");
   const [submitting, setSubmitting] = useState(false);
   const [composeError, setComposeError] = useState<string | null>(null);
   const [deletingId, setDeletingId] = useState<string | null>(null);
@@ -286,19 +293,28 @@ export function RegionalSummaryMarquee({
     globalSummary.lossPct,
   );
 
+  const canPost = draftIsSpecial ? richDraftText.trim().length > 0 : draft.trim().length > 0;
+  const overRichLimit = draftIsSpecial && richDraftText.length > RICH_ANNOUNCEMENT_MAX_CHARS;
+
   const handlePost = async () => {
-    if (!userEmail || !draft.trim()) return;
+    if (!userEmail || !canPost) return;
+    if (overRichLimit) {
+      setComposeError(`Too long — keep it under ${RICH_ANNOUNCEMENT_MAX_CHARS} characters`);
+      return;
+    }
     setSubmitting(true);
     setComposeError(null);
     try {
       await createAnnouncement({
-        body: draft.trim(),
+        body: draftIsSpecial ? richDraftJson : draft.trim(),
         author_email: userEmail,
         author_name: user?.name || user?.username,
         kind: draftIsSpecial ? "special" : "regular",
       });
       setDraft("");
       setDraftIsSpecial(false);
+      setRichDraftJson("");
+      setRichDraftText("");
       setComposeOpen(false);
       await mutateAnnouncements();
     } catch (err) {
@@ -349,18 +365,6 @@ export function RegionalSummaryMarquee({
                 Visible to everyone on the dashboard marquee. Only notify-list users can post.
               </DialogDescription>
             </DialogHeader>
-            <Textarea
-              value={draft}
-              onChange={(e) => setDraft(e.target.value)}
-              placeholder="e.g. BSP data for Accra East will be late today…"
-              rows={4}
-              maxLength={500}
-            />
-            <div className="flex items-center justify-between text-xs text-muted-foreground">
-              <span>{draft.length}/500</span>
-              {composeError && <span className="text-red-600">{composeError}</span>}
-            </div>
-
             <div className="flex items-center gap-2">
               <Switch
                 id="announcement-is-special"
@@ -371,6 +375,30 @@ export function RegionalSummaryMarquee({
                 Special — show in the alerts dialog instead of the marquee
               </Label>
             </div>
+
+            {draftIsSpecial ? (
+              <RichAnnouncementEditor
+                value={richDraftJson}
+                onChange={(json, text) => {
+                  setRichDraftJson(json);
+                  setRichDraftText(text);
+                }}
+              />
+            ) : (
+              <>
+                <Textarea
+                  value={draft}
+                  onChange={(e) => setDraft(e.target.value)}
+                  placeholder="e.g. BSP data for Accra East will be late today…"
+                  rows={4}
+                  maxLength={500}
+                />
+                <div className="flex items-center justify-between text-xs text-muted-foreground">
+                  <span>{draft.length}/500</span>
+                </div>
+              </>
+            )}
+            {composeError && <p className="text-xs text-red-600">{composeError}</p>}
 
             {allAnnouncements.length > 0 && (
               <div className="border-t pt-3 space-y-2 max-h-40 overflow-y-auto">
@@ -386,7 +414,7 @@ export function RegionalSummaryMarquee({
                           Special
                         </span>
                       )}
-                      {a.body}
+                      {a.kind === "special" ? richAnnouncementPreviewText(a.body) : a.body}
                     </span>
                     <Button
                       type="button"
@@ -412,7 +440,7 @@ export function RegionalSummaryMarquee({
               <Button
                 type="button"
                 onClick={handlePost}
-                disabled={submitting || !draft.trim()}
+                disabled={submitting || !canPost || overRichLimit}
               >
                 {submitting ? (
                   <>
