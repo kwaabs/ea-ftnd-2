@@ -7,7 +7,6 @@ import {
   Dialog,
   DialogClose,
   DialogContent,
-  DialogDescription,
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
@@ -106,10 +105,17 @@ export function SpecialAnnouncementsDialog({
             rainbow gradient was "too fancy" but plain white/grey "doesn't
             stand out." showCloseButton is off here because the default
             close button assumes a light bg/dark icon, illegible on solid
-            blue -- replaced below with one styled for this panel. */}
+            blue -- replaced below with one styled for this panel.
+            onPointerDownOutside/onEscapeKeyDown prevent default so an
+            outside click or Escape can't dismiss this without the reader
+            actually clicking the close button -- these are meant to be
+            read, not brushed past. Width is sm:max-w-lg (512px) x1.25 =
+            640px. */}
         <DialogContent
           showCloseButton={false}
-          className="sm:max-w-lg gap-0 overflow-hidden rounded-xl border-0 bg-[#2e3192] p-0 shadow-[0_8px_28px_rgba(46,49,146,0.45)] ring-0"
+          onPointerDownOutside={(e) => e.preventDefault()}
+          onEscapeKeyDown={(e) => e.preventDefault()}
+          className="sm:max-w-[640px] gap-0 overflow-hidden rounded-xl border-0 bg-[#2e3192] p-0 shadow-[0_8px_28px_rgba(46,49,146,0.45)] ring-0"
         >
           <DialogClose asChild>
             <Button
@@ -123,14 +129,11 @@ export function SpecialAnnouncementsDialog({
             </Button>
           </DialogClose>
 
-          <DialogHeader className="gap-2 border-b border-white/15 px-6 py-5">
+          <DialogHeader className="border-b border-white/15 px-6 py-5">
             <DialogTitle className="flex items-center gap-2.5 text-2xl font-bold text-white">
               <Info className="h-7 w-7 shrink-0 text-[#fdf200]" />
               Information
             </DialogTitle>
-            <DialogDescription className="text-sm text-white/80">
-              Important notices, kept separate from the regular marquee.
-            </DialogDescription>
           </DialogHeader>
 
           <div className="space-y-3 max-h-96 overflow-y-auto px-6 py-5">
