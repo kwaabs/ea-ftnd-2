@@ -7,7 +7,6 @@ import {
   Dialog,
   DialogClose,
   DialogContent,
-  DialogDescription,
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
@@ -123,14 +122,11 @@ export function SpecialAnnouncementsDialog({
             </Button>
           </DialogClose>
 
-          <DialogHeader className="gap-2 border-b border-white/15 px-6 py-5">
+          <DialogHeader className="border-b border-white/15 px-6 py-5">
             <DialogTitle className="flex items-center gap-2.5 text-2xl font-bold text-white">
               <Info className="h-7 w-7 shrink-0 text-[#fdf200]" />
               Information
             </DialogTitle>
-            <DialogDescription className="text-sm text-white/80">
-              Important notices, kept separate from the regular marquee.
-            </DialogDescription>
           </DialogHeader>
 
           <div className="space-y-3 max-h-96 overflow-y-auto px-6 py-5">
