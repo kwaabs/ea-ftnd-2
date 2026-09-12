@@ -105,10 +105,17 @@ export function SpecialAnnouncementsDialog({
             rainbow gradient was "too fancy" but plain white/grey "doesn't
             stand out." showCloseButton is off here because the default
             close button assumes a light bg/dark icon, illegible on solid
-            blue -- replaced below with one styled for this panel. */}
+            blue -- replaced below with one styled for this panel.
+            onPointerDownOutside/onEscapeKeyDown prevent default so an
+            outside click or Escape can't dismiss this without the reader
+            actually clicking the close button -- these are meant to be
+            read, not brushed past. Width is sm:max-w-lg (512px) x1.25 =
+            640px. */}
         <DialogContent
           showCloseButton={false}
-          className="sm:max-w-lg gap-0 overflow-hidden rounded-xl border-0 bg-[#2e3192] p-0 shadow-[0_8px_28px_rgba(46,49,146,0.45)] ring-0"
+          onPointerDownOutside={(e) => e.preventDefault()}
+          onEscapeKeyDown={(e) => e.preventDefault()}
+          className="sm:max-w-[640px] gap-0 overflow-hidden rounded-xl border-0 bg-[#2e3192] p-0 shadow-[0_8px_28px_rgba(46,49,146,0.45)] ring-0"
         >
           <DialogClose asChild>
             <Button
