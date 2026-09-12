@@ -4,15 +4,14 @@ import React from "react"
 import Image from "next/image"
 import { cn } from "@/lib/utils"
 import { Button } from "@/components/ui/button"
-import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui/dropdown-menu"
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu"
 import { Avatar, AvatarFallback } from "@/components/ui/avatar"
 import { ScrollArea } from "@/components/ui/scroll-area"
 import { useSidebarStore } from "@/stores/sidebar-store"
 import { useUserStore } from "@/stores/user-store"
 import { usePathname, useRouter } from "next/navigation"
 import { useFilterOptionsWithAvailability } from "@/hooks/api/use-filter-options"
-import { LayoutDashboard, Map, BarChart3, Globe, Users, ChevronRight, ChevronLeft, Settings, LogOut, User, MessageSquare, Database, Scale } from "lucide-react"
-import { useCommentsSheetStore } from "@/stores/comments-sheet-store"
+import { LayoutDashboard, Map, BarChart3, Globe, Users, ChevronRight, ChevronLeft, Settings, LogOut, User, Database, Scale } from "lucide-react"
 import { logoutSession } from "@/lib/auth-session"
 import { useIsNotifyEmail } from "@/hooks/api/use-notify-email-api"
 
@@ -46,7 +45,6 @@ export function Sidebar() {
     const { isAllowed: canManageMeters } = useIsNotifyEmail()
     const pathname = usePathname()
     const router = useRouter()
-    const openCommentsSheet = useCommentsSheetStore(s => s.open)
 
     const { data: filterOptions, isLoading: isLoadingFilters } = useFilterOptionsWithAvailability()
 
@@ -489,11 +487,6 @@ export function Sidebar() {
                                 </Button>
                             </DropdownMenuTrigger>
                             <DropdownMenuContent align="end" className="w-56">
-                                <DropdownMenuItem onClick={openCommentsSheet}>
-                                    <MessageSquare className="mr-2 h-4 w-4" />
-                                    Comments
-                                </DropdownMenuItem>
-                                <DropdownMenuSeparator />
                                 <DropdownMenuItem onClick={handleLogout}>
                                     <LogOut className="mr-2 h-4 w-4" />
                                     Logout
