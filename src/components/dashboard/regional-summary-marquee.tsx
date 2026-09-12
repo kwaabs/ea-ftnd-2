@@ -358,7 +358,16 @@ export function RegionalSummaryMarquee({
               Announce
             </Button>
           </DialogTrigger>
-          <DialogContent className="sm:max-w-md">
+          {/* Prevent outside-click/Escape dismiss -- same reasoning as
+              special-announcements-dialog.tsx, plus here it also guards
+              against losing an in-progress draft (rich text content
+              especially) to an accidental click. Width matches that
+              dialog's 704px for consistency between the two. */}
+          <DialogContent
+            onPointerDownOutside={(e) => e.preventDefault()}
+            onEscapeKeyDown={(e) => e.preventDefault()}
+            className="sm:max-w-[704px]"
+          >
             <DialogHeader>
               <DialogTitle>Post announcement</DialogTitle>
               <DialogDescription>
