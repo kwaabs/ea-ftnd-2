@@ -1,10 +1,11 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { AlertTriangle } from "lucide-react";
+import { AlertTriangle, Info, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
+  DialogClose,
   DialogContent,
   DialogDescription,
   DialogHeader,
@@ -98,26 +99,53 @@ export function SpecialAnnouncementsDialog({
         </span>
       </Button>
       <Dialog open={open} onOpenChange={setOpen}>
-        <DialogContent className="sm:max-w-md">
-          <DialogHeader>
-            <DialogTitle className="flex items-center gap-2">
-              <AlertTriangle className="h-4 w-4 text-amber-600" />
-              Special announcements
+        {/* ECG brand colors (sampled from public/images/ecg-logo.jpg):
+            blue #2e3192, yellow #fdf200, red #ed1c24. Solid blue panel
+            rather than a gradient wash -- reads as branded/deliberate
+            without competing with the content, per feedback that a full
+            rainbow gradient was "too fancy" but plain white/grey "doesn't
+            stand out." showCloseButton is off here because the default
+            close button assumes a light bg/dark icon, illegible on solid
+            blue -- replaced below with one styled for this panel. */}
+        <DialogContent
+          showCloseButton={false}
+          className="sm:max-w-lg gap-0 overflow-hidden rounded-xl border-0 bg-[#2e3192] p-0 shadow-[0_8px_28px_rgba(46,49,146,0.45)] ring-0"
+        >
+          <DialogClose asChild>
+            <Button
+              type="button"
+              variant="ghost"
+              size="icon-sm"
+              className="absolute top-3 right-3 text-white/80 hover:bg-white/10 hover:text-white"
+            >
+              <X className="h-4 w-4" />
+              <span className="sr-only">Close</span>
+            </Button>
+          </DialogClose>
+
+          <DialogHeader className="gap-2 border-b border-white/15 px-6 py-5">
+            <DialogTitle className="flex items-center gap-2.5 text-2xl font-bold text-white">
+              <Info className="h-7 w-7 shrink-0 text-[#fdf200]" />
+              Information
             </DialogTitle>
-            <DialogDescription>
+            <DialogDescription className="text-sm text-white/80">
               Important notices, kept separate from the regular marquee.
             </DialogDescription>
           </DialogHeader>
-          <div className="space-y-3 max-h-96 overflow-y-auto">
+
+          <div className="space-y-3 max-h-96 overflow-y-auto px-6 py-5">
             {announcements.map((a) => (
               <div
                 key={a.id}
-                className="rounded-md border border-amber-200 bg-amber-50 dark:border-amber-900 dark:bg-amber-950/40 px-3 py-2.5"
+                className="rounded-md border-l-[6px] border-[#fdf200] bg-[#fdf6d8] py-2.5 pr-3 pl-3.5"
               >
-                <div className="text-amber-950 dark:text-amber-100">
+                <span className="mb-1.5 inline-block rounded bg-[#ed1c24] px-1.5 py-0.5 text-[10px] font-bold tracking-wide text-white uppercase">
+                  Alert
+                </span>
+                <div className="text-[#241f04]">
                   <RichAnnouncementBody body={a.body} />
                 </div>
-                <p className="mt-1.5 text-xs text-amber-700 dark:text-amber-400">
+                <p className="mt-1.5 text-xs text-[#8a7f3f]">
                   {(a.author_name || a.author_email) && (
                     <>{a.author_name || a.author_email} · </>
                   )}
