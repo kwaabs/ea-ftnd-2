@@ -29,10 +29,13 @@ export const RICH_ANNOUNCEMENT_MAX_CHARS = 5000;
 // preflight resets ul/ol to list-style:none — these explicit utilities
 // restore visible bullets/numbers instead of pulling in that plugin for
 // just this one use. Shared with rich-announcement-body.tsx's read-only
-// renderer so editing and display look identical.
+// renderer so editing and display look identical. Ordered-list markers
+// (::marker) are bolded on their own -- unlike [&_strong]:font-semibold,
+// that's list-numbering emphasis a reader didn't have to type themselves.
 export const RICH_ANNOUNCEMENT_CONTENT_CLASS =
-  "text-sm leading-relaxed [&_p]:my-1 [&_ul]:list-disc [&_ul]:pl-5 [&_ul]:my-1 " +
-  "[&_ol]:list-decimal [&_ol]:pl-5 [&_ol]:my-1 [&_li]:my-0.5 [&_strong]:font-semibold";
+  "text-base leading-relaxed [&_p]:my-1 [&_ul]:list-disc [&_ul]:pl-5 [&_ul]:my-1 " +
+  "[&_ol]:list-decimal [&_ol]:pl-5 [&_ol]:my-1 [&_ol_li::marker]:font-bold " +
+  "[&_li]:my-0.5 [&_strong]:font-semibold";
 
 interface RichAnnouncementEditorProps {
   /** Serialized TipTap JSON, or empty string for a fresh editor. */
