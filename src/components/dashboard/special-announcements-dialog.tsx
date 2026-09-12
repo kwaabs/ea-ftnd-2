@@ -136,7 +136,7 @@ export function SpecialAnnouncementsDialog({
             </DialogTitle>
           </DialogHeader>
 
-          <div className="space-y-3 max-h-96 overflow-y-auto px-6 py-5">
+          <div className="space-y-3 max-h-[76vh] overflow-y-auto px-6 py-5">
             {announcements.map((a) => (
               <div
                 key={a.id}
