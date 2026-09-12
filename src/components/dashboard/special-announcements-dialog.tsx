@@ -110,12 +110,12 @@ export function SpecialAnnouncementsDialog({
             outside click or Escape can't dismiss this without the reader
             actually clicking the close button -- these are meant to be
             read, not brushed past. Width is sm:max-w-lg (512px) x1.25 =
-            640px, then x1.10 = 704px. */}
+            640px, x1.10 = 704px, x1.10 again = 774px. */}
         <DialogContent
           showCloseButton={false}
           onPointerDownOutside={(e) => e.preventDefault()}
           onEscapeKeyDown={(e) => e.preventDefault()}
-          className="sm:max-w-[704px] gap-0 overflow-hidden rounded-xl border-0 bg-[#2e3192] p-0 shadow-[0_8px_28px_rgba(46,49,146,0.45)] ring-0"
+          className="sm:max-w-[774px] gap-0 overflow-hidden rounded-xl border-0 bg-[#2e3192] p-0 shadow-[0_8px_28px_rgba(46,49,146,0.45)] ring-0"
         >
           <DialogClose asChild>
             <Button
@@ -136,7 +136,7 @@ export function SpecialAnnouncementsDialog({
             </DialogTitle>
           </DialogHeader>
 
-          <div className="space-y-3 max-h-96 overflow-y-auto px-6 py-5">
+          <div className="space-y-3 max-h-[76vh] overflow-y-auto px-6 py-5">
             {announcements.map((a) => (
               <div
                 key={a.id}
