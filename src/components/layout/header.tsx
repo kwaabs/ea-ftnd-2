@@ -1,6 +1,6 @@
 "use client"
 import Link from "next/link"
-import { Filter, Calendar, BarChart3 } from "lucide-react"
+import { Filter, Calendar, BarChart3, MessageSquare } from "lucide-react"
 import { useState, useEffect, Suspense, useMemo } from "react"
 import { usePathname } from "next/navigation"
 import { Button } from "@/components/ui/button"
@@ -11,6 +11,7 @@ import { HeaderFilterDropdown } from "@/components/layout/header-filter-dropdown
 import { Breadcrumbs } from "./breadcrumbs"
 import { NotificationBell } from "@/components/comments/notification-bell"
 import { useIsNotifyEmail } from "@/hooks/api/use-notify-email-api"
+import { useCommentsSheetStore } from "@/stores/comments-sheet-store"
 
 function getYesterday() {
     const d = new Date()
@@ -48,6 +49,7 @@ export function Header() {
     const { user } = useUserStore()
     const userEmail = user?.email || user?.username || ""
     const { isAllowed: canSeeNotifications } = useIsNotifyEmail()
+    const openCommentsSheet = useCommentsSheetStore((s) => s.open)
 
     const yesterday = getYesterday()
 
@@ -156,6 +158,23 @@ export function Header() {
                     )}
 
                     {canSeeNotifications && <NotificationBell userEmail={userEmail} />}
+
+                    {/* Moved here from the sidebar's user-avatar dropdown --
+                        same trigger (useCommentsSheetStore's open action),
+                        just relocated for one-click access instead of two
+                        clicks through the account menu. Placed immediately
+                        before Filters per request. */}
+                    {user && (
+                        <Button
+                            variant="outline"
+                            size="sm"
+                            className="gap-2 bg-transparent"
+                            onClick={openCommentsSheet}
+                        >
+                            <MessageSquare className="h-4 w-4" />
+                            Comments
+                        </Button>
+                    )}
 
                     {showGlobalFilters && (
                         <Popover open={isFilterOpen} onOpenChange={setIsFilterOpen}>
