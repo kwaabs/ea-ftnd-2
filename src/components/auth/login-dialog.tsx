@@ -342,7 +342,14 @@ export function LoginDialog() {
           </p>
 
           {showBreakGlass && (
-            <div className="mt-6 space-y-3 border-t border-slate-200 pt-6">
+            <form
+              className="mt-6 space-y-3 border-t border-slate-200 pt-6"
+              onSubmit={(e) => {
+                e.preventDefault()
+                setBreakGlassError(null)
+                localLoginMutation.mutate()
+              }}
+            >
               <p className="text-xs font-medium text-slate-500">Emergency local sign-in</p>
 
               {breakGlassError && (
@@ -373,12 +380,9 @@ export function LoginDialog() {
               </div>
 
               <Button
+                type="submit"
                 variant="outline"
                 className="w-full"
-                onClick={() => {
-                  setBreakGlassError(null)
-                  localLoginMutation.mutate()
-                }}
                 disabled={
                   localLoginMutation.isPending || !breakGlassEmail || !breakGlassPassword
                 }
@@ -388,7 +392,7 @@ export function LoginDialog() {
                 )}
                 Sign in
               </Button>
-            </div>
+            </form>
           )}
         </div>
 
