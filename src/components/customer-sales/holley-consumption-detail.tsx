@@ -39,7 +39,7 @@ function SortButton({
   children,
 }: {
   field: SortField
-  activeField: SortField
+  activeField: SortField | null
   onToggle: (field: SortField) => void
   children: React.ReactNode
 }) {
@@ -75,7 +75,12 @@ export function HolleyConsumptionDetailTable({ dateRange, region, district }: Ho
   const [page, setPage] = useState(1)
   const [searchTerm, setSearchTerm] = useState("")
   const [debouncedSearch, setDebouncedSearch] = useState("")
-  const [sortField, setSortField] = useState<SortField>("consumption_kwh")
+  // No default sort — unlike BOT/BXC/PNS, this table starts in the
+  // backend's own stable order (region, district, customer_name,
+  // meter_no) rather than highest-kWh-first, since a kWh-desc default can
+  // put a filtered view's zero-kWh rows on page 1 and read as broken data
+  // when it's really just this view's slice of the table.
+  const [sortField, setSortField] = useState<SortField | null>(null)
   const [sortOrder, setSortOrder] = useState<SortOrder>("desc")
   const [exporting, setExporting] = useState<ExportFormat | null>(null)
 
@@ -100,8 +105,8 @@ export function HolleyConsumptionDetailTable({ dateRange, region, district }: Ho
     search: debouncedSearch || undefined,
     page,
     limit: PAGE_SIZE,
-    sortBy: sortField,
-    sortOrder,
+    sortBy: sortField ?? undefined,
+    sortOrder: sortField ? sortOrder : undefined,
   })
 
   const rows = detailData?.data ?? []
@@ -129,8 +134,8 @@ export function HolleyConsumptionDetailTable({ dateRange, region, district }: Ho
         region,
         district,
         search: debouncedSearch || undefined,
-        sortBy: sortField,
-        sortOrder,
+        sortBy: sortField ?? undefined,
+        sortOrder: sortField ? sortOrder : undefined,
       })
       const rowsForExport = all.map((r) => ({
         customer_name: r.customer_name,
@@ -163,9 +168,7 @@ export function HolleyConsumptionDetailTable({ dateRange, region, district }: Ho
         <div className="flex items-center justify-between flex-wrap gap-3">
           <div>
             <CardTitle>Holley Customer Records</CardTitle>
-            <CardDescription>
-              Individual Holley-ingested readings — sorted by highest kWh by default
-            </CardDescription>
+            <CardDescription>Individual Holley-ingested readings</CardDescription>
           </div>
           <div className="flex items-center gap-2">
             <DropdownMenu>
