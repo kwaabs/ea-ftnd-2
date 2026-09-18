@@ -71,6 +71,22 @@ export async function createAnnouncement(payload: {
   return json
 }
 
+export async function updateAnnouncement(
+  id: string,
+  payload: { body: string; author_email: string },
+): Promise<MutationResponse> {
+  const response = await fetch(`${API_BASE_URL}/api/v1/announcements/${id}`, {
+    method: "PUT",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(payload),
+  })
+  const json = await response.json()
+  if (!response.ok) {
+    throw new Error(json?.message || "Failed to update announcement")
+  }
+  return json
+}
+
 export async function deleteAnnouncement(id: string, authorEmail: string): Promise<MutationResponse> {
   const response = await fetch(
     `${API_BASE_URL}/api/v1/announcements/${id}?author_email=${encodeURIComponent(authorEmail)}`,
