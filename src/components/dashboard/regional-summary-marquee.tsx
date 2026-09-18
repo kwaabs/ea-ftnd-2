@@ -123,7 +123,11 @@ export function RegionalSummaryMarquee({
   const [editingId, setEditingId] = useState<string | null>(null);
   const [phase, setPhase] = useState<MarqueePhase>("figures");
 
-  const { announcements: allAnnouncements, mutate: mutateAnnouncements } = useAnnouncements({
+  const {
+    announcements: allAnnouncements,
+    isLoading: announcementsLoading,
+    mutate: mutateAnnouncements,
+  } = useAnnouncements({
     refreshInterval: 30_000,
   });
 
@@ -533,7 +537,11 @@ export function RegionalSummaryMarquee({
         </Dialog>
       )}
 
-      <SpecialAnnouncementsDialog announcements={specialAnnouncements} compact={compact} />
+      <SpecialAnnouncementsDialog
+        announcements={specialAnnouncements}
+        compact={compact}
+        isLoading={announcementsLoading}
+      />
 
       <div className="min-w-0 flex-1 flex items-center gap-2">
         {hasAnnouncements && (

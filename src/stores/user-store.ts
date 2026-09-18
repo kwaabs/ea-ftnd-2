@@ -98,6 +98,15 @@ interface UserState {
     isAuthenticated: boolean
     isLoading: boolean
     hasHydrated: boolean
+    // Set by login() (a fresh sign-in), never by onRehydrateStorage (a
+    // session merely restored from storage) — lets a one-time "just signed
+    // in" action (see SpecialAnnouncementsDialog) fire once per real login,
+    // not on every page load. Persisted (see partialize) because the Azure
+    // AD flow does a full window.location.replace after login() — an
+    // in-memory-only flag wouldn't survive that reload. Consumers clear it
+    // via clearJustLoggedIn() once handled, so it doesn't fire again on the
+    // next unrelated refresh.
+    justLoggedIn: boolean
     setUser: (user: User | null) => void
     login: (user: User, token: string, expiresAt: number, refreshToken?: string | null) => void
     setTokens: (token: string, expiresAt: number, refreshToken?: string | null) => void
@@ -105,6 +114,7 @@ interface UserState {
     setLoading: (loading: boolean) => void
     setHasHydrated: (hydrated: boolean) => void
     isTokenExpired: () => boolean
+    clearJustLoggedIn: () => void
 }
 
 export const useUserStore = create<UserState>()(
@@ -117,6 +127,7 @@ export const useUserStore = create<UserState>()(
             isAuthenticated: false,
             isLoading: true, // Always starts true, will be set to false after rehydration
             hasHydrated: false, // Tracks if store has been rehydrated from storage
+            justLoggedIn: false,
             setUser: (user) => set({ user, isAuthenticated: !!user }),
             login: (user, token, expiresAt, refreshToken = null) => {
                 console.log("[v0] UserStore - Login called", { userId: user.id, hasToken: !!token, expiresAt })
@@ -128,8 +139,10 @@ export const useUserStore = create<UserState>()(
                     isAuthenticated: true,
                     isLoading: false,
                     hasHydrated: true,
+                    justLoggedIn: true,
                 })
             },
+            clearJustLoggedIn: () => set({ justLoggedIn: false }),
             setTokens: (token, expiresAt, refreshToken) => {
                 set((state) => ({
                     token,
@@ -165,6 +178,7 @@ export const useUserStore = create<UserState>()(
                 refreshToken: state.refreshToken,
                 tokenExpiresAt: state.tokenExpiresAt,
                 isAuthenticated: state.isAuthenticated,
+                justLoggedIn: state.justLoggedIn,
             }),
             // Ensure isAuthenticated is restored based on token/user existence
             onRehydrateStorage: () => (state) => {
