@@ -94,6 +94,27 @@ export function EtlSourcesTab() {
 
   const currentSourceHasPassword = sources.find((s) => s.id === editingId)?.has_password ?? false
 
+  // ---- Sources table filters (client-side — sources is already fully
+  // loaded, no pagination on this list) -----------------------------------
+  const [nameFilter, setNameFilter] = useState("")
+  const [kindFilter, setKindFilter] = useState("all")
+  const [statusFilter, setStatusFilter] = useState("all")
+
+  const filtersActive = nameFilter.trim() !== "" || kindFilter !== "all" || statusFilter !== "all"
+
+  const clearFilters = () => {
+    setNameFilter("")
+    setKindFilter("all")
+    setStatusFilter("all")
+  }
+
+  const filteredSources = sources.filter((s) => {
+    if (nameFilter.trim() && !s.name.toLowerCase().includes(nameFilter.trim().toLowerCase())) return false
+    if (kindFilter !== "all" && s.kind !== kindFilter) return false
+    if (statusFilter !== "all" && (statusFilter === "enabled") !== s.enabled) return false
+    return true
+  })
+
   const setField = <K extends keyof EtlSourceInput>(key: K, value: EtlSourceInput[K]) =>
     setForm((f) => ({ ...f, [key]: value }))
 
@@ -407,9 +428,46 @@ export function EtlSourcesTab() {
       <Card>
         <CardHeader>
           <CardTitle>Sources</CardTitle>
-          <CardDescription>{sources.length} registered</CardDescription>
+          <CardDescription>
+            {filtersActive ? `${filteredSources.length} of ${sources.length} shown` : `${sources.length} registered`}
+          </CardDescription>
         </CardHeader>
         <CardContent>
+          <div className="flex flex-wrap items-center gap-2 mb-3">
+            <Input
+              placeholder="Search by name…"
+              value={nameFilter}
+              onChange={(e) => setNameFilter(e.target.value)}
+              className="h-8 w-48 text-xs"
+            />
+            <Select value={kindFilter} onValueChange={setKindFilter}>
+              <SelectTrigger className="h-8 w-36 text-xs">
+                <SelectValue placeholder="Kind" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">All kinds</SelectItem>
+                <SelectItem value="oracle">Oracle</SelectItem>
+                <SelectItem value="mssql">MSSQL</SelectItem>
+                <SelectItem value="postgres">Postgres</SelectItem>
+                <SelectItem value="http_api">HTTP API</SelectItem>
+              </SelectContent>
+            </Select>
+            <Select value={statusFilter} onValueChange={setStatusFilter}>
+              <SelectTrigger className="h-8 w-32 text-xs">
+                <SelectValue placeholder="Status" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">All statuses</SelectItem>
+                <SelectItem value="enabled">Enabled</SelectItem>
+                <SelectItem value="disabled">Disabled</SelectItem>
+              </SelectContent>
+            </Select>
+            {filtersActive && (
+              <Button variant="ghost" size="sm" className="h-8 px-2 text-xs" onClick={clearFilters}>
+                Clear filters
+              </Button>
+            )}
+          </div>
           {isLoading ? (
             <div className="space-y-2">
               {[...Array(3)].map((_, i) => (
@@ -431,14 +489,14 @@ export function EtlSourcesTab() {
                   </tr>
                 </thead>
                 <tbody>
-                  {sources.length === 0 ? (
+                  {filteredSources.length === 0 ? (
                     <tr>
                       <td colSpan={7} className="text-center text-muted-foreground py-8">
-                        No sources registered yet.
+                        {sources.length === 0 ? "No sources registered yet." : "No sources match these filters."}
                       </td>
                     </tr>
                   ) : (
-                    sources.map((s) => (
+                    filteredSources.map((s) => (
                       <tr key={s.id} className="border-b last:border-0 hover:bg-muted/40">
                         <td className="py-2.5 pr-4 font-medium">{s.name}</td>
                         <td className="py-2.5 px-4">
