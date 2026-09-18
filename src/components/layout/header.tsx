@@ -37,14 +37,18 @@ export function Header() {
     // own independent month-granularity window control
     // (purchases-sales-report-view.tsx) — the global filter isn't read by
     // that page at all, so showing it here would suggest it does something
-    // it doesn't.
-    const showDateRange = !pathname?.startsWith("/admin/logins") && !pathname?.startsWith("/reports")
+    // it doesn't. /admin/etl is a config page (sources/jobs/logs), not a
+    // data view — nothing on it reads the global date range either.
+    const showDateRange =
+        !pathname?.startsWith("/admin/logins") && !pathname?.startsWith("/reports") && !pathname?.startsWith("/admin/etl")
     // The whole global Filters popover (date range + region/district/etc,
     // all backed by useAppStore) is a no-op on /reports -- that page reads
     // none of it, it runs its own month window plus its own region/district
     // selects that actually filter its data. Showing the global one here
     // just looks like an unrelated date filter reappearing on the page.
-    const showGlobalFilters = !pathname?.startsWith("/reports")
+    // Same reasoning for /admin/etl -- a config page with no filterable
+    // data of its own.
+    const showGlobalFilters = !pathname?.startsWith("/reports") && !pathname?.startsWith("/admin/etl")
     const { filters, setFilters } = useAppStore()
     const { user } = useUserStore()
     const userEmail = user?.email || user?.username || ""

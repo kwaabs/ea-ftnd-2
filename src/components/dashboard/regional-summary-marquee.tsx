@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { Megaphone, Plus, Trash2, Loader2 } from "lucide-react";
+import { Megaphone, Plus, Pencil, Trash2, Loader2 } from "lucide-react";
 import { Marquee, MarqueeItem } from "@/components/ui/marquee";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
@@ -25,7 +25,9 @@ import { useMmsCustomerSalesAggregate } from "@/hooks/api/use-mms-customer-sales
 import {
   useAnnouncements,
   createAnnouncement,
+  updateAnnouncement,
   deleteAnnouncement,
+  type Announcement,
 } from "@/hooks/api/use-announcements-api";
 import { useUserStore } from "@/stores/user-store";
 import { useIsNotifyEmail } from "@/hooks/api/use-notify-email-api";
@@ -113,6 +115,12 @@ export function RegionalSummaryMarquee({
   const [submitting, setSubmitting] = useState(false);
   const [composeError, setComposeError] = useState<string | null>(null);
   const [deletingId, setDeletingId] = useState<string | null>(null);
+  // Set while editing an existing announcement instead of composing a new
+  // one — same form, different submit target (updateAnnouncement instead
+  // of createAnnouncement). Kind isn't editable (see the backend's
+  // UpdateAnnouncementRequest), so the special/regular switch is disabled
+  // whenever this is set.
+  const [editingId, setEditingId] = useState<string | null>(null);
   const [phase, setPhase] = useState<MarqueePhase>("figures");
 
   const { announcements: allAnnouncements, mutate: mutateAnnouncements } = useAnnouncements({
@@ -296,7 +304,29 @@ export function RegionalSummaryMarquee({
   const canPost = draftIsSpecial ? richDraftText.trim().length > 0 : draft.trim().length > 0;
   const overRichLimit = draftIsSpecial && richDraftText.length > RICH_ANNOUNCEMENT_MAX_CHARS;
 
-  const handlePost = async () => {
+  const resetDraft = () => {
+    setDraft("");
+    setDraftIsSpecial(false);
+    setRichDraftJson("");
+    setRichDraftText("");
+    setEditingId(null);
+    setComposeError(null);
+  };
+
+  const handleEditClick = (a: Announcement) => {
+    setEditingId(a.id);
+    setDraftIsSpecial(a.kind === "special");
+    if (a.kind === "special") {
+      setRichDraftJson(a.body);
+      setRichDraftText(richAnnouncementPreviewText(a.body));
+    } else {
+      setDraft(a.body);
+    }
+    setComposeError(null);
+    setComposeOpen(true);
+  };
+
+  const handleSubmit = async () => {
     if (!userEmail || !canPost) return;
     if (overRichLimit) {
       setComposeError(`Too long — keep it under ${RICH_ANNOUNCEMENT_MAX_CHARS} characters`);
@@ -305,20 +335,24 @@ export function RegionalSummaryMarquee({
     setSubmitting(true);
     setComposeError(null);
     try {
-      await createAnnouncement({
-        body: draftIsSpecial ? richDraftJson : draft.trim(),
-        author_email: userEmail,
-        author_name: user?.name || user?.username,
-        kind: draftIsSpecial ? "special" : "regular",
-      });
-      setDraft("");
-      setDraftIsSpecial(false);
-      setRichDraftJson("");
-      setRichDraftText("");
+      const body = draftIsSpecial ? richDraftJson : draft.trim();
+      if (editingId) {
+        await updateAnnouncement(editingId, { body, author_email: userEmail });
+      } else {
+        await createAnnouncement({
+          body,
+          author_email: userEmail,
+          author_name: user?.name || user?.username,
+          kind: draftIsSpecial ? "special" : "regular",
+        });
+      }
+      resetDraft();
       setComposeOpen(false);
       await mutateAnnouncements();
     } catch (err) {
-      setComposeError(err instanceof Error ? err.message : "Failed to post announcement");
+      setComposeError(
+        err instanceof Error ? err.message : `Failed to ${editingId ? "update" : "post"} announcement`,
+      );
     } finally {
       setSubmitting(false);
     }
@@ -346,7 +380,13 @@ export function RegionalSummaryMarquee({
       }
     >
       {canManageAnnouncements && (
-        <Dialog open={composeOpen} onOpenChange={setComposeOpen}>
+        <Dialog
+          open={composeOpen}
+          onOpenChange={(open) => {
+            setComposeOpen(open);
+            if (!open) resetDraft();
+          }}
+        >
           <DialogTrigger asChild>
             <Button
               type="button"
@@ -369,7 +409,7 @@ export function RegionalSummaryMarquee({
             className="sm:max-w-[704px]"
           >
             <DialogHeader>
-              <DialogTitle>Post announcement</DialogTitle>
+              <DialogTitle>{editingId ? "Edit announcement" : "Post announcement"}</DialogTitle>
               <DialogDescription>
                 Visible to everyone on the dashboard marquee. Only notify-list users can post.
               </DialogDescription>
@@ -379,14 +419,27 @@ export function RegionalSummaryMarquee({
                 id="announcement-is-special"
                 checked={draftIsSpecial}
                 onCheckedChange={setDraftIsSpecial}
+                disabled={Boolean(editingId)}
               />
               <Label htmlFor="announcement-is-special" className="text-xs font-normal">
                 Special — show in the alerts dialog instead of the marquee
               </Label>
+              {editingId && (
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="sm"
+                  className="h-6 px-2 text-xs ml-auto"
+                  onClick={resetDraft}
+                >
+                  Cancel edit
+                </Button>
+              )}
             </div>
 
             {draftIsSpecial ? (
               <RichAnnouncementEditor
+                key={editingId ?? "new"}
                 value={richDraftJson}
                 onChange={(json, text) => {
                   setRichDraftJson(json);
@@ -425,21 +478,34 @@ export function RegionalSummaryMarquee({
                       )}
                       {a.kind === "special" ? richAnnouncementPreviewText(a.body) : a.body}
                     </span>
-                    <Button
-                      type="button"
-                      variant="ghost"
-                      size="sm"
-                      className="h-6 w-6 p-0 shrink-0 text-muted-foreground hover:text-red-600"
-                      disabled={deletingId === a.id}
-                      onClick={() => handleDelete(a.id)}
-                      title="Remove announcement"
-                    >
-                      {deletingId === a.id ? (
-                        <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                      ) : (
-                        <Trash2 className="h-3.5 w-3.5" />
-                      )}
-                    </Button>
+                    <div className="flex items-center gap-0.5 shrink-0">
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="sm"
+                        className="h-6 w-6 p-0 text-muted-foreground hover:text-foreground"
+                        disabled={deletingId === a.id || submitting}
+                        onClick={() => handleEditClick(a)}
+                        title="Edit announcement"
+                      >
+                        <Pencil className="h-3.5 w-3.5" />
+                      </Button>
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="sm"
+                        className="h-6 w-6 p-0 text-muted-foreground hover:text-red-600"
+                        disabled={deletingId === a.id}
+                        onClick={() => handleDelete(a.id)}
+                        title="Remove announcement"
+                      >
+                        {deletingId === a.id ? (
+                          <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                        ) : (
+                          <Trash2 className="h-3.5 w-3.5" />
+                        )}
+                      </Button>
+                    </div>
                   </div>
                 ))}
               </div>
@@ -448,14 +514,16 @@ export function RegionalSummaryMarquee({
             <DialogFooter>
               <Button
                 type="button"
-                onClick={handlePost}
+                onClick={handleSubmit}
                 disabled={submitting || !canPost || overRichLimit}
               >
                 {submitting ? (
                   <>
                     <Loader2 className="h-3.5 w-3.5 mr-1.5 animate-spin" />
-                    Posting…
+                    {editingId ? "Saving…" : "Posting…"}
                   </>
+                ) : editingId ? (
+                  "Save changes"
                 ) : (
                   "Post"
                 )}

@@ -139,6 +139,23 @@ export interface EtlRunningJob {
   query_text: string | null
 }
 
+/** One run of any job, past or present, across every job — see
+ * useEtlRunLogs. Unlike EtlRunningJob (only in-flight runs), this covers
+ * every status and both timestamps, for the Logs tab. */
+export interface EtlRunLog {
+  run_id: number
+  job_id: string
+  job_name: string
+  status: EtlRunStatus
+  started_at: string
+  finished_at: string | null
+  rows_extracted: number
+  rows_loaded: number
+  error_message: string | null
+  /** See EtlJobRun.query_text. */
+  query_text: string | null
+}
+
 /** Same pattern as use-meters-admin-api.ts / use-express-feeders-admin-api.ts. */
 function authHeaders(): HeadersInit {
   const token = useUserStore.getState().token
@@ -331,6 +348,21 @@ export function useEtlRunningJobs(options?: { refetchInterval?: number | false }
       return response.json()
     },
     refetchInterval: options?.refetchInterval ?? 5000,
+  })
+}
+
+export function useEtlRunLogs(options?: { limit?: number; refetchInterval?: number | false }) {
+  const limit = options?.limit ?? 100
+  return useQuery<{ data: EtlRunLog[] }>({
+    queryKey: ["etl-run-logs", limit],
+    queryFn: async () => {
+      const response = await fetch(`${API_BASE_URL}/api/v1/etl/admin/runs?limit=${limit}`, {
+        headers: authHeaders(),
+      })
+      if (!response.ok) throw new Error(await readError(response))
+      return response.json()
+    },
+    refetchInterval: options?.refetchInterval ?? 10000,
   })
 }
 

@@ -5,6 +5,7 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/com
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { EtlSourcesTab } from "@/components/admin/etl-sources-tab"
 import { EtlJobsTab } from "@/components/admin/etl-jobs-tab"
+import { EtlLogsTab } from "@/components/admin/etl-logs-tab"
 import { EtlQueryConsole } from "@/components/admin/etl-query-console"
 import { useEtlSources } from "@/hooks/api/use-etl-admin-api"
 
@@ -58,6 +59,7 @@ export function ManageEtlView() {
         <TabsList>
           <TabsTrigger value="sources">Sources</TabsTrigger>
           <TabsTrigger value="jobs">Jobs</TabsTrigger>
+          <TabsTrigger value="logs">Logs</TabsTrigger>
           <TabsTrigger value="query">Query console</TabsTrigger>
         </TabsList>
         <TabsContent value="sources">
@@ -65,6 +67,9 @@ export function ManageEtlView() {
         </TabsContent>
         <TabsContent value="jobs">
           <EtlJobsTab />
+        </TabsContent>
+        <TabsContent value="logs">
+          <EtlLogsTab />
         </TabsContent>
         <TabsContent value="query">
           <StandaloneQueryTester />

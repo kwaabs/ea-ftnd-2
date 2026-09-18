@@ -120,7 +120,7 @@ function parseCsv(s: string): string[] {
     .filter((v) => v.length > 0)
 }
 
-function statusBadge(status: string) {
+export function statusBadge(status: string) {
   if (status === "success") {
     return (
       <Badge variant="outline" className="text-xs font-normal text-emerald-700 border-emerald-300 gap-1">
@@ -152,7 +152,7 @@ function statusBadge(status: string) {
 /** "1h 23m" / "4m 12s" / "38s" -- elapsed since a run started, for the
  * Running now list. Deliberately coarse (no ms) since this is a glance
  * indicator, not a stopwatch. */
-function formatElapsed(startedAt: string): string {
+export function formatElapsed(startedAt: string): string {
   const ms = Date.now() - new Date(startedAt).getTime()
   const totalSeconds = Math.max(0, Math.floor(ms / 1000))
   const hours = Math.floor(totalSeconds / 3600)
@@ -488,31 +488,6 @@ export function EtlJobsTab() {
   }
 
   const sourceName = (id: string) => sources.find((s) => s.id === id)?.name ?? "—"
-
-  // ---- Jobs table filters (client-side — jobs is already fully loaded,
-  // no pagination on this list) ------------------------------------------
-  const [nameFilter, setNameFilter] = useState("")
-  const [sourceFilter, setSourceFilter] = useState("all")
-  const [modeFilter, setModeFilter] = useState("all")
-  const [statusFilter, setStatusFilter] = useState("all")
-
-  const filtersActive =
-    nameFilter.trim() !== "" || sourceFilter !== "all" || modeFilter !== "all" || statusFilter !== "all"
-
-  const clearFilters = () => {
-    setNameFilter("")
-    setSourceFilter("all")
-    setModeFilter("all")
-    setStatusFilter("all")
-  }
-
-  const filteredJobs = jobs.filter((j) => {
-    if (nameFilter.trim() && !j.name.toLowerCase().includes(nameFilter.trim().toLowerCase())) return false
-    if (sourceFilter !== "all" && j.source_id !== sourceFilter) return false
-    if (modeFilter !== "all" && j.mode !== modeFilter) return false
-    if (statusFilter !== "all" && (statusFilter === "enabled") !== j.enabled) return false
-    return true
-  })
 
   return (
     <div className="space-y-6">
@@ -1137,57 +1112,9 @@ export function EtlJobsTab() {
       <Card>
         <CardHeader>
           <CardTitle>Jobs</CardTitle>
-          <CardDescription>
-            {filtersActive ? `${filteredJobs.length} of ${jobs.length} shown` : `${jobs.length} configured`}
-          </CardDescription>
+          <CardDescription>{jobs.length} configured</CardDescription>
         </CardHeader>
         <CardContent>
-          <div className="flex flex-wrap items-center gap-2 mb-3">
-            <Input
-              placeholder="Search by name…"
-              value={nameFilter}
-              onChange={(e) => setNameFilter(e.target.value)}
-              className="h-8 w-48 text-xs"
-            />
-            <Select value={sourceFilter} onValueChange={setSourceFilter}>
-              <SelectTrigger className="h-8 w-40 text-xs">
-                <SelectValue placeholder="Source" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">All sources</SelectItem>
-                {sources.map((s) => (
-                  <SelectItem key={s.id} value={s.id}>
-                    {s.name}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-            <Select value={modeFilter} onValueChange={setModeFilter}>
-              <SelectTrigger className="h-8 w-36 text-xs">
-                <SelectValue placeholder="Mode" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">All modes</SelectItem>
-                <SelectItem value="incremental">Incremental</SelectItem>
-                <SelectItem value="full_refresh">Full refresh</SelectItem>
-              </SelectContent>
-            </Select>
-            <Select value={statusFilter} onValueChange={setStatusFilter}>
-              <SelectTrigger className="h-8 w-32 text-xs">
-                <SelectValue placeholder="Status" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">All statuses</SelectItem>
-                <SelectItem value="enabled">Enabled</SelectItem>
-                <SelectItem value="disabled">Disabled</SelectItem>
-              </SelectContent>
-            </Select>
-            {filtersActive && (
-              <Button variant="ghost" size="sm" className="h-8 px-2 text-xs" onClick={clearFilters}>
-                Clear filters
-              </Button>
-            )}
-          </div>
           {isLoading ? (
             <div className="space-y-2">
               {[...Array(3)].map((_, i) => (
@@ -1209,14 +1136,14 @@ export function EtlJobsTab() {
                   </tr>
                 </thead>
                 <tbody>
-                  {filteredJobs.length === 0 ? (
+                  {jobs.length === 0 ? (
                     <tr>
                       <td colSpan={7} className="text-center text-muted-foreground py-8">
-                        {jobs.length === 0 ? "No jobs configured yet." : "No jobs match these filters."}
+                        No jobs configured yet.
                       </td>
                     </tr>
                   ) : (
-                    filteredJobs.map((j) => (
+                    jobs.map((j) => (
                       <tr key={j.id} className="border-b last:border-0 hover:bg-muted/40">
                         <td className="py-2.5 pr-4 font-medium">{j.name}</td>
                         <td className="py-2.5 px-4 text-muted-foreground">{sourceName(j.source_id)}</td>
