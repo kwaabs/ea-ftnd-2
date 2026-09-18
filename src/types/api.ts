@@ -777,3 +777,43 @@ export interface PnsConsumptionDetailResponse {
   limit: number
   total_pages: number
 }
+
+// Holley-ingested legacy consumption source (ea-bknd-3/internal/
+// holleyconsumption), loaded by the ETL job "holley-consumption-pull".
+// Like PNS, has a real date_time timestamp (no billmonth-label
+// resolution); unlike PNS, region/district are already human-readable
+// names, not opaque codes.
+export interface HolleyConsumptionAggregateItem {
+  region?: string | null
+  district?: string | null
+  tariff_class?: string | null
+  customer_count: number
+  sum_kwh: number
+}
+
+export interface HolleyConsumptionAggregateResponse {
+  data: HolleyConsumptionAggregateItem[]
+  total: number
+}
+
+export interface HolleyConsumptionDetail {
+  meter_id: number
+  date_time: string
+  consumption_kwh: number
+  meter_no: string
+  customer_no: string
+  customer_id: string
+  customer_name: string
+  geocode: string
+  region: string
+  district: string
+  tariff_class: string
+}
+
+export interface HolleyConsumptionDetailResponse {
+  data: HolleyConsumptionDetail[]
+  total: number
+  page: number
+  limit: number
+  total_pages: number
+}
