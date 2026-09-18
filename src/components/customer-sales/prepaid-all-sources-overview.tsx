@@ -19,22 +19,35 @@ import { useZeusBillingAggregate } from "@/hooks/api/use-zeus-billing-aggregate-
 import { useMmsCustomerSalesAggregate } from "@/hooks/api/use-mms-customer-sales-aggregate-api"
 import { useBotConsumptionAggregate } from "@/hooks/api/use-bot-consumption-api"
 import { useBxcConsumptionAggregate } from "@/hooks/api/use-bxc-consumption-api"
+import { usePnsConsumptionAggregate } from "@/hooks/api/use-pns-consumption-api"
+import { useHolleyConsumptionAggregate } from "@/hooks/api/use-holley-consumption-api"
 import { normalizeRegionName, shortRegionLabel, useResolvedRegionName } from "@/hooks/use-resolved-region-name"
 import { cn } from "@/lib/utils"
 
 // Zeus + MMS is treated as ONE source here (they're deduped against each
 // other via excludeMmsDuplicates, same as everywhere else on this page) —
-// BOT and BXC are genuinely independent sources with no overlap against
-// Zeus/MMS or each other (confirmed), so they're summed directly, no
-// precedence logic needed. PNS has no backend yet (Legacy Meters tab still
-// shows "Coming soon" for it), so it's left out until it does.
-const SOURCES = ["Zeus + MMS", "BOT", "BXC"] as const
+// BOT, BXC, PNS, and HOLLEY are genuinely independent sources with no
+// overlap against Zeus/MMS or each other (confirmed), so they're summed
+// directly, no precedence logic needed. Every other Legacy Meters tab
+// (ECASH 1&3, IMES, CLOU, MBH, ECASH 4, SMART G, ALPHA LIBERTY, INEST,
+// NURI) still shows "Coming soon" — no data source wired up for them yet
+// — so they're left out until they are.
+//
+// PNS's own region/district are opaque regionid/districtid codes with no
+// name lookup yet (see pnsconsumption's package doc comment) — unlike
+// HOLLEY, whose region is now resolved to a real name server-side. PNS
+// rows here will therefore show as raw codes rather than merging into the
+// same region buckets as everything else, until a PNS code->name mapping
+// shows up.
+const SOURCES = ["Zeus + MMS", "BOT", "BXC", "PNS", "HOLLEY"] as const
 type Source = (typeof SOURCES)[number]
 
 const SOURCE_COLORS: Record<Source, string> = {
   "Zeus + MMS": "#2563eb", // blue, matches the Zeus + MMS tab elsewhere
   BOT: "#d97706", // amber, matches the BOT tab
   BXC: "#9333ea", // purple, matches the BXC tab
+  PNS: "#e11d48", // rose, matches the PNS tab
+  HOLLEY: "#0d9488", // teal, matches the HOLLEY tab
 }
 
 function formatKwhRaw(value: number | null | undefined) {
@@ -123,8 +136,18 @@ export function PrepaidAllSourcesOverview({ dateRange }: PrepaidAllSourcesOvervi
     dateTo: dateRange.end,
     groupBy: "region",
   })
+  const { data: pnsRegionAgg = [], isLoading: pnsLoading } = usePnsConsumptionAggregate({
+    dateFrom: dateRange.start,
+    dateTo: dateRange.end,
+    groupBy: "region",
+  })
+  const { data: holleyRegionAgg = [], isLoading: holleyLoading } = useHolleyConsumptionAggregate({
+    dateFrom: dateRange.start,
+    dateTo: dateRange.end,
+    groupBy: "region",
+  })
 
-  const regionLoading = zeusLoading || mmsLoading || botLoading || bxcLoading
+  const regionLoading = zeusLoading || mmsLoading || botLoading || bxcLoading || pnsLoading || holleyLoading
 
   const byRegion = useMemo<RegionRow[]>(() => {
     const rows = new Map<string, RegionRow>()
@@ -136,15 +159,23 @@ export function PrepaidAllSourcesOverview({ dateRange }: PrepaidAllSourcesOvervi
     )
     botRegionAgg.forEach((r) => mergeBySource(rows, r.region || "Unknown", "BOT", r.sum_kwh || 0, r.customer_count || 0))
     bxcRegionAgg.forEach((r) => mergeBySource(rows, r.region || "Unknown", "BXC", r.sum_kwh || 0, r.customer_count || 0))
+    pnsRegionAgg.forEach((r) =>
+      mergeBySource(rows, r.region_id || "Unknown", "PNS", r.sum_energy_kwh || 0, r.customer_count || 0),
+    )
+    holleyRegionAgg.forEach((r) =>
+      mergeBySource(rows, r.region || "Unknown", "HOLLEY", r.sum_kwh || 0, r.customer_count || 0),
+    )
 
     return withLeadingSource(Array.from(rows.values())).sort((a, b) => b.totalKwh - a.totalKwh)
-  }, [zeusRegionAgg, mmsRegionAgg, botRegionAgg, bxcRegionAgg])
+  }, [zeusRegionAgg, mmsRegionAgg, botRegionAgg, bxcRegionAgg, pnsRegionAgg, holleyRegionAgg])
 
   const bySource = useMemo(() => {
     const totals: Record<Source, SourceBucket> = {
       "Zeus + MMS": { kwh: 0, customers: 0 },
       BOT: { kwh: 0, customers: 0 },
       BXC: { kwh: 0, customers: 0 },
+      PNS: { kwh: 0, customers: 0 },
+      HOLLEY: { kwh: 0, customers: 0 },
     }
     byRegion.forEach((row) => {
       for (const source of SOURCES) {
@@ -205,8 +236,34 @@ export function PrepaidAllSourcesOverview({ dateRange }: PrepaidAllSourcesOvervi
     region: selectedRegion || undefined,
     enabled: Boolean(selectedRegion),
   })
+  // PNS's own region values are raw regionid codes (see the SOURCES
+  // comment above), so a selectedRegion drawn from a real region name
+  // won't match PNS's own rows — this simply comes back empty for PNS in
+  // that case, same graceful degradation as clicking a region with no PNS
+  // data at all. It matches correctly when selectedRegion IS a PNS code
+  // (i.e. the user clicked PNS's own unmerged row in the table above).
+  const { data: pnsDistrictAgg = [], isLoading: pnsDistrictLoading } = usePnsConsumptionAggregate({
+    dateFrom: dateRange.start,
+    dateTo: dateRange.end,
+    groupBy: "district",
+    region: selectedRegion || undefined,
+    enabled: Boolean(selectedRegion),
+  })
+  const { data: holleyDistrictAgg = [], isLoading: holleyDistrictLoading } = useHolleyConsumptionAggregate({
+    dateFrom: dateRange.start,
+    dateTo: dateRange.end,
+    groupBy: "district",
+    region: selectedRegion || undefined,
+    enabled: Boolean(selectedRegion),
+  })
 
-  const districtLoading = zeusDistrictLoading || mmsDistrictLoading || botDistrictLoading || bxcDistrictLoading
+  const districtLoading =
+    zeusDistrictLoading ||
+    mmsDistrictLoading ||
+    botDistrictLoading ||
+    bxcDistrictLoading ||
+    pnsDistrictLoading ||
+    holleyDistrictLoading
 
   const byDistrict = useMemo<RegionRow[]>(() => {
     const rows = new Map<string, RegionRow>()
@@ -218,9 +275,15 @@ export function PrepaidAllSourcesOverview({ dateRange }: PrepaidAllSourcesOvervi
     )
     botDistrictAgg.forEach((r) => mergeBySource(rows, r.district || "Unknown", "BOT", r.sum_kwh || 0, r.customer_count || 0))
     bxcDistrictAgg.forEach((r) => mergeBySource(rows, r.district || "Unknown", "BXC", r.sum_kwh || 0, r.customer_count || 0))
+    pnsDistrictAgg.forEach((r) =>
+      mergeBySource(rows, r.district_id || "Unknown", "PNS", r.sum_energy_kwh || 0, r.customer_count || 0),
+    )
+    holleyDistrictAgg.forEach((r) =>
+      mergeBySource(rows, r.district || "Unknown", "HOLLEY", r.sum_kwh || 0, r.customer_count || 0),
+    )
 
     return withLeadingSource(Array.from(rows.values())).sort((a, b) => b.totalKwh - a.totalKwh)
-  }, [zeusDistrictAgg, mmsDistrictAgg, botDistrictAgg, bxcDistrictAgg])
+  }, [zeusDistrictAgg, mmsDistrictAgg, botDistrictAgg, bxcDistrictAgg, pnsDistrictAgg, holleyDistrictAgg])
 
   const chartData = byRegion.slice(0, 14)
 
@@ -228,8 +291,7 @@ export function PrepaidAllSourcesOverview({ dateRange }: PrepaidAllSourcesOvervi
     <div className="space-y-6">
       <div>
         <p className="text-muted-foreground">
-          Every prepaid source combined — Zeus + MMS (deduped), BOT, and BXC. PNS isn&apos;t counted yet
-          (no data source wired up).
+          Every prepaid source combined — Zeus + MMS (deduped), BOT, BXC, PNS, and HOLLEY.
           {selectedRegion ? (
             <span className="text-foreground font-medium"> · filtered by {shortRegionLabel(selectedRegion)}</span>
           ) : null}
