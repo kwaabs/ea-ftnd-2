@@ -41,6 +41,7 @@ import { BotConsumptionView } from "@/components/customer-sales/bot-consumption-
 import { BxcConsumptionView } from "@/components/customer-sales/bxc-consumption-view"
 import { PnsConsumptionView } from "@/components/customer-sales/pns-consumption-view"
 import { HolleyConsumptionView } from "@/components/customer-sales/holley-consumption-view"
+import { Ecash4ConsumptionView } from "@/components/customer-sales/ecash4-consumption-view"
 import { LegacyMeterComingSoon } from "@/components/customer-sales/legacy-meter-coming-soon"
 import { PrepaidAllSourcesOverview } from "@/components/customer-sales/prepaid-all-sources-overview"
 import {
@@ -1054,7 +1055,7 @@ export function PrepaidHubView() {
               <LegacyMeterComingSoon name="MBH" />
             </TabsContent>
             <TabsContent value="ecash4" className="mt-4">
-              <LegacyMeterComingSoon name="ECASH 4" />
+              <Ecash4ConsumptionView dateRange={dateRange} />
             </TabsContent>
             <TabsContent value="smartg" className="mt-4">
               <LegacyMeterComingSoon name="SMART G" />
