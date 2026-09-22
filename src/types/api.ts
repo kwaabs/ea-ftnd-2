@@ -817,3 +817,43 @@ export interface HolleyConsumptionDetailResponse {
   limit: number
   total_pages: number
 }
+
+// ECASH 4-ingested legacy consumption source (ea-bknd-3/internal/
+// ecash4consumption), loaded by the ETL job "ecash4-consumption-pull".
+// Like Holley, region/district are already human-readable text (district
+// is the source's "Name" field — a branch/office label, not a customer
+// name). Unlike every other source, the source has no timestamp at all —
+// just a "YYYY-MM" year_month label — so date filtering/sorting uses the
+// destination table's generated period_date column instead.
+export interface Ecash4ConsumptionAggregateItem {
+  region?: string | null
+  district?: string | null
+  tariff_class?: string | null
+  customer_count: number
+  sum_kwh: number
+}
+
+export interface Ecash4ConsumptionAggregateResponse {
+  data: Ecash4ConsumptionAggregateItem[]
+  total: number
+}
+
+export interface Ecash4ConsumptionDetail {
+  meter_serial: string
+  spn: string
+  district: string
+  region: string
+  customer_name: string
+  year_month: string
+  period_date: string
+  energy_kwh: number
+  tariff_class: string
+}
+
+export interface Ecash4ConsumptionDetailResponse {
+  data: Ecash4ConsumptionDetail[]
+  total: number
+  page: number
+  limit: number
+  total_pages: number
+}
