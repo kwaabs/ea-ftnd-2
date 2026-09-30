@@ -371,13 +371,23 @@ export function OverviewMainTabV3({
     const zeusAmrKwh = postpaidSalesSummary?.by_source?.zeus_amr?.kwh ?? 0;
     const zeusPrepaidKwh = prepaidSalesSummary?.by_source?.zeus_prepaid?.kwh ?? 0;
     const mmsKwh = prepaidSalesSummary?.by_source?.mms?.kwh ?? 0;
-    const legacyKwh =
-      (prepaidSalesSummary?.by_source?.bot?.kwh ?? 0) +
-      (prepaidSalesSummary?.by_source?.bxc?.kwh ?? 0);
+
+    // "Legacy Prepaid" = every Prepaid source in by_source OTHER than
+    // zeus_prepaid/mms (which make up "MMS Prepaid" below) — not a
+    // hardcoded BOT+BXC list. salessummary.sourcesFor(Prepaid) on the
+    // backend is the one place a new source gets wired in (see its own
+    // doc comment); summing by_source generically here means this KPI
+    // picks up every source added there automatically, with no frontend
+    // change required, instead of silently missing it the way this
+    // computation missed BOT/BXC (and until now, HOLLEY/ECASH4) before.
+    const legacyKwh = Object.entries(prepaidSalesSummary?.by_source ?? {}).reduce(
+      (sum, [source, stat]) => (source === "zeus_prepaid" || source === "mms" ? sum : sum + (stat?.kwh ?? 0)),
+      0,
+    );
 
     // "MMS Prepaid" = Zeus Prepaid (deduped against MMS) + MMS — the
-    // original two-source Prepaid definition. "Legacy Prepaid" = BOT +
-    // BXC, the newer bot-ingested legacy meter sources.
+    // original two-source Prepaid definition. "Legacy Prepaid" is
+    // everything else (see legacyKwh above).
     const mmsPrepaidKwh = zeusPrepaidKwh + mmsKwh;
     const legacyPrepaidKwh = legacyKwh;
     const total = zeusPostpaidKwh + zeusAmrKwh + mmsPrepaidKwh + legacyPrepaidKwh;
