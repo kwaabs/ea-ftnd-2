@@ -368,6 +368,48 @@ export function CustomerSalesOverview({
     };
   }, [postpaidRegionItems, zeusByServiceType]);
 
+  // ── Streetlighting (Zeus tariffclasscode E03) — single source, so no
+  // dedup/merge needed like Postpaid's Zeus+AMR merge above. Mirrors
+  // streetlighting-hub-view.tsx's own region fetch + stats computation
+  // exactly, so this tab's totals match the dedicated hub page.
+  const { data: streetlightingData, isLoading: streetlightingLoading } =
+    useZeusBillingAggregate({
+      ...params,
+      groupBy: "regionname",
+      tariffClassCode: "E03",
+    });
+  const streetlightingRegionItems = useMemo(
+    () => streetlightingData || [],
+    [streetlightingData],
+  );
+  const streetlightingTabStats = useMemo(() => {
+    const totalKwh = streetlightingRegionItems.reduce(
+      (s, r) => s + (r.sum_billconsumptionvalue || 0),
+      0,
+    );
+    const totalBilling = streetlightingRegionItems.reduce(
+      (s, r) => s + (r.sum_billamount || 0),
+      0,
+    );
+    const totalCustomers = streetlightingRegionItems.reduce(
+      (s, r) => s + (r.customer_count || 0),
+      0,
+    );
+    return {
+      totalKwh,
+      totalBilling,
+      totalCustomers,
+      avgKwh: totalCustomers > 0 ? totalKwh / totalCustomers : 0,
+    };
+  }, [streetlightingRegionItems]);
+  const streetlightingByConsumption = useMemo(
+    () =>
+      [...streetlightingRegionItems]
+        .sort((a, b) => (b.sum_billconsumptionvalue || 0) - (a.sum_billconsumptionvalue || 0))
+        .slice(0, 12),
+    [streetlightingRegionItems],
+  );
+
   // ── MMS stats ──
   const mmsStats = useMemo(() => {
     if (!mmsItems.length && !mmsNationalItems.length)
@@ -975,7 +1017,7 @@ export function CustomerSalesOverview({
       <div className="space-y-6">
         {/* ── REGION BREAKDOWN TABS ── */}
         <Tabs defaultValue="combined" className="w-full">
-          <TabsList className="grid w-full grid-cols-3 mb-4">
+          <TabsList className="grid w-full grid-cols-4 mb-4">
             <TabsTrigger
               value="combined"
               className="data-[state=active]:text-purple-700"
@@ -993,6 +1035,12 @@ export function CustomerSalesOverview({
               className="data-[state=active]:text-emerald-700"
             >
               Prepaid
+            </TabsTrigger>
+            <TabsTrigger
+              value="streetlighting"
+              className="data-[state=active]:text-yellow-700"
+            >
+              Streetlighting
             </TabsTrigger>
           </TabsList>
 
@@ -2099,6 +2147,226 @@ export function CustomerSalesOverview({
                           </td>
                           <td className="py-2.5 pl-4 text-right font-semibold text-green-700 tabular-nums">
                             {formatMoney(mmsStats.totalCredit)}
+                          </td>
+                        </tr>
+                      </tfoot>
+                    </table>
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+          </TabsContent>
+
+          {/* ── STREETLIGHTING TAB (Zeus tariffclasscode E03) ── */}
+          <TabsContent value="streetlighting" className="space-y-6 mt-6">
+            <div className="flex items-center justify-between gap-3 flex-wrap">
+              <div>
+                <p className="text-sm font-medium">Streetlighting</p>
+                <p className="text-xs text-muted-foreground">
+                  Zeus billing — flat-rate, MDA-billed accounts (tariff class E03)
+                </p>
+              </div>
+              <Link
+                href="/customer-sales/streetlighting"
+                className="inline-flex items-center gap-1.5 rounded-md bg-yellow-600 hover:bg-yellow-700 px-3 py-1.5 text-xs font-medium text-white"
+              >
+                Open Streetlighting hub
+                <ArrowRight className="h-3.5 w-3.5" />
+              </Link>
+            </div>
+
+            <div className="grid gap-4 md:grid-cols-2">
+              <Card className="border-dashed">
+                <CardContent className="pt-4 pb-4">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-2">
+                      <Zap className="h-4 w-4 text-muted-foreground" />
+                      <span className="text-sm text-muted-foreground font-medium">
+                        Total Consumption
+                      </span>
+                    </div>
+                    {streetlightingLoading ? (
+                      <Skeleton className="h-5 w-28" />
+                    ) : (
+                      <span className="text-base font-semibold text-yellow-700">
+                        {formatKwhRaw(streetlightingTabStats.totalKwh)}
+                      </span>
+                    )}
+                  </div>
+                </CardContent>
+              </Card>
+              <Card className="border-dashed">
+                <CardContent className="pt-4 pb-4">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-2">
+                      <DollarSign className="h-4 w-4 text-muted-foreground" />
+                      <span className="text-sm text-muted-foreground font-medium">
+                        Total Billing
+                      </span>
+                    </div>
+                    {streetlightingLoading ? (
+                      <Skeleton className="h-5 w-28" />
+                    ) : (
+                      <span className="text-base font-semibold text-yellow-700">
+                        {formatMoney(streetlightingTabStats.totalBilling)}
+                      </span>
+                    )}
+                  </div>
+                </CardContent>
+              </Card>
+            </div>
+
+            <Card>
+              <CardHeader>
+                <CardTitle>Consumption by region (Zeus Streetlighting)</CardTitle>
+                <CardDescription>
+                  Billed kWh and accounts per region — tariff class E03 only
+                </CardDescription>
+              </CardHeader>
+              <CardContent>
+                {streetlightingLoading ? (
+                  <Skeleton className="h-[320px] w-full" />
+                ) : streetlightingByConsumption.length === 0 ? (
+                  <p className="text-sm text-muted-foreground py-12 text-center">
+                    No Streetlighting aggregate data for this period.
+                  </p>
+                ) : (
+                  <ResponsiveContainer width="100%" height={320}>
+                    <BarChart
+                      data={streetlightingByConsumption}
+                      margin={{ top: 40, right: 8, left: 8, bottom: 80 }}
+                    >
+                      <CartesianGrid strokeDasharray="3 3" vertical={false} />
+                      <XAxis
+                        dataKey="regionname"
+                        angle={-35}
+                        textAnchor="end"
+                        tick={{ fontSize: 11 }}
+                        interval={0}
+                      />
+                      <YAxis
+                        tickFormatter={(v) => `${(v / 1_000_000).toFixed(0)}M`}
+                        tick={{ fontSize: 11 }}
+                      />
+                      <Tooltip
+                        formatter={(v: number, name: string) =>
+                          name === "customer_count"
+                            ? [formatNumber(v), "Customers"]
+                            : [formatKwhRaw(v), "Consumption"]
+                        }
+                      />
+                      <Bar
+                        dataKey="sum_billconsumptionvalue"
+                        radius={[6, 6, 0, 0]}
+                        isAnimationActive={false}
+                        fill="#ca8a04"
+                      >
+                        <LabelList
+                          dataKey="sum_billconsumptionvalue"
+                          content={(props) => (
+                            <DualValueLabel {...props} data={streetlightingByConsumption} />
+                          )}
+                        />
+                        {streetlightingByConsumption.map((row, i) => (
+                          <Cell key={row.regionname || i} fill="#ca8a04" />
+                        ))}
+                      </Bar>
+                    </BarChart>
+                  </ResponsiveContainer>
+                )}
+              </CardContent>
+            </Card>
+
+            <Card>
+              <CardHeader>
+                <CardTitle>Streetlighting by region</CardTitle>
+                <CardDescription>
+                  Full regional breakdown, sorted by consumption
+                </CardDescription>
+              </CardHeader>
+              <CardContent>
+                {streetlightingLoading ? (
+                  <Skeleton className="h-48 w-full" />
+                ) : (
+                  <div className="overflow-x-auto">
+                    <table className="w-full text-sm">
+                      <thead>
+                        <tr className="border-b">
+                          <th className="text-left py-2 pr-4 font-medium text-muted-foreground">
+                            Region
+                          </th>
+                          <th className="text-right py-2 px-4 font-medium text-yellow-700">
+                            Consumption (kWh)
+                          </th>
+                          <th className="text-right py-2 px-4 font-medium text-muted-foreground">
+                            Customers
+                          </th>
+                          <th className="text-right py-2 px-4 font-medium text-muted-foreground">
+                            Billing
+                          </th>
+                          <th className="text-right py-2 pl-4 font-medium text-muted-foreground">
+                            kWh Share
+                          </th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {[...streetlightingRegionItems]
+                          .sort(
+                            (a, b) =>
+                              (b.sum_billconsumptionvalue || 0) - (a.sum_billconsumptionvalue || 0),
+                          )
+                          .map((item, idx) => {
+                            const pct =
+                              streetlightingTabStats.totalKwh > 0
+                                ? ((item.sum_billconsumptionvalue || 0) /
+                                    streetlightingTabStats.totalKwh) *
+                                  100
+                                : 0;
+                            return (
+                              <tr key={idx} className="border-b last:border-0 hover:bg-muted/40">
+                                <td className="py-2.5 pr-4 font-medium">
+                                  {item.regionname || "Unknown"}
+                                </td>
+                                <td className="py-2.5 px-4 text-right font-semibold text-yellow-700 tabular-nums">
+                                  {formatKwhRaw(item.sum_billconsumptionvalue)}
+                                </td>
+                                <td className="py-2.5 px-4 text-right tabular-nums">
+                                  {formatNumber(item.customer_count)}
+                                </td>
+                                <td className="py-2.5 px-4 text-right text-green-700 tabular-nums">
+                                  {formatMoney(item.sum_billamount)}
+                                </td>
+                                <td className="py-2.5 pl-4 text-right">
+                                  <div className="flex items-center justify-end gap-2">
+                                    <div className="w-20 h-1.5 bg-muted rounded-full overflow-hidden">
+                                      <div
+                                        className="h-full bg-yellow-500 rounded-full"
+                                        style={{ width: `${pct}%` }}
+                                      />
+                                    </div>
+                                    <span className="text-xs text-muted-foreground w-10 text-right">
+                                      {pct.toFixed(1)}%
+                                    </span>
+                                  </div>
+                                </td>
+                              </tr>
+                            );
+                          })}
+                      </tbody>
+                      <tfoot>
+                        <tr className="border-t bg-muted/30">
+                          <td className="py-2.5 pr-4 font-semibold">Total</td>
+                          <td className="py-2.5 px-4 text-right font-bold text-yellow-700 tabular-nums">
+                            {formatKwhRaw(streetlightingTabStats.totalKwh)}
+                          </td>
+                          <td className="py-2.5 px-4 text-right font-semibold tabular-nums">
+                            {formatNumber(streetlightingTabStats.totalCustomers)}
+                          </td>
+                          <td className="py-2.5 px-4 text-right font-semibold text-green-700 tabular-nums">
+                            {formatMoney(streetlightingTabStats.totalBilling)}
+                          </td>
+                          <td className="py-2.5 pl-4 text-right text-xs text-muted-foreground">
+                            100%
                           </td>
                         </tr>
                       </tfoot>
