@@ -52,6 +52,13 @@ export default function CustomerSalesPage() {
       accent: "border-emerald-200 bg-emerald-50/60 text-emerald-900",
       linkClass: "bg-emerald-600 hover:bg-emerald-700",
     },
+    {
+      href: "/customer-sales/streetlighting",
+      title: "Streetlighting",
+      description: "Zeus Sales, tariff class E03 — flat-rate, MDA-billed consumption",
+      accent: "border-yellow-200 bg-yellow-50/60 text-yellow-900",
+      linkClass: "bg-yellow-600 hover:bg-yellow-700",
+    },
   ];
 
   return (
@@ -68,7 +75,7 @@ export default function CustomerSalesPage() {
 
         <CustomerSalesOverview dateRange={dateRange} />
 
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
           {categories.map((category) => (
             <div
               key={category.href}
