@@ -342,6 +342,13 @@ export function OverviewMainTabV3({
     region: customerSalesParams.region,
   });
 
+  const { data: streetlightingSalesSummary } = useSalesSummary({
+    category: "streetlighting",
+    dateFrom: dateRange.start,
+    dateTo: dateRange.end,
+    region: customerSalesParams.region,
+  });
+
   const energyPurchases = useMemo(() => {
     if (!aggregateData?.rawData || aggregateData.rawData.length === 0) {
       return 0;
@@ -365,7 +372,7 @@ export function OverviewMainTabV3({
   // else sums directly). Replaces a hand-rolled Zeus+MMS-only computation
   // that silently missed BOT/BXC once those sources were added.
   const energySalesBreakdown = useMemo(() => {
-    if (!prepaidSalesSummary && !postpaidSalesSummary) return null;
+    if (!prepaidSalesSummary && !postpaidSalesSummary && !streetlightingSalesSummary) return null;
 
     const zeusPostpaidKwh = postpaidSalesSummary?.by_source?.zeus_postpaid?.kwh ?? 0;
     const zeusAmrKwh = postpaidSalesSummary?.by_source?.zeus_amr?.kwh ?? 0;
@@ -390,7 +397,13 @@ export function OverviewMainTabV3({
     // everything else (see legacyKwh above).
     const mmsPrepaidKwh = zeusPrepaidKwh + mmsKwh;
     const legacyPrepaidKwh = legacyKwh;
-    const total = zeusPostpaidKwh + zeusAmrKwh + mmsPrepaidKwh + legacyPrepaidKwh;
+    // Streetlighting (Zeus Sales tariffclasscode E03) — flat-rate,
+    // MDA-billed consumption, kept as its own salessummary Category
+    // rather than folded into Postpaid/Prepaid (see
+    // ea-bknd-3/internal/salessummary's Streetlighting Category doc
+    // comment). Summed into the same "all sales" total shown here.
+    const streetlightingKwh = streetlightingSalesSummary?.by_source?.zeus_streetlighting?.kwh ?? 0;
+    const total = zeusPostpaidKwh + zeusAmrKwh + mmsPrepaidKwh + legacyPrepaidKwh + streetlightingKwh;
     if (total === 0) {
       return null;
     }
@@ -400,9 +413,10 @@ export function OverviewMainTabV3({
       zeusAmrKwh,
       mmsPrepaidKwh,
       legacyPrepaidKwh,
+      streetlightingKwh,
       total,
     };
-  }, [prepaidSalesSummary, postpaidSalesSummary]);
+  }, [prepaidSalesSummary, postpaidSalesSummary, streetlightingSalesSummary]);
 
   const energySales = energySalesBreakdown?.total ?? null;
 
@@ -7966,6 +7980,12 @@ export function OverviewMainTabV3({
                   >
                     Legacy Prepaid {formatSalesKwh(energySalesBreakdown.legacyPrepaidKwh)}
                   </Badge>
+                  <Badge
+                    variant="outline"
+                    className="text-[10px] gap-1 border-yellow-300 text-yellow-700"
+                  >
+                    Streetlighting {formatSalesKwh(energySalesBreakdown.streetlightingKwh)}
+                  </Badge>
                 </div>
               )}
             </CardContent>
@@ -8329,6 +8349,12 @@ export function OverviewMainTabV3({
                   className="text-[10px] gap-1 border-amber-300 text-amber-700"
                 >
                   Legacy Prepaid {formatSalesKwh(energySalesBreakdown.legacyPrepaidKwh)}
+                </Badge>
+                <Badge
+                  variant="outline"
+                  className="text-[10px] gap-1 border-yellow-300 text-yellow-700"
+                >
+                  Streetlighting {formatSalesKwh(energySalesBreakdown.streetlightingKwh)}
                 </Badge>
               </div>
             )}

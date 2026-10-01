@@ -6,7 +6,7 @@ import { fetchWithTimeout } from "@/lib/utils"
 
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8780"
 
-export type SalesSummaryCategory = "prepaid" | "postpaid"
+export type SalesSummaryCategory = "prepaid" | "postpaid" | "streetlighting"
 export type SalesSummaryGroupBy = "region" | "district"
 
 interface SalesSummaryParams {
