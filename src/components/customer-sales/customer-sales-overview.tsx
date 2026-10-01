@@ -177,6 +177,7 @@ export function CustomerSalesOverview({
   const [postpaidChartKind, setPostpaidChartKind] = useState<ChartKind>("bar");
   const [selectedPostpaidRegion, setSelectedPostpaidRegion] = useState<string | null>(null);
   const [selectedPostpaidDistrict, setSelectedPostpaidDistrict] = useState<string | null>(null);
+  const [selectedStreetlightingRegion, setSelectedStreetlightingRegion] = useState<string | null>(null);
   const [sourceMetric, setSourceMetric] = useState<"kwh" | "customers" | "billing">("kwh");
 
   // Zeus's own metermodeltype=AMR billing records are a subset of Zeus data,
@@ -409,6 +410,17 @@ export function CustomerSalesOverview({
         .slice(0, 12),
     [streetlightingRegionItems],
   );
+
+  // District drill-down for the Streetlighting chart/table — only fetched
+  // once a region is clicked, same pattern as postpaidDistrictData above.
+  const { data: streetlightingDistrictData, isLoading: streetlightingDistrictLoading } =
+    useZeusBillingAggregate({
+      ...params,
+      groupBy: "districtname",
+      region: selectedStreetlightingRegion || undefined,
+      tariffClassCode: "E03",
+      enabled: Boolean(selectedStreetlightingRegion),
+    });
 
   // ── MMS stats ──
   const mmsStats = useMemo(() => {
@@ -2220,7 +2232,7 @@ export function CustomerSalesOverview({
               <CardHeader>
                 <CardTitle>Consumption by region (Zeus Streetlighting)</CardTitle>
                 <CardDescription>
-                  Billed kWh and accounts per region — tariff class E03 only
+                  Billed kWh and accounts per region — click a region (bar chart or table row below) to drill into districts
                 </CardDescription>
               </CardHeader>
               <CardContent>
@@ -2258,8 +2270,15 @@ export function CustomerSalesOverview({
                       <Bar
                         dataKey="sum_billconsumptionvalue"
                         radius={[6, 6, 0, 0]}
+                        cursor="pointer"
                         isAnimationActive={false}
-                        fill="#ca8a04"
+                        onClick={(data: { regionname?: string }) => {
+                          if (data?.regionname) {
+                            setSelectedStreetlightingRegion((prev) =>
+                              prev === data.regionname ? null : data.regionname!,
+                            );
+                          }
+                        }}
                       >
                         <LabelList
                           dataKey="sum_billconsumptionvalue"
@@ -2268,7 +2287,14 @@ export function CustomerSalesOverview({
                           )}
                         />
                         {streetlightingByConsumption.map((row, i) => (
-                          <Cell key={row.regionname || i} fill="#ca8a04" />
+                          <Cell
+                            key={row.regionname || i}
+                            fill={
+                              selectedStreetlightingRegion === row.regionname
+                                ? "#854d0e"
+                                : "#ca8a04"
+                            }
+                          />
                         ))}
                       </Bar>
                     </BarChart>
@@ -2277,11 +2303,88 @@ export function CustomerSalesOverview({
               </CardContent>
             </Card>
 
+            {selectedStreetlightingRegion && (
+              <Card>
+                <CardHeader className="flex flex-row items-center justify-between gap-2">
+                  <div>
+                    <CardTitle>District breakdown — {selectedStreetlightingRegion}</CardTitle>
+                    <CardDescription>
+                      Consumption and billing by district
+                    </CardDescription>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => setSelectedStreetlightingRegion(null)}
+                    className="text-xs text-yellow-700 hover:underline"
+                  >
+                    Clear
+                  </button>
+                </CardHeader>
+                <CardContent>
+                  {streetlightingDistrictLoading ? (
+                    <Skeleton className="h-48 w-full" />
+                  ) : !streetlightingDistrictData || streetlightingDistrictData.length === 0 ? (
+                    <p className="text-sm text-muted-foreground py-8 text-center">
+                      No district data for {selectedStreetlightingRegion}.
+                    </p>
+                  ) : (
+                    <div className="overflow-x-auto">
+                      <table className="w-full text-sm">
+                        <thead>
+                          <tr className="border-b">
+                            <th className="text-left py-2 pr-4 font-medium text-muted-foreground">
+                              District
+                            </th>
+                            <th className="text-right py-2 px-4 font-medium text-yellow-700">
+                              Consumption (kWh)
+                            </th>
+                            <th className="text-right py-2 px-4 font-medium text-muted-foreground">
+                              Customers
+                            </th>
+                            <th className="text-right py-2 pl-4 font-medium text-muted-foreground">
+                              Billing
+                            </th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {[...streetlightingDistrictData]
+                            .sort(
+                              (a, b) =>
+                                (b.sum_billconsumptionvalue || 0) -
+                                (a.sum_billconsumptionvalue || 0),
+                            )
+                            .map((item) => (
+                              <tr
+                                key={item.districtname || "unknown"}
+                                className="border-b last:border-0 hover:bg-muted/40"
+                              >
+                                <td className="py-2.5 pr-4 font-medium">
+                                  {item.districtname || "—"}
+                                </td>
+                                <td className="py-2.5 px-4 text-right font-semibold text-yellow-700 tabular-nums">
+                                  {formatKwhRaw(item.sum_billconsumptionvalue)}
+                                </td>
+                                <td className="py-2.5 px-4 text-right tabular-nums">
+                                  {formatNumber(item.customer_count)}
+                                </td>
+                                <td className="py-2.5 pl-4 text-right text-green-700 tabular-nums">
+                                  {formatMoney(item.sum_billamount)}
+                                </td>
+                              </tr>
+                            ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  )}
+                </CardContent>
+              </Card>
+            )}
+
             <Card>
               <CardHeader>
                 <CardTitle>Streetlighting by region</CardTitle>
                 <CardDescription>
-                  Full regional breakdown, sorted by consumption
+                  Full regional breakdown, sorted by consumption — click a region to drill into districts
                 </CardDescription>
               </CardHeader>
               <CardContent>
@@ -2322,8 +2425,22 @@ export function CustomerSalesOverview({
                                     streetlightingTabStats.totalKwh) *
                                   100
                                 : 0;
+                            const isSelected = selectedStreetlightingRegion === item.regionname;
                             return (
-                              <tr key={idx} className="border-b last:border-0 hover:bg-muted/40">
+                              <tr
+                                key={idx}
+                                onClick={() => {
+                                  if (item.regionname) {
+                                    setSelectedStreetlightingRegion((prev) =>
+                                      prev === item.regionname ? null : item.regionname!,
+                                    );
+                                  }
+                                }}
+                                className={cn(
+                                  "border-b last:border-0 hover:bg-muted/40 cursor-pointer",
+                                  isSelected && "bg-yellow-50",
+                                )}
+                              >
                                 <td className="py-2.5 pr-4 font-medium">
                                   {item.regionname || "Unknown"}
                                 </td>
