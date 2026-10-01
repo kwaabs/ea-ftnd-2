@@ -8034,11 +8034,18 @@ export function OverviewMainTabV3({
                 Sales not yet available
               </p>
             ) : (
-              <ResponsiveContainer width="100%" height={90}>
+              <ResponsiveContainer width="100%" height={130}>
                 <RechartsBarChart
                   data={[
-                    { name: "Purchases", value: energyPurchases },
-                    { name: "Sales", value: energySales },
+                    { name: "Purchases", purchases: energyPurchases },
+                    {
+                      name: "Sales",
+                      nonAmrPostpaid: energySalesBreakdown?.zeusPostpaidKwh ?? 0,
+                      amrPostpaid: energySalesBreakdown?.zeusAmrKwh ?? 0,
+                      mmsPrepaid: energySalesBreakdown?.mmsPrepaidKwh ?? 0,
+                      legacyPrepaid: energySalesBreakdown?.legacyPrepaidKwh ?? 0,
+                      streetlighting: energySalesBreakdown?.streetlightingKwh ?? 0,
+                    },
                   ]}
                   layout="vertical"
                   margin={{ top: 4, right: 48, left: 0, bottom: 4 }}
@@ -8052,17 +8059,23 @@ export function OverviewMainTabV3({
                     axisLine={false}
                     tickLine={false}
                   />
-                  <Tooltip formatter={(value: number) => [`${formatNumber(value)} kWh`, ""]} />
-                  <Bar dataKey="value" radius={[0, 4, 4, 0]} barSize={22}>
-                    <Cell fill="#10b981" />
-                    <Cell fill="#2563eb" />
-                    <LabelList
-                      dataKey="value"
-                      position="right"
-                      formatter={(v: number) => `${formatNumber(v)} kWh`}
-                      className="fill-foreground text-xs font-semibold"
-                    />
-                  </Bar>
+                  <Tooltip
+                    formatter={(value: number, name: string) => [`${formatNumber(value)} kWh`, name]}
+                  />
+                  <Legend wrapperStyle={{ fontSize: 10 }} iconSize={8} />
+                  <Bar dataKey="purchases" name="Purchases" fill="#10b981" radius={[0, 4, 4, 0]} barSize={22} />
+                  <Bar dataKey="nonAmrPostpaid" name="Non-AMR Postpaid" stackId="sales" fill="#2563eb" barSize={22} />
+                  <Bar dataKey="amrPostpaid" name="AMR Postpaid" stackId="sales" fill="#4f46e5" barSize={22} />
+                  <Bar dataKey="mmsPrepaid" name="MMS Prepaid" stackId="sales" fill="#059669" barSize={22} />
+                  <Bar dataKey="legacyPrepaid" name="Legacy Prepaid" stackId="sales" fill="#d97706" barSize={22} />
+                  <Bar
+                    dataKey="streetlighting"
+                    name="Streetlighting"
+                    stackId="sales"
+                    fill="#ca8a04"
+                    radius={[0, 4, 4, 0]}
+                    barSize={22}
+                  />
                 </RechartsBarChart>
               </ResponsiveContainer>
             )}
