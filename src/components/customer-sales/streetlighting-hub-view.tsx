@@ -70,6 +70,22 @@ function formatRowKwh(value: number | null | undefined) {
   return value.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })
 }
 
+const MONTH_NAMES = [
+  "Jan", "Feb", "Mar", "Apr", "May", "Jun",
+  "Jul", "Aug", "Sep", "Oct", "Nov", "Dec",
+]
+
+// Zeus Sales is a per-bill record, not a daily meter reading — there is no
+// day-precision date column, only billingMonth/billingYear (the billing
+// period this bill covers). Same helper/convention used by every other
+// Zeus billing table in this app (account-detail-view.tsx,
+// customer-sales-detail.tsx, service-point-detail-view.tsx).
+function formatBillingPeriod(month: number | null | undefined, year: number | null | undefined) {
+  if (!month || !year) return "—"
+  const name = MONTH_NAMES[month - 1]
+  return name ? `${name} ${year}` : `${month}/${year}`
+}
+
 function formatNumber(value: number | null | undefined) {
   if (value === null || value === undefined) return "0"
   return (value || 0).toLocaleString("en-US", { maximumFractionDigits: 0 })
@@ -240,8 +256,10 @@ export function StreetlightingHubView() {
         customer_name: r.customerName,
         account_code: r.accountCode,
         service_point_code: r.servicePointCode,
+        service_class: r.serviceClass,
         region: r.regionName,
         district: r.districtName,
+        billing_period: formatBillingPeriod(r.billingMonth as number | undefined, r.billingYear as number | undefined),
         bill_consumption_kwh: r.billConsumptionValue,
       }))
       const filename = `${(effectiveRegion || "all").replace(/\s+/g, "-").toLowerCase()}-streetlighting`
@@ -491,8 +509,10 @@ export function StreetlightingHubView() {
                     </TableHead>
                     <TableHead>Account</TableHead>
                     <TableHead>Service Point</TableHead>
+                    <TableHead>Service Class</TableHead>
                     <TableHead>Region</TableHead>
                     <TableHead>District</TableHead>
+                    <TableHead>Billing Period</TableHead>
                     <TableHead className="text-right bg-yellow-50">
                       <SortButton field="billconsumptionvalue" activeField={sortField} onToggle={toggleSort}>
                         <span className="text-yellow-700">kWh</span>
@@ -504,7 +524,7 @@ export function StreetlightingHubView() {
                   {detailLoading ? (
                     [...Array(10)].map((_, i) => (
                       <TableRow key={i}>
-                        {[...Array(6)].map((_, j) => (
+                        {[...Array(8)].map((_, j) => (
                           <TableCell key={j}>
                             <Skeleton className="h-4 w-full" />
                           </TableCell>
@@ -513,7 +533,7 @@ export function StreetlightingHubView() {
                     ))
                   ) : rows.length === 0 ? (
                     <TableRow>
-                      <TableCell colSpan={6} className="text-center py-12 text-muted-foreground">
+                      <TableCell colSpan={8} className="text-center py-12 text-muted-foreground">
                         No records found for the selected date range
                       </TableCell>
                     </TableRow>
@@ -525,8 +545,12 @@ export function StreetlightingHubView() {
                         </TableCell>
                         <TableCell className="font-mono text-xs">{r.accountCode || "—"}</TableCell>
                         <TableCell className="font-mono text-xs">{r.servicePointCode || "—"}</TableCell>
+                        <TableCell className="text-xs text-muted-foreground">{r.serviceClass || "—"}</TableCell>
                         <TableCell className="text-xs text-muted-foreground">{r.regionName || "—"}</TableCell>
                         <TableCell className="text-xs text-muted-foreground">{r.districtName || "—"}</TableCell>
+                        <TableCell className="text-xs text-muted-foreground">
+                          {formatBillingPeriod(r.billingMonth, r.billingYear)}
+                        </TableCell>
                         <TableCell className="text-right bg-yellow-50/50">
                           <span className="font-bold text-yellow-700 tabular-nums text-sm">
                             {formatRowKwh(r.billConsumptionValue)}
