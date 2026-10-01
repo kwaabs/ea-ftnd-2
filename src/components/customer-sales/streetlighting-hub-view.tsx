@@ -24,8 +24,9 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { useAppStore } from "@/stores/app-store"
-import { useZeusBillingAggregate } from "@/hooks/api/use-zeus-billing-aggregate-api"
+import { useZeusBillingAggregate, type ZeusBillingGroupBy } from "@/hooks/api/use-zeus-billing-aggregate-api"
 import { useZeusBillingDetail } from "@/hooks/api/use-zeus-billing-detail-api"
 import { normalizeRegionName, shortRegionLabel } from "@/hooks/use-resolved-region-name"
 import { exportToCSV, exportToExcel } from "@/lib/export-utils"
@@ -103,6 +104,21 @@ type ExportFormat = "csv" | "xlsx"
 
 const PAGE_SIZE = 50
 
+// Records table grouping — "list" is the existing flat per-bill view;
+// every other mode switches the table to aggregated rows (one per group)
+// via the same aggregate endpoint already powering the region chart/table
+// above, rather than fetching and summing individual bills client-side.
+type GroupByMode = "list" | "region" | "district" | "period" | "region_period" | "district_period"
+
+const GROUP_BY_OPTIONS: { value: GroupByMode; label: string; dims: ZeusBillingGroupBy[] }[] = [
+  { value: "list", label: "List (individual bills)", dims: [] },
+  { value: "region", label: "Region", dims: ["regionname"] },
+  { value: "district", label: "District", dims: ["districtname"] },
+  { value: "period", label: "Billing period", dims: ["billingyear", "billingmonth"] },
+  { value: "region_period", label: "Region + billing period", dims: ["regionname", "billingyear", "billingmonth"] },
+  { value: "district_period", label: "District + billing period", dims: ["districtname", "billingyear", "billingmonth"] },
+]
+
 function SortButton({
   field,
   activeField,
@@ -178,6 +194,9 @@ export function StreetlightingHubView() {
   const [sortField, setSortField] = useState<SortField | null>(null)
   const [sortOrder, setSortOrder] = useState<SortOrder>("desc")
   const [exporting, setExporting] = useState<ExportFormat | null>(null)
+  const [groupByMode, setGroupByMode] = useState<GroupByMode>("list")
+  const groupByOption = GROUP_BY_OPTIONS.find((o) => o.value === groupByMode) ?? GROUP_BY_OPTIONS[0]
+  const isGrouped = groupByMode !== "list"
 
   useEffect(() => {
     const t = setTimeout(() => setDebouncedSearch(searchTerm.trim()), 300)
@@ -198,11 +217,32 @@ export function StreetlightingHubView() {
     limit: PAGE_SIZE,
     sortBy: sortField ?? undefined,
     sortDir: sortField ? sortOrder : undefined,
+    enabled: !isGrouped,
   })
 
   const rows = detailData?.data ?? []
   const total = detailData?.total ?? 0
   const totalPages = Math.max(1, detailData?.total_pages ?? 1)
+
+  // Grouped view — reuses the aggregate endpoint (same one powering the
+  // region chart/table above) instead of fetching and summing individual
+  // bills client-side. Search/sort/pagination don't apply to this mode:
+  // the aggregate endpoint doesn't support search, and the group count is
+  // small enough (at most a few hundred for district+period) to render in
+  // one page, sorted by kWh desc like every other aggregate table here.
+  const { data: groupedData, isLoading: groupedLoading } = useZeusBillingAggregate({
+    dateFrom: dateRange.start,
+    dateTo: dateRange.end,
+    tariffClassCode: STREETLIGHTING_TARIFF_CODE,
+    region: effectiveRegion,
+    groupBy: groupByOption.dims,
+    enabled: isGrouped,
+  })
+
+  const groupedRows = useMemo(
+    () => [...(groupedData || [])].sort((a, b) => (b.sum_billconsumptionvalue || 0) - (a.sum_billconsumptionvalue || 0)),
+    [groupedData],
+  )
 
   const toggleSort = (field: SortField) => {
     if (sortField === field) {
@@ -460,12 +500,31 @@ export function StreetlightingHubView() {
           <div className="flex items-center justify-between flex-wrap gap-3">
             <div>
               <CardTitle>Streetlighting Records</CardTitle>
-              <CardDescription>Individual E03 billing records</CardDescription>
+              <CardDescription>
+                {isGrouped ? `Grouped by ${groupByOption.label.toLowerCase()}` : "Individual E03 billing records"}
+              </CardDescription>
             </div>
             <div className="flex items-center gap-2">
+              <Select value={groupByMode} onValueChange={(v) => setGroupByMode(v as GroupByMode)}>
+                <SelectTrigger className="w-[220px]">
+                  <SelectValue placeholder="Group by" />
+                </SelectTrigger>
+                <SelectContent>
+                  {GROUP_BY_OPTIONS.map((o) => (
+                    <SelectItem key={o.value} value={o.value}>
+                      {o.label}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
               <DropdownMenu>
                 <DropdownMenuTrigger asChild>
-                  <Button variant="outline" size="sm" disabled={exporting !== null || total === 0}>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    disabled={exporting !== null || total === 0 || isGrouped}
+                    title={isGrouped ? "Switch to the individual-bills view to export" : undefined}
+                  >
                     {exporting ? <Loader2 className="h-4 w-4 mr-1.5 animate-spin" /> : <Download className="h-4 w-4 mr-1.5" />}
                     Download
                     <ChevronDown className="h-3.5 w-3.5 ml-1" />
@@ -481,107 +540,172 @@ export function StreetlightingHubView() {
                 </DropdownMenuContent>
               </DropdownMenu>
               <Badge variant="outline" className="text-sm font-medium px-3 py-1 border-yellow-300 text-yellow-700">
-                {total.toLocaleString()} records
+                {isGrouped ? `${groupedRows.length.toLocaleString()} groups` : `${total.toLocaleString()} records`}
               </Badge>
             </div>
           </div>
         </CardHeader>
         <CardContent className="space-y-4">
-          <div className="relative flex-1">
-            <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
-            <Input
-              placeholder="Search by customer/MDA name, account, service point..."
-              value={searchTerm}
-              onChange={(e) => setSearchTerm(e.target.value)}
-              className="pl-8"
-            />
-          </div>
+          {!isGrouped && (
+            <div className="relative flex-1">
+              <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
+              <Input
+                placeholder="Search by customer/MDA name, account, service point..."
+                value={searchTerm}
+                onChange={(e) => setSearchTerm(e.target.value)}
+                className="pl-8"
+              />
+            </div>
+          )}
 
           <div className="border rounded-lg overflow-hidden">
             <div className="overflow-x-auto max-h-[500px] overflow-y-auto">
-              <Table>
-                <TableHeader className="sticky top-0 z-10 bg-background">
-                  <TableRow className="bg-muted/40">
-                    <TableHead>
-                      <SortButton field="customername" activeField={sortField} onToggle={toggleSort}>
-                        Customer / MDA
-                      </SortButton>
-                    </TableHead>
-                    <TableHead>Account</TableHead>
-                    <TableHead>Service Point</TableHead>
-                    <TableHead>Service Class</TableHead>
-                    <TableHead>Region</TableHead>
-                    <TableHead>District</TableHead>
-                    <TableHead>Billing Period</TableHead>
-                    <TableHead className="text-right bg-yellow-50">
-                      <SortButton field="billconsumptionvalue" activeField={sortField} onToggle={toggleSort}>
+              {isGrouped ? (
+                <Table>
+                  <TableHeader className="sticky top-0 z-10 bg-background">
+                    <TableRow className="bg-muted/40">
+                      {groupByOption.dims.includes("regionname") && <TableHead>Region</TableHead>}
+                      {groupByOption.dims.includes("districtname") && <TableHead>District</TableHead>}
+                      {groupByOption.dims.includes("billingyear") && <TableHead>Billing Period</TableHead>}
+                      <TableHead className="text-right">Accounts</TableHead>
+                      <TableHead className="text-right">Billing</TableHead>
+                      <TableHead className="text-right bg-yellow-50">
                         <span className="text-yellow-700">kWh</span>
-                      </SortButton>
-                    </TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {detailLoading ? (
-                    [...Array(10)].map((_, i) => (
-                      <TableRow key={i}>
-                        {[...Array(8)].map((_, j) => (
-                          <TableCell key={j}>
-                            <Skeleton className="h-4 w-full" />
-                          </TableCell>
-                        ))}
-                      </TableRow>
-                    ))
-                  ) : rows.length === 0 ? (
-                    <TableRow>
-                      <TableCell colSpan={8} className="text-center py-12 text-muted-foreground">
-                        No records found for the selected date range
-                      </TableCell>
+                      </TableHead>
                     </TableRow>
-                  ) : (
-                    rows.map((r, idx) => (
-                      <TableRow key={`${r.accountCode}-${r.servicePointCode}-${idx}`} className="hover:bg-muted/40">
-                        <TableCell className="font-medium truncate max-w-[200px]" title={r.mdaName || r.customerName}>
-                          {r.mdaName || r.customerName || "—"}
-                        </TableCell>
-                        <TableCell className="font-mono text-xs">{r.accountCode || "—"}</TableCell>
-                        <TableCell className="font-mono text-xs">{r.servicePointCode || "—"}</TableCell>
-                        <TableCell className="text-xs text-muted-foreground">{r.serviceClass || "—"}</TableCell>
-                        <TableCell className="text-xs text-muted-foreground">{r.regionName || "—"}</TableCell>
-                        <TableCell className="text-xs text-muted-foreground">{r.districtName || "—"}</TableCell>
-                        <TableCell className="text-xs text-muted-foreground">
-                          {formatBillingPeriod(r.billingMonth, r.billingYear)}
-                        </TableCell>
-                        <TableCell className="text-right bg-yellow-50/50">
-                          <span className="font-bold text-yellow-700 tabular-nums text-sm">
-                            {formatRowKwh(r.billConsumptionValue)}
-                          </span>
+                  </TableHeader>
+                  <TableBody>
+                    {groupedLoading ? (
+                      [...Array(10)].map((_, i) => (
+                        <TableRow key={i}>
+                          {[...Array(groupByOption.dims.length + 2)].map((_, j) => (
+                            <TableCell key={j}>
+                              <Skeleton className="h-4 w-full" />
+                            </TableCell>
+                          ))}
+                        </TableRow>
+                      ))
+                    ) : groupedRows.length === 0 ? (
+                      <TableRow>
+                        <TableCell colSpan={groupByOption.dims.length + 3} className="text-center py-12 text-muted-foreground">
+                          No records found for the selected date range
                         </TableCell>
                       </TableRow>
-                    ))
-                  )}
-                </TableBody>
-              </Table>
+                    ) : (
+                      groupedRows.map((r, idx) => (
+                        <TableRow key={idx} className="hover:bg-muted/40">
+                          {groupByOption.dims.includes("regionname") && (
+                            <TableCell className="font-medium">{r.regionname || "Unknown"}</TableCell>
+                          )}
+                          {groupByOption.dims.includes("districtname") && (
+                            <TableCell className="font-medium">{r.districtname || "Unknown"}</TableCell>
+                          )}
+                          {groupByOption.dims.includes("billingyear") && (
+                            <TableCell className="text-xs text-muted-foreground">
+                              {formatBillingPeriod(r.billingmonth, r.billingyear)}
+                            </TableCell>
+                          )}
+                          <TableCell className="text-right tabular-nums">{formatNumber(r.customer_count)}</TableCell>
+                          <TableCell className="text-right text-green-700 tabular-nums">
+                            {`₵${(r.sum_billamount || 0).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`}
+                          </TableCell>
+                          <TableCell className="text-right bg-yellow-50/50">
+                            <span className="font-bold text-yellow-700 tabular-nums text-sm">
+                              {formatRowKwh(r.sum_billconsumptionvalue)}
+                            </span>
+                          </TableCell>
+                        </TableRow>
+                      ))
+                    )}
+                  </TableBody>
+                </Table>
+              ) : (
+                <Table>
+                  <TableHeader className="sticky top-0 z-10 bg-background">
+                    <TableRow className="bg-muted/40">
+                      <TableHead>
+                        <SortButton field="customername" activeField={sortField} onToggle={toggleSort}>
+                          Customer / MDA
+                        </SortButton>
+                      </TableHead>
+                      <TableHead>Account</TableHead>
+                      <TableHead>Service Point</TableHead>
+                      <TableHead>Service Class</TableHead>
+                      <TableHead>Region</TableHead>
+                      <TableHead>District</TableHead>
+                      <TableHead>Billing Period</TableHead>
+                      <TableHead className="text-right bg-yellow-50">
+                        <SortButton field="billconsumptionvalue" activeField={sortField} onToggle={toggleSort}>
+                          <span className="text-yellow-700">kWh</span>
+                        </SortButton>
+                      </TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {detailLoading ? (
+                      [...Array(10)].map((_, i) => (
+                        <TableRow key={i}>
+                          {[...Array(8)].map((_, j) => (
+                            <TableCell key={j}>
+                              <Skeleton className="h-4 w-full" />
+                            </TableCell>
+                          ))}
+                        </TableRow>
+                      ))
+                    ) : rows.length === 0 ? (
+                      <TableRow>
+                        <TableCell colSpan={8} className="text-center py-12 text-muted-foreground">
+                          No records found for the selected date range
+                        </TableCell>
+                      </TableRow>
+                    ) : (
+                      rows.map((r, idx) => (
+                        <TableRow key={`${r.accountCode}-${r.servicePointCode}-${idx}`} className="hover:bg-muted/40">
+                          <TableCell className="font-medium truncate max-w-[200px]" title={r.mdaName || r.customerName}>
+                            {r.mdaName || r.customerName || "—"}
+                          </TableCell>
+                          <TableCell className="font-mono text-xs">{r.accountCode || "—"}</TableCell>
+                          <TableCell className="font-mono text-xs">{r.servicePointCode || "—"}</TableCell>
+                          <TableCell className="text-xs text-muted-foreground">{r.serviceClass || "—"}</TableCell>
+                          <TableCell className="text-xs text-muted-foreground">{r.regionName || "—"}</TableCell>
+                          <TableCell className="text-xs text-muted-foreground">{r.districtName || "—"}</TableCell>
+                          <TableCell className="text-xs text-muted-foreground">
+                            {formatBillingPeriod(r.billingMonth, r.billingYear)}
+                          </TableCell>
+                          <TableCell className="text-right bg-yellow-50/50">
+                            <span className="font-bold text-yellow-700 tabular-nums text-sm">
+                              {formatRowKwh(r.billConsumptionValue)}
+                            </span>
+                          </TableCell>
+                        </TableRow>
+                      ))
+                    )}
+                  </TableBody>
+                </Table>
+              )}
             </div>
           </div>
 
-          <div className="flex items-center justify-between text-sm">
-            <span className="text-muted-foreground">
-              Showing {rows.length > 0 ? (page - 1) * PAGE_SIZE + 1 : 0}–{Math.min(page * PAGE_SIZE, total)} of{" "}
-              {total.toLocaleString()} records
-              {detailFetching && !detailLoading ? " · updating…" : ""}
-            </span>
-            <div className="flex items-center gap-2">
-              <Button variant="outline" size="sm" onClick={() => setPage(Math.max(1, page - 1))} disabled={page === 1 || detailFetching}>
-                <ChevronLeft className="h-4 w-4" />
-              </Button>
-              <span className="font-medium px-1">
-                Page {page} of {totalPages.toLocaleString()}
+          {!isGrouped && (
+            <div className="flex items-center justify-between text-sm">
+              <span className="text-muted-foreground">
+                Showing {rows.length > 0 ? (page - 1) * PAGE_SIZE + 1 : 0}–{Math.min(page * PAGE_SIZE, total)} of{" "}
+                {total.toLocaleString()} records
+                {detailFetching && !detailLoading ? " · updating…" : ""}
               </span>
-              <Button variant="outline" size="sm" onClick={() => setPage(page + 1)} disabled={page >= totalPages || detailFetching}>
-                <ChevronRight className="h-4 w-4" />
-              </Button>
+              <div className="flex items-center gap-2">
+                <Button variant="outline" size="sm" onClick={() => setPage(Math.max(1, page - 1))} disabled={page === 1 || detailFetching}>
+                  <ChevronLeft className="h-4 w-4" />
+                </Button>
+                <span className="font-medium px-1">
+                  Page {page} of {totalPages.toLocaleString()}
+                </span>
+                <Button variant="outline" size="sm" onClick={() => setPage(page + 1)} disabled={page >= totalPages || detailFetching}>
+                  <ChevronRight className="h-4 w-4" />
+                </Button>
+              </div>
             </div>
-          </div>
+          )}
         </CardContent>
       </Card>
     </div>
