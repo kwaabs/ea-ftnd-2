@@ -8063,16 +8063,30 @@ export function OverviewMainTabV3({
                     formatter={(value: number, name: string) => [`${formatNumber(value)} kWh`, name]}
                   />
                   <Legend wrapperStyle={{ fontSize: 10 }} iconSize={8} />
-                  <Bar dataKey="purchases" name="Purchases" fill="#475569" radius={[0, 4, 4, 0]} barSize={22} />
+                  {/* Green is reserved for Purchases alone in this chart —
+                      every Sales segment below uses a hue nowhere near it
+                      (and nowhere near each other) so the stack reads at a
+                      glance: blue, indigo, pink, orange, cyan. legendType
+                      "none" keeps Purchases out of the shared legend —
+                      it's already labeled by the Y-axis row, so repeating
+                      it in the legend just duplicated it. */}
+                  <Bar
+                    dataKey="purchases"
+                    name="Purchases"
+                    fill="#16a34a"
+                    radius={[0, 4, 4, 0]}
+                    barSize={22}
+                    legendType="none"
+                  />
                   <Bar dataKey="nonAmrPostpaid" name="Non-AMR Postpaid" stackId="sales" fill="#2563eb" barSize={22} />
                   <Bar dataKey="amrPostpaid" name="AMR Postpaid" stackId="sales" fill="#4f46e5" barSize={22} />
-                  <Bar dataKey="mmsPrepaid" name="MMS Prepaid" stackId="sales" fill="#059669" barSize={22} />
-                  <Bar dataKey="legacyPrepaid" name="Legacy Prepaid" stackId="sales" fill="#d97706" barSize={22} />
+                  <Bar dataKey="mmsPrepaid" name="MMS Prepaid" stackId="sales" fill="#db2777" barSize={22} />
+                  <Bar dataKey="legacyPrepaid" name="Legacy Prepaid" stackId="sales" fill="#ea580c" barSize={22} />
                   <Bar
                     dataKey="streetlighting"
                     name="Streetlighting"
                     stackId="sales"
-                    fill="#ca8a04"
+                    fill="#0891b2"
                     radius={[0, 4, 4, 0]}
                     barSize={22}
                   />
