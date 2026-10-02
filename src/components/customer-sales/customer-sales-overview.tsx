@@ -19,6 +19,8 @@ import { useMmsCustomerSalesAggregate } from "@/hooks/api/use-mms-customer-sales
 import { useBotConsumptionAggregate } from "@/hooks/api/use-bot-consumption-api";
 import { useBxcConsumptionAggregate } from "@/hooks/api/use-bxc-consumption-api";
 import { usePnsConsumptionAggregate } from "@/hooks/api/use-pns-consumption-api";
+import { useHolleyConsumptionAggregate } from "@/hooks/api/use-holley-consumption-api";
+import { useEcash4ConsumptionAggregate } from "@/hooks/api/use-ecash4-consumption-api";
 import { normalizeRegionName, shortRegionLabel } from "@/hooks/use-resolved-region-name";
 import { cn } from "@/lib/utils";
 import {
@@ -253,6 +255,24 @@ export function CustomerSalesOverview({
     ...params,
     groupBy: "region",
   });
+  // HOLLEY and ECASH4 both have real backends and human-readable
+  // region/district names (like BOT/BXC, unlike PNS), so they fold into
+  // the Legacy national/source totals below the same way. Added here to
+  // fix a real drift from the dashboard's Legacy Prepaid figure: the
+  // dashboard sums salessummary.by_source generically (every Prepaid
+  // source other than zeus_prepaid/mms), so it already picked up
+  // HOLLEY/ECASH4 automatically; this page computed Legacy by hand as
+  // BOT+BXC+PNS only and was never updated when those two sources were
+  // added, silently undercounting Prepaid/Total Customer Consumption
+  // here relative to the dashboard for the same period.
+  const { data: holleyRegionData } = useHolleyConsumptionAggregate({
+    ...params,
+    groupBy: "region",
+  });
+  const { data: ecash4RegionData } = useEcash4ConsumptionAggregate({
+    ...params,
+    groupBy: "region",
+  });
   // District drill-down for the Postpaid/Zeus combined chart — only fetched
   // once a region is clicked.
   const { data: postpaidDistrictData, isLoading: postpaidDistrictLoading } =
@@ -480,14 +500,33 @@ export function CustomerSalesOverview({
       totalCustomers: items.reduce((s, i) => s + (i.customer_count || 0), 0),
     };
   }, [pnsRegionData]);
+  const holleyTotals = useMemo(() => {
+    const items = holleyRegionData || [];
+    return {
+      totalKwh: items.reduce((s, i) => s + (i.sum_kwh || 0), 0),
+      totalCustomers: items.reduce((s, i) => s + (i.customer_count || 0), 0),
+    };
+  }, [holleyRegionData]);
+  const ecash4Totals = useMemo(() => {
+    const items = ecash4RegionData || [];
+    return {
+      totalKwh: items.reduce((s, i) => s + (i.sum_kwh || 0), 0),
+      totalCustomers: items.reduce((s, i) => s + (i.customer_count || 0), 0),
+    };
+  }, [ecash4RegionData]);
 
-  // Legacy = BOT + BXC + PNS combined — the three legacy meter sources with
-  // a real backend today (the other 10 on the Legacy Meters tab are
-  // "coming soon" placeholders with no data to fold in yet).
+  // Legacy = BOT + BXC + PNS + HOLLEY + ECASH4 — every legacy meter source
+  // with a real backend today (the rest of the Legacy Meters tab are
+  // "coming soon" placeholders with no data to fold in yet). Going
+  // forward, any new legacy source added should be folded in here too —
+  // see the dashboard's energySalesBreakdown (overview-main-tab-v3.tsx)
+  // for the generic by_source version of this same rule.
   const legacyKwh =
-    botTotals.totalKwh + bxcTotals.totalKwh + pnsTotals.totalKwh;
+    botTotals.totalKwh + bxcTotals.totalKwh + pnsTotals.totalKwh +
+    holleyTotals.totalKwh + ecash4Totals.totalKwh;
   const legacyCustomers =
-    botTotals.totalCustomers + bxcTotals.totalCustomers + pnsTotals.totalCustomers;
+    botTotals.totalCustomers + bxcTotals.totalCustomers + pnsTotals.totalCustomers +
+    holleyTotals.totalCustomers + ecash4Totals.totalCustomers;
 
   // ── Data source breakdown (Zeus vs MMS vs Legacy) — the underlying
   // systems this page's data is sourced from, independent of
