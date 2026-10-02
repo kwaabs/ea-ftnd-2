@@ -8063,7 +8063,7 @@ export function OverviewMainTabV3({
                     formatter={(value: number, name: string) => [`${formatNumber(value)} kWh`, name]}
                   />
                   <Legend wrapperStyle={{ fontSize: 10 }} iconSize={8} />
-                  <Bar dataKey="purchases" name="Purchases" fill="#10b981" radius={[0, 4, 4, 0]} barSize={22} />
+                  <Bar dataKey="purchases" name="Purchases" fill="#475569" radius={[0, 4, 4, 0]} barSize={22} />
                   <Bar dataKey="nonAmrPostpaid" name="Non-AMR Postpaid" stackId="sales" fill="#2563eb" barSize={22} />
                   <Bar dataKey="amrPostpaid" name="AMR Postpaid" stackId="sales" fill="#4f46e5" barSize={22} />
                   <Bar dataKey="mmsPrepaid" name="MMS Prepaid" stackId="sales" fill="#059669" barSize={22} />
