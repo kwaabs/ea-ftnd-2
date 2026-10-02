@@ -430,6 +430,32 @@ export function OverviewMainTabV3({
     return `${value.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })} kWh`;
   };
 
+  // Same rounding as formatSalesKwh, split into {amount, unit} so the big
+  // Sales KPI number can be styled (large amount, small unit label) while
+  // still rounding to the same 2-decimal precision as the per-source
+  // badges below it — otherwise the badges (each rounded to 2dp) visibly
+  // fail to sum to a full-precision kWh total shown next to them, even
+  // though they're the exact same numbers by construction (energySales
+  // IS zeusPostpaidKwh + zeusAmrKwh + mmsPrepaidKwh + legacyPrepaidKwh +
+  // streetlightingKwh — see energySalesBreakdown above).
+  const formatSalesKwhParts = (value: number): { amount: string; unit: string } => {
+    if (value >= 1_000_000)
+      return {
+        amount: (value / 1_000_000).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 }),
+        unit: "GWh",
+      };
+    if (value >= 1_000)
+      return {
+        amount: (value / 1_000).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 }),
+        unit: "MWh",
+      };
+    return {
+      amount: value.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 }),
+      unit: "kWh",
+    };
+  };
+  const salesKwhParts = energySales !== null ? formatSalesKwhParts(energySales) : null;
+
   const systemLosses = useMemo(() => {
     if (energySales === null || energyPurchases === 0) {
       return {
@@ -7941,15 +7967,15 @@ export function OverviewMainTabV3({
             <CardContent className="py-2.5 px-4">
               <p className="text-sm font-medium text-muted-foreground">Sales</p>
               <p className="text-2xl font-bold tabular-nums tracking-tight mt-0.5">
-                {energySales === null ? (
+                {energySales === null || !salesKwhParts ? (
                   <span className="text-lg font-semibold text-muted-foreground">
                     Not yet available
                   </span>
                 ) : (
                   <>
-                    {formatNumber(energySales)}
+                    {salesKwhParts.amount}
                     <span className="text-sm font-normal text-muted-foreground ml-1.5">
-                      kWh
+                      {salesKwhParts.unit}
                     </span>
                   </>
                 )}
@@ -8344,12 +8370,12 @@ export function OverviewMainTabV3({
           </CardHeader>
           <CardContent>
             <div className="text-lg font-bold">
-              {energySales === null
+              {energySales === null || !salesKwhParts
                 ? "Not Yet Available"
-                : formatNumber(energySales)}
+                : salesKwhParts.amount}
             </div>
             <p className="text-xs text-muted-foreground mt-1">
-              {energySales === null ? "Not Applicable" : "kWh"}
+              {energySales === null || !salesKwhParts ? "Not Applicable" : salesKwhParts.unit}
             </p>
             {energySalesBreakdown && (
               <div className="flex items-center gap-1.5 mt-2 flex-wrap">
