@@ -217,6 +217,11 @@ export function Sidebar() {
                     label: "Prepaid",
                     href: "/customer-sales/prepaid",
                 },
+                {
+                    id: "customer-streetlighting",
+                    label: "Streetlighting",
+                    href: "/customer-sales/streetlighting",
+                },
             ],
         },
         {
