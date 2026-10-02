@@ -7970,19 +7970,19 @@ export function OverviewMainTabV3({
                   </Badge>
                   <Badge
                     variant="outline"
-                    className="text-[10px] gap-1 border-emerald-300 text-emerald-700"
+                    className="text-[10px] gap-1 border-pink-300 text-pink-700"
                   >
                     MMS Prepaid {formatSalesKwh(energySalesBreakdown.mmsPrepaidKwh)}
                   </Badge>
                   <Badge
                     variant="outline"
-                    className="text-[10px] gap-1 border-amber-300 text-amber-700"
+                    className="text-[10px] gap-1 border-orange-300 text-orange-700"
                   >
                     Legacy Prepaid {formatSalesKwh(energySalesBreakdown.legacyPrepaidKwh)}
                   </Badge>
                   <Badge
                     variant="outline"
-                    className="text-[10px] gap-1 border-yellow-300 text-yellow-700"
+                    className="text-[10px] gap-1 border-cyan-300 text-cyan-700"
                   >
                     Streetlighting {formatSalesKwh(energySalesBreakdown.streetlightingKwh)}
                   </Badge>
@@ -8367,19 +8367,19 @@ export function OverviewMainTabV3({
                 </Badge>
                 <Badge
                   variant="outline"
-                  className="text-[10px] gap-1 border-emerald-300 text-emerald-700"
+                  className="text-[10px] gap-1 border-pink-300 text-pink-700"
                 >
                   MMS Prepaid {formatSalesKwh(energySalesBreakdown.mmsPrepaidKwh)}
                 </Badge>
                 <Badge
                   variant="outline"
-                  className="text-[10px] gap-1 border-amber-300 text-amber-700"
+                  className="text-[10px] gap-1 border-orange-300 text-orange-700"
                 >
                   Legacy Prepaid {formatSalesKwh(energySalesBreakdown.legacyPrepaidKwh)}
                 </Badge>
                 <Badge
                   variant="outline"
-                  className="text-[10px] gap-1 border-yellow-300 text-yellow-700"
+                  className="text-[10px] gap-1 border-cyan-300 text-cyan-700"
                 >
                   Streetlighting {formatSalesKwh(energySalesBreakdown.streetlightingKwh)}
                 </Badge>
