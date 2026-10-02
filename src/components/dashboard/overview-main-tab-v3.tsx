@@ -420,42 +420,6 @@ export function OverviewMainTabV3({
 
   const energySales = energySalesBreakdown?.total ?? null;
 
-  // 1,000 kWh = 1 MWh; 1,000,000 kWh = 1 GWh — see
-  // customer-sales-overview.tsx's formatKwh for the identical fix/comment.
-  const formatSalesKwh = (value: number) => {
-    if (value >= 1_000_000)
-      return `${(value / 1_000_000).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })} GWh`;
-    if (value >= 1_000)
-      return `${(value / 1_000).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })} MWh`;
-    return `${value.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })} kWh`;
-  };
-
-  // Same rounding as formatSalesKwh, split into {amount, unit} so the big
-  // Sales KPI number can be styled (large amount, small unit label) while
-  // still rounding to the same 2-decimal precision as the per-source
-  // badges below it — otherwise the badges (each rounded to 2dp) visibly
-  // fail to sum to a full-precision kWh total shown next to them, even
-  // though they're the exact same numbers by construction (energySales
-  // IS zeusPostpaidKwh + zeusAmrKwh + mmsPrepaidKwh + legacyPrepaidKwh +
-  // streetlightingKwh — see energySalesBreakdown above).
-  const formatSalesKwhParts = (value: number): { amount: string; unit: string } => {
-    if (value >= 1_000_000)
-      return {
-        amount: (value / 1_000_000).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 }),
-        unit: "GWh",
-      };
-    if (value >= 1_000)
-      return {
-        amount: (value / 1_000).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 }),
-        unit: "MWh",
-      };
-    return {
-      amount: value.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 }),
-      unit: "kWh",
-    };
-  };
-  const salesKwhParts = energySales !== null ? formatSalesKwhParts(energySales) : null;
-
   const systemLosses = useMemo(() => {
     if (energySales === null || energyPurchases === 0) {
       return {
@@ -7967,15 +7931,15 @@ export function OverviewMainTabV3({
             <CardContent className="py-2.5 px-4">
               <p className="text-sm font-medium text-muted-foreground">Sales</p>
               <p className="text-2xl font-bold tabular-nums tracking-tight mt-0.5">
-                {energySales === null || !salesKwhParts ? (
+                {energySales === null ? (
                   <span className="text-lg font-semibold text-muted-foreground">
                     Not yet available
                   </span>
                 ) : (
                   <>
-                    {salesKwhParts.amount}
+                    {formatNumber(energySales)}
                     <span className="text-sm font-normal text-muted-foreground ml-1.5">
-                      {salesKwhParts.unit}
+                      kWh
                     </span>
                   </>
                 )}
@@ -7986,31 +7950,31 @@ export function OverviewMainTabV3({
                     variant="outline"
                     className="text-[10px] gap-1 border-blue-300 text-blue-700"
                   >
-                    Non AMR Postpaid {formatSalesKwh(energySalesBreakdown.zeusPostpaidKwh)}
+                    Non AMR Postpaid {formatNumber(energySalesBreakdown.zeusPostpaidKwh)} kWh
                   </Badge>
                   <Badge
                     variant="outline"
                     className="text-[10px] gap-1 border-indigo-300 text-indigo-700"
                   >
-                    AMR Postpaid {formatSalesKwh(energySalesBreakdown.zeusAmrKwh)}
+                    AMR Postpaid {formatNumber(energySalesBreakdown.zeusAmrKwh)} kWh
                   </Badge>
                   <Badge
                     variant="outline"
                     className="text-[10px] gap-1 border-pink-300 text-pink-700"
                   >
-                    MMS Prepaid {formatSalesKwh(energySalesBreakdown.mmsPrepaidKwh)}
+                    MMS Prepaid {formatNumber(energySalesBreakdown.mmsPrepaidKwh)} kWh
                   </Badge>
                   <Badge
                     variant="outline"
                     className="text-[10px] gap-1 border-orange-300 text-orange-700"
                   >
-                    Legacy Prepaid {formatSalesKwh(energySalesBreakdown.legacyPrepaidKwh)}
+                    Legacy Prepaid {formatNumber(energySalesBreakdown.legacyPrepaidKwh)} kWh
                   </Badge>
                   <Badge
                     variant="outline"
                     className="text-[10px] gap-1 border-cyan-300 text-cyan-700"
                   >
-                    Streetlighting {formatSalesKwh(energySalesBreakdown.streetlightingKwh)}
+                    Streetlighting {formatNumber(energySalesBreakdown.streetlightingKwh)} kWh
                   </Badge>
                 </div>
               )}
@@ -8370,12 +8334,12 @@ export function OverviewMainTabV3({
           </CardHeader>
           <CardContent>
             <div className="text-lg font-bold">
-              {energySales === null || !salesKwhParts
+              {energySales === null
                 ? "Not Yet Available"
-                : salesKwhParts.amount}
+                : formatNumber(energySales)}
             </div>
             <p className="text-xs text-muted-foreground mt-1">
-              {energySales === null || !salesKwhParts ? "Not Applicable" : salesKwhParts.unit}
+              {energySales === null ? "Not Applicable" : "kWh"}
             </p>
             {energySalesBreakdown && (
               <div className="flex items-center gap-1.5 mt-2 flex-wrap">
@@ -8383,31 +8347,31 @@ export function OverviewMainTabV3({
                   variant="outline"
                   className="text-[10px] gap-1 border-blue-300 text-blue-700"
                 >
-                  Non AMR Postpaid {formatSalesKwh(energySalesBreakdown.zeusPostpaidKwh)}
+                  Non AMR Postpaid {formatNumber(energySalesBreakdown.zeusPostpaidKwh)} kWh
                 </Badge>
                 <Badge
                   variant="outline"
                   className="text-[10px] gap-1 border-indigo-300 text-indigo-700"
                 >
-                  AMR Postpaid {formatSalesKwh(energySalesBreakdown.zeusAmrKwh)}
+                  AMR Postpaid {formatNumber(energySalesBreakdown.zeusAmrKwh)} kWh
                 </Badge>
                 <Badge
                   variant="outline"
                   className="text-[10px] gap-1 border-pink-300 text-pink-700"
                 >
-                  MMS Prepaid {formatSalesKwh(energySalesBreakdown.mmsPrepaidKwh)}
+                  MMS Prepaid {formatNumber(energySalesBreakdown.mmsPrepaidKwh)} kWh
                 </Badge>
                 <Badge
                   variant="outline"
                   className="text-[10px] gap-1 border-orange-300 text-orange-700"
                 >
-                  Legacy Prepaid {formatSalesKwh(energySalesBreakdown.legacyPrepaidKwh)}
+                  Legacy Prepaid {formatNumber(energySalesBreakdown.legacyPrepaidKwh)} kWh
                 </Badge>
                 <Badge
                   variant="outline"
                   className="text-[10px] gap-1 border-cyan-300 text-cyan-700"
                 >
-                  Streetlighting {formatSalesKwh(energySalesBreakdown.streetlightingKwh)}
+                  Streetlighting {formatNumber(energySalesBreakdown.streetlightingKwh)} kWh
                 </Badge>
               </div>
             )}
