@@ -1,6 +1,6 @@
 "use client"
 
-import { Fragment, useMemo, useState } from "react"
+import { Fragment, useEffect, useMemo, useState } from "react"
 import {
   Area,
   CartesianGrid,
@@ -28,7 +28,14 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Badge } from "@/components/ui/badge"
 import { Input } from "@/components/ui/input"
 import { Checkbox } from "@/components/ui/checkbox"
-import { Carousel, CarouselContent, CarouselItem, CarouselNext, CarouselPrevious } from "@/components/ui/carousel"
+import {
+  Carousel,
+  type CarouselApi,
+  CarouselContent,
+  CarouselItem,
+  CarouselNext,
+  CarouselPrevious,
+} from "@/components/ui/carousel"
 import {
   currentMonthPoint,
   monthKey,
@@ -118,6 +125,33 @@ export function PurchasesSalesReportView() {
   // the ranking table highlights the same selection in both, rather than
   // being two disconnected views of the same data.
   const [focusedRegionKey, setFocusedRegionKey] = useState<string | null>(null)
+
+  // Heat map carousel: Embla lays every slide out in one row and sizes its
+  // own viewport to the tallest of them, so without this the carousel stays
+  // exactly as tall as the Loss % slide (the longest one) even while a much
+  // shorter slide like Purchases is showing -- leaving visible dead space
+  // below its card. Tracking the active slide's own height and applying it
+  // to Embla's root node keeps the carousel's box matching whatever's
+  // actually on screen. Re-measured on slide change and on resize (a slide
+  // whose data is still loading is shorter than once its table renders).
+  const [heatCarouselApi, setHeatCarouselApi] = useState<CarouselApi>()
+  useEffect(() => {
+    if (!heatCarouselApi) return
+    const updateHeight = () => {
+      const slide = heatCarouselApi.slideNodes()[heatCarouselApi.selectedScrollSnap()]
+      if (slide) heatCarouselApi.rootNode().style.height = `${slide.offsetHeight}px`
+    }
+    updateHeight()
+    heatCarouselApi.on("select", updateHeight)
+    heatCarouselApi.on("reInit", updateHeight)
+    const resizeObserver = new ResizeObserver(updateHeight)
+    heatCarouselApi.slideNodes().forEach((node) => resizeObserver.observe(node))
+    return () => {
+      heatCarouselApi.off("select", updateHeight)
+      heatCarouselApi.off("reInit", updateHeight)
+      resizeObserver.disconnect()
+    }
+  }, [heatCarouselApi])
 
   // Custom range is clamped, not rejected: picking a span over 12 months
   // keeps the most recent 12 of whatever was selected rather than blocking
@@ -966,14 +1000,14 @@ export function PurchasesSalesReportView() {
           buttons sit above the card, top-right, rather than pinned to the
           viewport's side edges -- the side position put them well outside
           this (narrower, padded) content column on real layouts. */}
-      <Carousel opts={{ align: "start" }}>
+      <Carousel opts={{ align: "start" }} setApi={setHeatCarouselApi} className="[&_[data-slot=carousel-content]]:transition-[height] [&_[data-slot=carousel-content]]:duration-300">
         <div className="flex justify-end gap-2 mb-2">
           <CarouselPrevious className="static translate-y-0" />
           <CarouselNext className="static translate-y-0" />
         </div>
-        <CarouselContent>
+        <CarouselContent className="items-start">
             <CarouselItem>
-              <Card className="h-full">
+              <Card>
                 <CardHeader>
                   <CardTitle>Loss % heat map — region × month</CardTitle>
                   <CardDescription>
