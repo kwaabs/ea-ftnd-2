@@ -17,7 +17,8 @@ import { useMeters } from "@/hooks/api/use-meter-api"
 import { useMeterStatusSummary, useStatusTimeline, useMeterStatusDetails } from "@/hooks/api/use-meter-status-api"
 import { useZeusBillingAggregate } from "@/hooks/api/use-zeus-billing-aggregate-api"
 import { useMmsCustomerSalesAggregate } from "@/hooks/api/use-mms-customer-sales-aggregate-api"
-import { useResolvedRegionName } from "@/hooks/use-resolved-region-name"
+import { useSalesSummary } from "@/hooks/api/use-sales-summary-api"
+import { useResolvedRegionName, normalizeRegionName } from "@/hooks/use-resolved-region-name"
 import { useAppStore } from "@/stores/app-store"
 import { formatNumber } from "@/lib/utils"
 import { RegionalCustomerSalesTable } from "@/components/regions/regional-customer-sales-table"
@@ -144,50 +145,83 @@ export function DistrictDetail({ district }: DistrictDetailProps) {
         (mmsDistrictNamesData || []).map((r) => r.district),
     )
 
-    // Customer sales totals for this district — Zeus billing (Postpaid /
-    // Prepaid only; AMR is not sourced anywhere on this page) + MMS daily
-    // for the Prepaid customer count.
+    // Zeus billing totals for debt/due/outstanding — Zeus-specific billing
+    // fields with no equivalent on MMS or any legacy source, so these stay
+    // sourced from Zeus alone rather than the cross-source endpoint below.
     const { data: zeusSalesTotals, isLoading: zeusSalesTotalsLoading } = useZeusBillingAggregate({
         dateFrom: dateRange.start,
         dateTo: dateRange.end,
         district: zeusDistrict,
         meterModelType: "Postpaid,Prepaid",
     })
-    const { data: zeusSalesByType, isLoading: zeusSalesByTypeLoading } = useZeusBillingAggregate({
+
+    // Consumption + customer counts — from the canonical cross-source
+    // endpoint (ea-bknd-3/internal/salessummary) rather than the previous
+    // Zeus+MMS-only hand merge, so BOT/BXC/HOLLEY/ECASH4/PNS are never
+    // silently missing from this district's totals the way they were
+    // before (same fix already applied to the region detail page).
+    //
+    // salessummary has no per-district filter path proven safe for every
+    // source (Zeus specifically needs a " District" suffix its own HTTP
+    // handler normalizes but salessummary's in-process calls don't — see
+    // ea-bknd-3's NormalizeZeusRegionNames fix, region-only so far), so
+    // this fetches the whole parent region grouped by district and picks
+    // out this district's row client-side instead of filtering by
+    // district directly. Summary()'s own row-merge key already strips
+    // each source's "Region"/"District" qualifier (shortLabel), so
+    // group_value here is already short-form and comparable via
+    // normalizeRegionName the same way zeusDistrict/mmsDistrict are
+    // resolved above.
+    const { data: prepaidDistrictSummary, isLoading: prepaidDistrictSummaryLoading } = useSalesSummary({
+        category: "prepaid",
         dateFrom: dateRange.start,
         dateTo: dateRange.end,
-        district: zeusDistrict,
-        meterModelType: "Postpaid,Prepaid",
-        groupBy: "metermodeltype",
+        region: parentRegion,
+        groupBy: "district",
+        enabled: Boolean(parentRegion),
     })
-    const { data: mmsSalesTotals, isLoading: mmsSalesTotalsLoading } = useMmsCustomerSalesAggregate({
+    const { data: postpaidDistrictSummary, isLoading: postpaidDistrictSummaryLoading } = useSalesSummary({
+        category: "postpaid",
         dateFrom: dateRange.start,
         dateTo: dateRange.end,
-        district: mmsDistrict,
+        region: parentRegion,
+        groupBy: "district",
+        enabled: Boolean(parentRegion),
+    })
+    // Streetlighting (Zeus tariffclasscode E03) — its own Category, kept
+    // separate from Postpaid/Prepaid everywhere else in this app.
+    const { data: streetlightingDistrictSummary, isLoading: streetlightingDistrictSummaryLoading } = useSalesSummary({
+        category: "streetlighting",
+        dateFrom: dateRange.start,
+        dateTo: dateRange.end,
+        region: parentRegion,
+        groupBy: "district",
+        enabled: Boolean(parentRegion),
     })
 
-    const customerSalesLoading = zeusSalesTotalsLoading || zeusSalesByTypeLoading || mmsSalesTotalsLoading
+    const customerSalesLoading =
+        zeusSalesTotalsLoading ||
+        prepaidDistrictSummaryLoading ||
+        postpaidDistrictSummaryLoading ||
+        streetlightingDistrictSummaryLoading
 
     const customerSalesStats = useMemo(() => {
         const totals = zeusSalesTotals || []
-        const totalConsumptionZeus = totals.reduce((s, r) => s + (r.sum_billconsumptionvalue || 0), 0)
         const totalDebt = totals.reduce((s, r) => s + (r.sum_debtamount || 0), 0)
         const totalDue = totals.reduce((s, r) => s + (r.sum_amountdue || 0), 0)
         const totalOutstanding = totals.reduce((s, r) => s + (r.sum_outstandingamount || 0), 0)
 
-        const byType = zeusSalesByType || []
-        const postpaidRow = byType.find((r) => (r.metermodeltype || "").trim().toLowerCase() === "postpaid")
-        const prepaidRow = byType.find((r) => (r.metermodeltype || "").trim().toLowerCase() === "prepaid")
-        const postpaidCustomers = postpaidRow?.customer_count || 0
-        const zeusPrepaidCustomers = prepaidRow?.customer_count || 0
+        const findDistrictRow = (summary: typeof prepaidDistrictSummary) =>
+            summary?.rows.find((r) => normalizeRegionName(r.group_value) === normalizeRegionName(district))
 
-        const mmsRow = mmsSalesTotals && mmsSalesTotals.length > 0 ? mmsSalesTotals[0] : null
-        const mmsCustomers = mmsRow?.customer_count || 0
-        const mmsKwh = mmsRow?.sum_last_month_kwh_read || 0
+        const postpaidRow = findDistrictRow(postpaidDistrictSummary)
+        const prepaidRow = findDistrictRow(prepaidDistrictSummary)
+        const streetlightingRow = findDistrictRow(streetlightingDistrictSummary)
 
-        const prepaidCustomers = zeusPrepaidCustomers + mmsCustomers
+        const postpaidCustomers = postpaidRow?.total_customers || 0
+        const prepaidCustomers = prepaidRow?.total_customers || 0
         const totalCustomers = postpaidCustomers + prepaidCustomers
-        const totalConsumption = totalConsumptionZeus + mmsKwh
+        const totalConsumption = (postpaidRow?.total_kwh || 0) + (prepaidRow?.total_kwh || 0)
 
         return {
             totalConsumption,
@@ -197,8 +231,10 @@ export function DistrictDetail({ district }: DistrictDetailProps) {
             postpaidCustomers,
             prepaidCustomers,
             totalCustomers,
+            streetlightingKwh: streetlightingRow?.total_kwh || 0,
+            streetlightingCustomers: streetlightingRow?.total_customers || 0,
         }
-    }, [zeusSalesTotals, zeusSalesByType, mmsSalesTotals])
+    }, [zeusSalesTotals, postpaidDistrictSummary, prepaidDistrictSummary, streetlightingDistrictSummary, district])
 
     // Fetch DTX consumption (meters IN this district)
     const { data: dtxAggregate, isLoading: dtxAggregateLoading } = useDtxAggregate({
@@ -976,7 +1012,7 @@ export function DistrictDetail({ district }: DistrictDetailProps) {
             <div className="space-y-4">
                 <h2 className="text-lg font-semibold">Customer Sales</h2>
 
-                <div className="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-5 gap-4">
+                <div className="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-6 gap-4">
                     <Card>
                         <CardHeader className="pb-3">
                             <CardTitle className="text-sm font-medium text-muted-foreground flex items-center gap-2">
@@ -990,7 +1026,7 @@ export function DistrictDetail({ district }: DistrictDetailProps) {
                             ) : (
                                 <>
                                     <div className="text-2xl font-bold">{formatNumber(customerSalesStats.totalConsumption)} kWh</div>
-                                    <p className="text-xs text-muted-foreground mt-1">Zeus + MMS</p>
+                                    <p className="text-xs text-muted-foreground mt-1">Postpaid + Prepaid, all sources</p>
                                 </>
                             )}
                         </CardContent>
@@ -1073,12 +1109,34 @@ export function DistrictDetail({ district }: DistrictDetailProps) {
                             )}
                         </CardContent>
                     </Card>
+
+                    <Card>
+                        <CardHeader className="pb-3">
+                            <CardTitle className="text-sm font-medium text-muted-foreground flex items-center gap-2">
+                                <Zap className="h-4 w-4 text-yellow-600" />
+                                Streetlighting
+                            </CardTitle>
+                        </CardHeader>
+                        <CardContent>
+                            {customerSalesLoading ? (
+                                <Skeleton className="h-10 w-32" />
+                            ) : (
+                                <>
+                                    <div className="text-2xl font-bold text-yellow-700">{formatNumber(customerSalesStats.streetlightingKwh)} kWh</div>
+                                    <p className="text-xs text-muted-foreground mt-1">
+                                        Zeus tariff class E03 · {formatNumber(customerSalesStats.streetlightingCustomers)} accounts
+                                    </p>
+                                </>
+                            )}
+                        </CardContent>
+                    </Card>
                 </div>
 
                 <Tabs defaultValue="postpaid">
-                    <TabsList className="grid w-full grid-cols-2 max-w-md">
+                    <TabsList className="grid w-full grid-cols-3 max-w-lg">
                         <TabsTrigger value="postpaid">Postpaid</TabsTrigger>
                         <TabsTrigger value="prepaid">Prepaid</TabsTrigger>
+                        <TabsTrigger value="streetlighting">Streetlighting</TabsTrigger>
                     </TabsList>
                     <TabsContent value="postpaid" className="space-y-4 mt-4">
                         <RegionalCustomerSalesTable
@@ -1096,6 +1154,13 @@ export function DistrictDetail({ district }: DistrictDetailProps) {
                         <MmsCustomerSalesDetail
                             dateRange={dateRange}
                             district={mmsDistrict}
+                        />
+                    </TabsContent>
+                    <TabsContent value="streetlighting" className="space-y-4 mt-4">
+                        <RegionalCustomerSalesTable
+                            district={zeusDistrict}
+                            dateRange={dateRange}
+                            tariffClassCode="E03"
                         />
                     </TabsContent>
                 </Tabs>
