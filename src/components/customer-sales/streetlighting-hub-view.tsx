@@ -625,9 +625,10 @@ export function StreetlightingHubView() {
                     <TableRow className="bg-muted/40">
                       <TableHead>
                         <SortButton field="customername" activeField={sortField} onToggle={toggleSort}>
-                          Customer / MDA
+                          Customer Name
                         </SortButton>
                       </TableHead>
+                      <TableHead>MDA</TableHead>
                       <TableHead>Account</TableHead>
                       <TableHead>Service Point</TableHead>
                       <TableHead>Service Class</TableHead>
@@ -645,7 +646,7 @@ export function StreetlightingHubView() {
                     {detailLoading ? (
                       [...Array(10)].map((_, i) => (
                         <TableRow key={i}>
-                          {[...Array(8)].map((_, j) => (
+                          {[...Array(9)].map((_, j) => (
                             <TableCell key={j}>
                               <Skeleton className="h-4 w-full" />
                             </TableCell>
@@ -654,15 +655,18 @@ export function StreetlightingHubView() {
                       ))
                     ) : rows.length === 0 ? (
                       <TableRow>
-                        <TableCell colSpan={8} className="text-center py-12 text-muted-foreground">
+                        <TableCell colSpan={9} className="text-center py-12 text-muted-foreground">
                           No records found for the selected date range
                         </TableCell>
                       </TableRow>
                     ) : (
                       rows.map((r, idx) => (
                         <TableRow key={`${r.accountCode}-${r.servicePointCode}-${idx}`} className="hover:bg-muted/40">
-                          <TableCell className="font-medium truncate max-w-[200px]" title={r.mdaName || r.customerName}>
-                            {r.mdaName || r.customerName || "—"}
+                          <TableCell className="font-medium truncate max-w-[200px]" title={r.customerName || undefined}>
+                            {r.customerName || "—"}
+                          </TableCell>
+                          <TableCell className="text-xs text-muted-foreground truncate max-w-[180px]" title={r.mdaName || undefined}>
+                            {r.mdaName || "—"}
                           </TableCell>
                           <TableCell className="font-mono text-xs">{r.accountCode || "—"}</TableCell>
                           <TableCell className="font-mono text-xs">{r.servicePointCode || "—"}</TableCell>
