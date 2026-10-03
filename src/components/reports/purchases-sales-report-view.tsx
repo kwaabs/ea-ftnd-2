@@ -962,10 +962,16 @@ export function PurchasesSalesReportView() {
       {/* Heat map carousel — Loss % (diverging severity) plus one sequential
           magnitude map per sales category. Each slide is its own self-
           contained Card so the carousel can be a thin wrapper around markup
-          that otherwise renders exactly as it did as a single Card. */}
-      <div className="relative px-6 sm:px-12">
-        <Carousel opts={{ align: "start" }}>
-          <CarouselContent>
+          that otherwise renders exactly as it did as a single Card. Nav
+          buttons sit above the card, top-right, rather than pinned to the
+          viewport's side edges -- the side position put them well outside
+          this (narrower, padded) content column on real layouts. */}
+      <Carousel opts={{ align: "start" }}>
+        <div className="flex justify-end gap-2 mb-2">
+          <CarouselPrevious className="static translate-y-0" />
+          <CarouselNext className="static translate-y-0" />
+        </div>
+        <CarouselContent>
             <CarouselItem>
               <Card className="h-full">
                 <CardHeader>
@@ -1148,11 +1154,8 @@ export function PurchasesSalesReportView() {
                 grandTotal={scopeTotals.streetlightingKwh}
               />
             </CarouselItem>
-          </CarouselContent>
-          <CarouselPrevious />
-          <CarouselNext />
-        </Carousel>
-      </div>
+        </CarouselContent>
+      </Carousel>
 
       {/* Loss map -- stays national regardless of the region/district filter
           above, since a single district has no geometry of its own to draw;
