@@ -75,6 +75,34 @@ export function lossHeatRgb(lossPct: number | null): [number, number, number] {
   return RED
 }
 
+// Per-metric hue for the single-quantity heat maps (Purchases/Prepaid/
+// Postpaid/Streetlighting) — reuses this app's own already-established
+// per-source colors (the same blue/emerald/indigo/amber used throughout
+// the dashboard, customer-sales views, and this report's own trend chart)
+// rather than introducing a fresh palette, so a color still means the same
+// thing everywhere in the app.
+export const METRIC_HEAT_HUES: Record<"purchases" | "prepaid" | "postpaid" | "streetlighting", [number, number, number]> = {
+  purchases: [29, 78, 216], // blue-700 — matches this report's own Purchases series color (#1d4ed8)
+  prepaid: [5, 150, 105], // emerald-600 — matches Sales/MMS Prepaid elsewhere in the app
+  postpaid: [79, 70, 229], // indigo-600 — matches AMR/Postpaid elsewhere in the app
+  streetlighting: [202, 138, 4], // amber-600 — matches Streetlighting everywhere in the app
+}
+
+/** Sequential (one hue, light→dark) magnitude heat color — unlike
+ * lossHeatRgb's diverging green/amber/red severity scale, a single-quantity
+ * map (how much kWh, not how bad a %) has no "good/bad" polarity, so it
+ * gets one hue ramped by share of the table's own max value instead.
+ * sqrt(t) spreads the low-to-mid range out more than a linear ramp would —
+ * this data is typically a few big regions and many small ones, and a
+ * linear ramp would leave most cells looking identically pale. */
+export function magnitudeHeatRgb(value: number, maxValue: number, hue: [number, number, number]): [number, number, number] {
+  const NO_DATA: [number, number, number] = [241, 245, 249] // slate-100, same treatment as lossHeatRgb
+  if (value <= 0 || maxValue <= 0) return NO_DATA
+  const LIGHT: [number, number, number] = [248, 250, 252] // slate-50 — near-surface tint for "near zero"
+  const t = Math.sqrt(Math.min(1, value / maxValue))
+  return mixRgb(LIGHT, hue, t)
+}
+
 /** Readable text color (near-black vs near-white) against a given heat
  * color background, so labels stay legible across the whole green-to-red
  * range instead of assuming one fixed text color works everywhere. */

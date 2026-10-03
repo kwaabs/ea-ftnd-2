@@ -28,6 +28,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Badge } from "@/components/ui/badge"
 import { Input } from "@/components/ui/input"
 import { Checkbox } from "@/components/ui/checkbox"
+import { Carousel, CarouselContent, CarouselItem, CarouselNext, CarouselPrevious } from "@/components/ui/carousel"
 import {
   currentMonthPoint,
   monthKey,
@@ -45,12 +46,14 @@ import {
   formatPct,
   lossHeatRgb,
   lossSeverityClass,
+  METRIC_HEAT_HUES,
   readableTextOn,
   regionTrendDelta,
   rgbToCss,
 } from "@/components/reports/report-format"
 import { PurchasesSalesLossMap } from "@/components/reports/purchases-sales-loss-map"
 import { CompareInsightsView } from "@/components/reports/compare-insights-view"
+import { MetricHeatMap } from "@/components/reports/metric-heat-map"
 
 const MAX_WINDOW_MONTHS = 12
 
@@ -956,117 +959,200 @@ export function PurchasesSalesReportView() {
         </CardContent>
       </Card>
 
-      {/* Loss % heat map — region x month */}
-      <Card>
-        <CardHeader>
-          <CardTitle>Loss % heat map — region × month</CardTitle>
-          <CardDescription>
-            Green is tight (≤10% loss), amber is watch (10–30%), red is leaking (30%+). Violet flags a
-            region-month that sold more than it bought — a data mismatch, not real negative loss (see Anomalies
-            above). Gray is no purchases data that month.
-          </CardDescription>
-        </CardHeader>
-        <CardContent>
-          {report.isLoading ? (
-            <Skeleton className="h-64 w-full" />
-          ) : scopeRegions.length === 0 ? (
-            <p className="text-sm text-muted-foreground py-8 text-center">No data for this window.</p>
-          ) : (
-            <div className="overflow-x-auto">
-              <table className="text-sm border-separate" style={{ borderSpacing: 2 }}>
-                <thead>
-                  <tr>
-                    <th className="text-left py-1 pr-3 font-medium text-muted-foreground sticky left-0 bg-card">
-                      Region
-                    </th>
-                    {report.monthLabels.map((label) => (
-                      <th
-                        key={label}
-                        className="text-center px-1 pb-1 font-medium text-muted-foreground whitespace-nowrap text-xs"
-                      >
-                        {label}
-                      </th>
-                    ))}
-                    <th className="text-center px-1 pb-1 font-medium text-muted-foreground whitespace-nowrap text-xs border-l">
-                      Total
-                    </th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {scopeRegions.map((r) => (
-                    <tr key={r.regionKey}>
-                      <td className="text-left pr-3 font-medium whitespace-nowrap sticky left-0 bg-card">
-                        {r.region}
-                      </td>
-                      {monthKeys.map((mKey, idx) => {
-                        const lossPct = cellLossPct(r.byMonth[mKey])
-                        const rgb = lossHeatRgb(lossPct)
-                        const cell = r.byMonth[mKey]
-                        const textColor = readableTextOn(rgb)
-                        return (
-                          <td
-                            key={mKey}
-                            className="text-center rounded align-middle px-1.5 py-1.5"
-                            style={{ backgroundColor: rgbToCss(rgb), color: textColor, minWidth: 92 }}
-                            title={
-                              cell
-                                ? `${r.region}, ${report.monthLabels[idx]}: purchased ${formatKwh(cell.purchasesKwh)}, sold ${formatKwh(cell.salesKwh)}, loss ${formatKwh(cell.purchasesKwh - cell.salesKwh)}`
-                                : `${r.region}, ${report.monthLabels[idx]}: no purchases data`
-                            }
-                          >
-                            {cell ? (
-                              <>
-                                <div className="text-sm font-bold tabular-nums leading-tight">
-                                  {formatPct(lossPct)}
-                                </div>
-                                <div
-                                  className="text-[10px] leading-tight tabular-nums opacity-90"
-                                  style={{ color: textColor }}
-                                >
-                                  P {formatAxisKwh(cell.purchasesKwh)} · S {formatAxisKwh(cell.salesKwh)}
-                                </div>
-                              </>
-                            ) : (
-                              <div className="text-xs font-medium">—</div>
+      {/* Heat map carousel — Loss % (diverging severity) plus one sequential
+          magnitude map per sales category. Each slide is its own self-
+          contained Card so the carousel can be a thin wrapper around markup
+          that otherwise renders exactly as it did as a single Card. */}
+      <div className="relative px-6 sm:px-12">
+        <Carousel opts={{ align: "start" }}>
+          <CarouselContent>
+            <CarouselItem>
+              <Card className="h-full">
+                <CardHeader>
+                  <CardTitle>Loss % heat map — region × month</CardTitle>
+                  <CardDescription>
+                    Green is tight (≤10% loss), amber is watch (10–30%), red is leaking (30%+). Violet flags a
+                    region-month that sold more than it bought — a data mismatch, not real negative loss (see
+                    Anomalies above). Gray is no purchases data that month.
+                  </CardDescription>
+                </CardHeader>
+                <CardContent>
+                  {report.isLoading ? (
+                    <Skeleton className="h-64 w-full" />
+                  ) : scopeRegions.length === 0 ? (
+                    <p className="text-sm text-muted-foreground py-8 text-center">No data for this window.</p>
+                  ) : (
+                    <div className="overflow-x-auto">
+                      <table className="text-sm border-separate" style={{ borderSpacing: 2 }}>
+                        <thead>
+                          <tr>
+                            <th className="text-left py-1 pr-3 font-medium text-muted-foreground sticky left-0 bg-card">
+                              Region
+                            </th>
+                            {report.monthLabels.map((label) => (
+                              <th
+                                key={label}
+                                className="text-center px-1 pb-1 font-medium text-muted-foreground whitespace-nowrap text-xs"
+                              >
+                                {label}
+                              </th>
+                            ))}
+                            <th className="text-center px-1 pb-1 font-medium text-muted-foreground whitespace-nowrap text-xs border-l">
+                              Total
+                            </th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {scopeRegions.map((r) => (
+                            <tr key={r.regionKey}>
+                              <td className="text-left pr-3 font-medium whitespace-nowrap sticky left-0 bg-card">
+                                {r.region}
+                              </td>
+                              {monthKeys.map((mKey, idx) => {
+                                const lossPct = cellLossPct(r.byMonth[mKey])
+                                const rgb = lossHeatRgb(lossPct)
+                                const cell = r.byMonth[mKey]
+                                const textColor = readableTextOn(rgb)
+                                return (
+                                  <td
+                                    key={mKey}
+                                    className="text-center rounded align-middle px-1.5 py-1.5"
+                                    style={{ backgroundColor: rgbToCss(rgb), color: textColor, minWidth: 92 }}
+                                    title={
+                                      cell
+                                        ? `${r.region}, ${report.monthLabels[idx]}: purchased ${formatKwh(cell.purchasesKwh)}, sold ${formatKwh(cell.salesKwh)}, loss ${formatKwh(cell.purchasesKwh - cell.salesKwh)}`
+                                        : `${r.region}, ${report.monthLabels[idx]}: no purchases data`
+                                    }
+                                  >
+                                    {cell ? (
+                                      <>
+                                        <div className="text-sm font-bold tabular-nums leading-tight">
+                                          {formatPct(lossPct)}
+                                        </div>
+                                        <div
+                                          className="text-[10px] leading-tight tabular-nums opacity-90"
+                                          style={{ color: textColor }}
+                                        >
+                                          P {formatAxisKwh(cell.purchasesKwh)} · S {formatAxisKwh(cell.salesKwh)}
+                                        </div>
+                                      </>
+                                    ) : (
+                                      <div className="text-xs font-medium">—</div>
+                                    )}
+                                  </td>
+                                )
+                              })}
+                              {heatTotalCell(
+                                `${r.regionKey}-total`,
+                                r.totalPurchasesKwh,
+                                r.totalSalesKwh,
+                                r.lossPct,
+                                `${r.region}, whole window: purchased ${formatKwh(r.totalPurchasesKwh)}, sold ${formatKwh(r.totalSalesKwh)}, loss ${formatKwh(r.lossKwh)}`,
+                              )}
+                            </tr>
+                          ))}
+                          <tr className="border-t-2">
+                            <td className="text-left pr-3 font-semibold whitespace-nowrap sticky left-0 bg-card">
+                              Total
+                            </td>
+                            {monthKeys.map((mKey, idx) => {
+                              const n = scopeNational[idx]
+                              return heatTotalCell(
+                                `total-${mKey}`,
+                                n?.purchasesKwh ?? 0,
+                                n?.salesKwh ?? 0,
+                                n?.lossPct ?? null,
+                                `${report.monthLabels[idx]}, all regions: purchased ${formatKwh(n?.purchasesKwh ?? 0)}, sold ${formatKwh(n?.salesKwh ?? 0)}, loss ${formatKwh(n?.lossKwh ?? 0)}`,
+                              )
+                            })}
+                            {heatTotalCell(
+                              "grand-total",
+                              scopeTotals.purchasesKwh,
+                              scopeTotals.salesKwh,
+                              scopeTotals.lossPct,
+                              `Whole window, all regions: purchased ${formatKwh(scopeTotals.purchasesKwh)}, sold ${formatKwh(scopeTotals.salesKwh)}, loss ${formatKwh(scopeTotals.lossKwh)}`,
                             )}
-                          </td>
-                        )
-                      })}
-                      {heatTotalCell(
-                        `${r.regionKey}-total`,
-                        r.totalPurchasesKwh,
-                        r.totalSalesKwh,
-                        r.lossPct,
-                        `${r.region}, whole window: purchased ${formatKwh(r.totalPurchasesKwh)}, sold ${formatKwh(r.totalSalesKwh)}, loss ${formatKwh(r.lossKwh)}`,
-                      )}
-                    </tr>
-                  ))}
-                  <tr className="border-t-2">
-                    <td className="text-left pr-3 font-semibold whitespace-nowrap sticky left-0 bg-card">Total</td>
-                    {monthKeys.map((mKey, idx) => {
-                      const n = scopeNational[idx]
-                      return heatTotalCell(
-                        `total-${mKey}`,
-                        n?.purchasesKwh ?? 0,
-                        n?.salesKwh ?? 0,
-                        n?.lossPct ?? null,
-                        `${report.monthLabels[idx]}, all regions: purchased ${formatKwh(n?.purchasesKwh ?? 0)}, sold ${formatKwh(n?.salesKwh ?? 0)}, loss ${formatKwh(n?.lossKwh ?? 0)}`,
-                      )
-                    })}
-                    {heatTotalCell(
-                      "grand-total",
-                      scopeTotals.purchasesKwh,
-                      scopeTotals.salesKwh,
-                      scopeTotals.lossPct,
-                      `Whole window, all regions: purchased ${formatKwh(scopeTotals.purchasesKwh)}, sold ${formatKwh(scopeTotals.salesKwh)}, loss ${formatKwh(scopeTotals.lossKwh)}`,
-                    )}
-                  </tr>
-                </tbody>
-              </table>
-            </div>
-          )}
-        </CardContent>
-      </Card>
+                          </tr>
+                        </tbody>
+                      </table>
+                    </div>
+                  )}
+                </CardContent>
+              </Card>
+            </CarouselItem>
+
+            <CarouselItem>
+              <MetricHeatMap
+                title="Purchases heat map — region × month"
+                description="BSP incomer imports by region and month. Darker blue is more purchased."
+                hue={METRIC_HEAT_HUES.purchases}
+                isLoading={report.isLoading}
+                regions={scopeRegions}
+                monthKeys={monthKeys}
+                monthLabels={report.monthLabels}
+                national={scopeNational}
+                cellValue={(cell) => cell?.purchasesKwh ?? 0}
+                regionTotal={(r) => r.totalPurchasesKwh}
+                nationalValue={(n) => n?.purchasesKwh ?? 0}
+                grandTotal={scopeTotals.purchasesKwh}
+              />
+            </CarouselItem>
+
+            <CarouselItem>
+              <MetricHeatMap
+                title="Prepaid heat map — region × month"
+                description="Zeus prepaid + MMS + Legacy (BOT/BXC/Holley/eCash4/PNS) prepaid sales by region and month. Darker green is more sold."
+                hue={METRIC_HEAT_HUES.prepaid}
+                isLoading={report.isLoading}
+                regions={scopeRegions}
+                monthKeys={monthKeys}
+                monthLabels={report.monthLabels}
+                national={scopeNational}
+                cellValue={(cell) => cell?.prepaidKwh ?? 0}
+                regionTotal={(r) => r.totalPrepaidKwh}
+                nationalValue={(n) => n?.prepaidKwh ?? 0}
+                grandTotal={scopeTotals.prepaidKwh}
+              />
+            </CarouselItem>
+
+            <CarouselItem>
+              <MetricHeatMap
+                title="Postpaid heat map — region × month"
+                description="Zeus postpaid (non-AMR + AMR) sales by region and month. Darker indigo is more sold."
+                hue={METRIC_HEAT_HUES.postpaid}
+                isLoading={report.isLoading}
+                regions={scopeRegions}
+                monthKeys={monthKeys}
+                monthLabels={report.monthLabels}
+                national={scopeNational}
+                cellValue={(cell) => cell?.postpaidKwh ?? 0}
+                regionTotal={(r) => r.totalPostpaidKwh}
+                nationalValue={(n) => n?.postpaidKwh ?? 0}
+                grandTotal={scopeTotals.postpaidKwh}
+              />
+            </CarouselItem>
+
+            <CarouselItem>
+              <MetricHeatMap
+                title="Streetlighting heat map — region × month"
+                description="Zeus streetlighting (tariff class E03) sales by region and month. Darker amber is more sold."
+                hue={METRIC_HEAT_HUES.streetlighting}
+                isLoading={report.isLoading}
+                regions={scopeRegions}
+                monthKeys={monthKeys}
+                monthLabels={report.monthLabels}
+                national={scopeNational}
+                cellValue={(cell) => cell?.streetlightingKwh ?? 0}
+                regionTotal={(r) => r.totalStreetlightingKwh}
+                nationalValue={(n) => n?.streetlightingKwh ?? 0}
+                grandTotal={scopeTotals.streetlightingKwh}
+              />
+            </CarouselItem>
+          </CarouselContent>
+          <CarouselPrevious />
+          <CarouselNext />
+        </Carousel>
+      </div>
 
       {/* Loss map -- stays national regardless of the region/district filter
           above, since a single district has no geometry of its own to draw;
