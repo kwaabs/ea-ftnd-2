@@ -254,11 +254,112 @@ async function fetchMmsByRegion(dateFrom: string, dateTo: string): Promise<MmsRo
   return body.data ?? []
 }
 
+interface HolleyEcash4Row {
+  region?: string | null
+  district?: string | null
+  sum_kwh: number
+}
+
+// HOLLEY and ECASH4 both have real, human-readable region/district names
+// (unlike PNS below) and neither's Aggregate supports a month/period
+// groupBy dimension (region/district/tariff only) -- same "one request per
+// month, scoped via dateFrom/dateTo" shape as fetchMmsByRegion, reusing
+// that month's own request rather than reading a period back out of the
+// row.
+async function fetchHolleyByMonth(dateFrom: string, dateTo: string): Promise<HolleyEcash4Row[]> {
+  const qs = new URLSearchParams({ dateFrom, dateTo, groupBy: "region,district" })
+  const res = await fetchWithTimeout(
+    `${API_BASE_URL}/api/v1/meters/consumption/holley-consumption/aggregate?${qs}`,
+    REPORT_FETCH_TIMEOUT_MS,
+  )
+  if (!res.ok) throw new Error(`Failed to fetch HOLLEY aggregate: ${res.status}`)
+  const body = await res.json()
+  return body.data ?? []
+}
+
+async function fetchEcash4ByMonth(dateFrom: string, dateTo: string): Promise<HolleyEcash4Row[]> {
+  const qs = new URLSearchParams({ dateFrom, dateTo, groupBy: "region,district" })
+  const res = await fetchWithTimeout(
+    `${API_BASE_URL}/api/v1/meters/consumption/ecash4-consumption/aggregate?${qs}`,
+    REPORT_FETCH_TIMEOUT_MS,
+  )
+  if (!res.ok) throw new Error(`Failed to fetch ECASH4 aggregate: ${res.status}`)
+  const body = await res.json()
+  return body.data ?? []
+}
+
+interface PnsRow {
+  sum_energy_kwh: number
+}
+
+// PNS's region/district are opaque numeric codes with no name lookup yet
+// (ea-bknd-3/internal/pnsconsumption's package doc comment) -- same reason
+// this report's existing BOT/BXC sum already excludes PNS from the
+// per-region breakdown below. It still belongs in the national Sales
+// total though (ea-bknd-3's salessummary package counts it, and so does
+// customer-sales-overview.tsx's Legacy figure), so this fetch asks for no
+// groupBy override and sums every row's sum_energy_kwh -- the exact
+// region/district split doesn't matter here, only the month's grand
+// total does.
+async function fetchPnsNationalByMonth(dateFrom: string, dateTo: string): Promise<number> {
+  const qs = new URLSearchParams({ dateFrom, dateTo })
+  const res = await fetchWithTimeout(
+    `${API_BASE_URL}/api/v1/meters/consumption/pns-consumption/aggregate?${qs}`,
+    REPORT_FETCH_TIMEOUT_MS,
+  )
+  if (!res.ok) throw new Error(`Failed to fetch PNS aggregate: ${res.status}`)
+  const body = await res.json()
+  const rows: PnsRow[] = body.data ?? []
+  return rows.reduce((s, r) => s + (r.sum_energy_kwh || 0), 0)
+}
+
+interface ZeusStreetlightingRow {
+  regionname?: string | null
+  districtname?: string | null
+  sum_billconsumptionvalue: number
+}
+
+// Streetlighting (Zeus tariffclasscode E03) -- flat-rate, MDA-billed
+// consumption, kept as its own tracked quantity rather than folded into
+// Sales, same Category split as ea-bknd-3/internal/salessummary and every
+// other Streetlighting view in this app (dashboard, customer-sales
+// overview, the dedicated hub page). Same per-month request shape as
+// fetchZeusPostpaidAmrByMonth for the same fast-path reason (see that
+// function's comment) -- billDateFrom/billDateTo scoped to exactly one
+// month, no billingyear/billingmonth in groupBy.
+async function fetchZeusStreetlightingByMonth(dateFrom: string, dateTo: string): Promise<ZeusStreetlightingRow[]> {
+  const qs = new URLSearchParams({
+    billDateFrom: dateFrom,
+    billDateTo: dateTo,
+    groupBy: "regionname,districtname",
+    tariffClassCode: "E03",
+  })
+  const res = await fetchWithTimeout(
+    `${API_BASE_URL}/api/v1/meters/consumption/zeus-billing/aggregate?${qs}`,
+    REPORT_FETCH_TIMEOUT_MS,
+  )
+  if (!res.ok) throw new Error(`Failed to fetch zeus billing aggregate (streetlighting): ${res.status}`)
+  const body = await res.json()
+  return body.data ?? []
+}
+
 // ── Public shape ─────────────────────────────────────────────────────────
 
 export interface RegionMonthCell {
   purchasesKwh: number
+  // salesKwh = postpaidKwh + prepaidKwh, kept as its own stored field
+  // (not a derived getter) since every existing chart/table on this page
+  // already reads it directly -- postpaidKwh/prepaidKwh are additive, new
+  // fields alongside it for the comparison module (see
+  // purchases-sales-report-view.tsx), not a replacement.
   salesKwh: number
+  postpaidKwh: number
+  prepaidKwh: number
+  // Streetlighting (Zeus tariffclasscode E03) is tracked separately from
+  // salesKwh entirely -- it's its own top-level category everywhere else
+  // in this app (ea-bknd-3/internal/salessummary, the dashboard, customer-
+  // sales overview), not a Postpaid/Prepaid bucket.
+  streetlightingKwh: number
 }
 
 // Sales-only -- purchases (BSP) aren't tracked at district granularity, only
@@ -269,6 +370,9 @@ export interface DistrictSeries {
   districtKey: string
   byMonth: Record<string, RegionMonthCell> // salesKwh only; purchasesKwh always 0 here
   totalSalesKwh: number
+  totalPostpaidKwh: number
+  totalPrepaidKwh: number
+  totalStreetlightingKwh: number
 }
 
 export interface StationSeries {
@@ -283,6 +387,9 @@ export interface RegionSeries {
   byMonth: Record<string, RegionMonthCell> // keyed by monthKey()
   totalPurchasesKwh: number
   totalSalesKwh: number
+  totalPostpaidKwh: number
+  totalPrepaidKwh: number
+  totalStreetlightingKwh: number
   lossKwh: number
   lossPct: number | null // null when purchases is 0 (undefined loss %, not a real 0%)
   districts: DistrictSeries[] // sorted highest sales first
@@ -294,6 +401,9 @@ export interface NationalMonthPoint {
   label: string
   purchasesKwh: number
   salesKwh: number
+  postpaidKwh: number
+  prepaidKwh: number
+  streetlightingKwh: number
   lossKwh: number
   lossPct: number | null
 }
@@ -310,7 +420,15 @@ export interface PurchasesSalesReport {
   monthLabels: string[]
   regions: RegionSeries[] // sorted worst loss % first
   national: NationalMonthPoint[]
-  nationalTotals: { purchasesKwh: number; salesKwh: number; lossKwh: number; lossPct: number | null }
+  nationalTotals: {
+    purchasesKwh: number
+    salesKwh: number
+    postpaidKwh: number
+    prepaidKwh: number
+    streetlightingKwh: number
+    lossKwh: number
+    lossPct: number | null
+  }
   /** Regions where sales exceeded purchases across the selected window as a
    * whole — a data-quality flag (a region can't sell more than it bought),
    * not a real negative loss. One entry per region (see the anomalies
@@ -402,8 +520,71 @@ export function usePurchasesSalesReport(months: MonthPoint[]): PurchasesSalesRep
   const mmsLoading = mmsQueries.some((q) => q.isLoading)
   const mmsError = mmsQueries.some((q) => q.isError)
 
+  // HOLLEY, ECASH4, PNS, and Streetlighting -- same per-month-scoped
+  // useQueries shape as MMS above, run in parallel.
+  const holleyQueries = useQueries({
+    queries: months.map((m) => {
+      const { dateFrom, dateTo } = monthBounds(m)
+      return {
+        queryKey: ["report-holley", dateFrom, dateTo],
+        queryFn: () => fetchHolleyByMonth(dateFrom, dateTo),
+        enabled,
+      }
+    }),
+  })
+  const holleyLoading = holleyQueries.some((q) => q.isLoading)
+  const holleyError = holleyQueries.some((q) => q.isError)
+
+  const ecash4Queries = useQueries({
+    queries: months.map((m) => {
+      const { dateFrom, dateTo } = monthBounds(m)
+      return {
+        queryKey: ["report-ecash4", dateFrom, dateTo],
+        queryFn: () => fetchEcash4ByMonth(dateFrom, dateTo),
+        enabled,
+      }
+    }),
+  })
+  const ecash4Loading = ecash4Queries.some((q) => q.isLoading)
+  const ecash4Error = ecash4Queries.some((q) => q.isError)
+
+  const pnsQueries = useQueries({
+    queries: months.map((m) => {
+      const { dateFrom, dateTo } = monthBounds(m)
+      return {
+        queryKey: ["report-pns", dateFrom, dateTo],
+        queryFn: () => fetchPnsNationalByMonth(dateFrom, dateTo),
+        enabled,
+      }
+    }),
+  })
+  const pnsLoading = pnsQueries.some((q) => q.isLoading)
+  const pnsError = pnsQueries.some((q) => q.isError)
+
+  const streetlightingQueries = useQueries({
+    queries: months.map((m) => {
+      const { dateFrom, dateTo } = monthBounds(m)
+      return {
+        queryKey: ["report-streetlighting", dateFrom, dateTo],
+        queryFn: () => fetchZeusStreetlightingByMonth(dateFrom, dateTo),
+        enabled,
+      }
+    }),
+  })
+  const streetlightingLoading = streetlightingQueries.some((q) => q.isLoading)
+  const streetlightingError = streetlightingQueries.some((q) => q.isError)
+
   const isLoading =
-    zeusPostAmrLoading || zeusPrepaidLoading || botLoading || bxcLoading || bspLoading || mmsLoading
+    zeusPostAmrLoading ||
+    zeusPrepaidLoading ||
+    botLoading ||
+    bxcLoading ||
+    bspLoading ||
+    mmsLoading ||
+    holleyLoading ||
+    ecash4Loading ||
+    pnsLoading ||
+    streetlightingLoading
   const erroredSources = [
     zeusPostAmrError && "Zeus (Postpaid/AMR)",
     zeusPrepaidError && "Zeus (Prepaid, deduped)",
@@ -411,6 +592,10 @@ export function usePurchasesSalesReport(months: MonthPoint[]): PurchasesSalesRep
     bxcError && "BXC",
     bspError && "BSP",
     mmsError && "MMS",
+    holleyError && "HOLLEY",
+    ecash4Error && "ECASH4",
+    pnsError && "PNS",
+    streetlightingError && "Zeus (Streetlighting)",
   ].filter((s): s is string => Boolean(s))
   const isError = erroredSources.length > 0
 
@@ -472,7 +657,8 @@ export function usePurchasesSalesReport(months: MonthPoint[]): PurchasesSalesRep
       return region.stations.get(key)!
     }
     const cell = (byMonth: Record<string, RegionMonthCell>, mKey: string): RegionMonthCell => {
-      if (!byMonth[mKey]) byMonth[mKey] = { purchasesKwh: 0, salesKwh: 0 }
+      if (!byMonth[mKey])
+        byMonth[mKey] = { purchasesKwh: 0, salesKwh: 0, postpaidKwh: 0, prepaidKwh: 0, streetlightingKwh: 0 }
       return byMonth[mKey]
     }
     // Adds to both the region's own total and its district breakdown in one
@@ -480,10 +666,24 @@ export function usePurchasesSalesReport(months: MonthPoint[]): PurchasesSalesRep
     // of whether that row's district was recognized, while districts is an
     // independent, additional drill-down (an unrecognized/blank district
     // lands in an "Unknown" bucket rather than being silently dropped).
-    const addSale = (regionRaw: string, districtRaw: string | null | undefined, mKey: string, kwh: number) => {
+    // category also increments postpaidKwh/prepaidKwh alongside the
+    // existing blended salesKwh -- additive fields for the comparison
+    // module, not a replacement for what every existing chart/table here
+    // already reads.
+    const addSale = (
+      regionRaw: string,
+      districtRaw: string | null | undefined,
+      mKey: string,
+      kwh: number,
+      category: "postpaid" | "prepaid",
+    ) => {
       const series = ensure(regionRaw)
-      cell(series.byMonth, mKey).salesKwh += kwh
-      cell(ensureDistrict(series, districtRaw).byMonth, mKey).salesKwh += kwh
+      const regionCell = cell(series.byMonth, mKey)
+      regionCell.salesKwh += kwh
+      regionCell[category === "postpaid" ? "postpaidKwh" : "prepaidKwh"] += kwh
+      const districtCell = cell(ensureDistrict(series, districtRaw).byMonth, mKey)
+      districtCell.salesKwh += kwh
+      districtCell[category === "postpaid" ? "postpaidKwh" : "prepaidKwh"] += kwh
     }
     // Purchases break down by station, not district (see
     // fetchBspPurchasesByRegionMonth's comment) -- same shape as addSale,
@@ -492,6 +692,18 @@ export function usePurchasesSalesReport(months: MonthPoint[]): PurchasesSalesRep
       const series = ensure(regionRaw)
       cell(series.byMonth, mKey).purchasesKwh += kwh
       cell(ensureStation(series, stationRaw).byMonth, mKey).purchasesKwh += kwh
+    }
+    // Streetlighting is tracked in its own field, never salesKwh -- see
+    // RegionMonthCell's doc comment.
+    const addStreetlighting = (
+      regionRaw: string,
+      districtRaw: string | null | undefined,
+      mKey: string,
+      kwh: number,
+    ) => {
+      const series = ensure(regionRaw)
+      cell(series.byMonth, mKey).streetlightingKwh += kwh
+      cell(ensureDistrict(series, districtRaw).byMonth, mKey).streetlightingKwh += kwh
     }
 
     // Purchases (BSP): net = import - export, same convention use-bsp-api.ts
@@ -513,7 +725,7 @@ export function usePurchasesSalesReport(months: MonthPoint[]): PurchasesSalesRep
       ;(q.data || []).forEach((r) => {
         const type = (r.metermodeltype || "").trim().toLowerCase()
         if (type !== "postpaid" && type !== "amr") return
-        addSale(r.regionname || "Unknown", r.districtname, mKey, r.sum_billconsumptionvalue || 0)
+        addSale(r.regionname || "Unknown", r.districtname, mKey, r.sum_billconsumptionvalue || 0, "postpaid")
       })
     })
     // Sales: Zeus Prepaid (deduped against MMS) + MMS, blended into one
@@ -521,22 +733,53 @@ export function usePurchasesSalesReport(months: MonthPoint[]): PurchasesSalesRep
     zeusPrepaidQueries.forEach((q, idx) => {
       const mKey = monthKey(months[idx])
       ;(q.data || []).forEach((r) => {
-        addSale(r.regionname || "Unknown", r.districtname, mKey, r.sum_billconsumptionvalue || 0)
+        addSale(r.regionname || "Unknown", r.districtname, mKey, r.sum_billconsumptionvalue || 0, "prepaid")
       })
     })
     mmsQueries.forEach((q, idx) => {
       const mKey = monthKey(months[idx])
       ;(q.data || []).forEach((r) => {
-        addSale(r.region || "Unknown", r.district, mKey, r.sum_last_month_kwh_read || 0)
+        addSale(r.region || "Unknown", r.district, mKey, r.sum_last_month_kwh_read || 0, "prepaid")
       })
     })
-    // Sales: Legacy (BOT + BXC) -- PNS excluded, same reason as the Region
-    // Breakdown table: its region is an opaque code, not a real name, so
-    // it can't be placed in a per-region row here.
+    // Sales: Legacy (BOT + BXC + HOLLEY + ECASH4), all Prepaid -- PNS
+    // excluded here, same reason as the Region Breakdown table: its
+    // region is an opaque code, not a real name, so it can't be placed in
+    // a per-region row. PNS still counts toward the national total below
+    // (pnsNationalKwhByMonth), same precedent as ea-ftnd-2's
+    // customer-sales-overview.tsx and ea-bknd-3's salessummary package.
     ;[...(botData || []), ...(bxcData || [])].forEach((r) => {
       const mp = parseBillMonthLabel(r.bill_month)
       if (!mp) return
-      addSale(r.region || "Unknown", r.district, monthKey(mp), r.sum_kwh || 0)
+      addSale(r.region || "Unknown", r.district, monthKey(mp), r.sum_kwh || 0, "prepaid")
+    })
+    holleyQueries.forEach((q, idx) => {
+      const mKey = monthKey(months[idx])
+      ;(q.data || []).forEach((r) => {
+        addSale(r.region || "Unknown", r.district, mKey, r.sum_kwh || 0, "prepaid")
+      })
+    })
+    ecash4Queries.forEach((q, idx) => {
+      const mKey = monthKey(months[idx])
+      ;(q.data || []).forEach((r) => {
+        addSale(r.region || "Unknown", r.district, mKey, r.sum_kwh || 0, "prepaid")
+      })
+    })
+    // PNS: national-only, keyed by month, added into national/nationalTotals
+    // below (never into a region's byMonth, per the opaque-region-code
+    // reasoning above).
+    const pnsNationalKwhByMonth: Record<string, number> = {}
+    pnsQueries.forEach((q, idx) => {
+      pnsNationalKwhByMonth[monthKey(months[idx])] = q.data || 0
+    })
+
+    // Streetlighting (Zeus tariffclasscode E03) -- own field, not folded
+    // into Sales/Postpaid/Prepaid (see addStreetlighting above).
+    streetlightingQueries.forEach((q, idx) => {
+      const mKey = monthKey(months[idx])
+      ;(q.data || []).forEach((r) => {
+        addStreetlighting(r.regionname || "Unknown", r.districtname, mKey, r.sum_billconsumptionvalue || 0)
+      })
     })
 
     const monthLabels = months.map((m) => monthLabel(m))
@@ -545,15 +788,29 @@ export function usePurchasesSalesReport(months: MonthPoint[]): PurchasesSalesRep
     const totalsFor = (byMonth: Record<string, RegionMonthCell>) => {
       let purchases = 0
       let sales = 0
+      let postpaid = 0
+      let prepaid = 0
+      let streetlighting = 0
       monthKeys.forEach((mKey) => {
         const c = byMonth[mKey]
         if (c) {
           purchases += c.purchasesKwh
           sales += c.salesKwh
+          postpaid += c.postpaidKwh
+          prepaid += c.prepaidKwh
+          streetlighting += c.streetlightingKwh
         }
       })
       const lossKwh = purchases - sales
-      return { purchases, sales, lossKwh, lossPct: purchases > 0 ? (lossKwh / purchases) * 100 : null }
+      return {
+        purchases,
+        sales,
+        postpaid,
+        prepaid,
+        streetlighting,
+        lossKwh,
+        lossPct: purchases > 0 ? (lossKwh / purchases) * 100 : null,
+      }
     }
     // Worst (highest) loss % first -- entries with no purchases data
     // (lossPct === null) sort last rather than masquerading as 0% loss.
@@ -571,12 +828,18 @@ export function usePurchasesSalesReport(months: MonthPoint[]): PurchasesSalesRep
         // first is the closest equivalent ("biggest first") for a table
         // that no longer has a severity dimension of its own.
         const districts = [...series.districts.values()]
-          .map((d) => ({
-            district: d.district,
-            districtKey: d.districtKey,
-            byMonth: d.byMonth,
-            totalSalesKwh: totalsFor(d.byMonth).sales,
-          }))
+          .map((d) => {
+            const dt = totalsFor(d.byMonth)
+            return {
+              district: d.district,
+              districtKey: d.districtKey,
+              byMonth: d.byMonth,
+              totalSalesKwh: dt.sales,
+              totalPostpaidKwh: dt.postpaid,
+              totalPrepaidKwh: dt.prepaid,
+              totalStreetlightingKwh: dt.streetlighting,
+            }
+          })
           .sort((a, b) => b.totalSalesKwh - a.totalSalesKwh)
         const stations = [...series.stations.values()]
           .map((s) => ({
@@ -591,6 +854,9 @@ export function usePurchasesSalesReport(months: MonthPoint[]): PurchasesSalesRep
           byMonth: series.byMonth,
           totalPurchasesKwh: t.purchases,
           totalSalesKwh: t.sales,
+          totalPostpaidKwh: t.postpaid,
+          totalPrepaidKwh: t.prepaid,
+          totalStreetlightingKwh: t.streetlighting,
           lossKwh: t.lossKwh,
           lossPct: t.lossPct,
           districts,
@@ -603,19 +869,33 @@ export function usePurchasesSalesReport(months: MonthPoint[]): PurchasesSalesRep
       const mKey = monthKeys[idx]
       let purchases = 0
       let sales = 0
+      let postpaid = 0
+      let prepaid = 0
+      let streetlighting = 0
       seriesByKey.forEach((series) => {
         const c = series.byMonth[mKey]
         if (c) {
           purchases += c.purchasesKwh
           sales += c.salesKwh
+          postpaid += c.postpaidKwh
+          prepaid += c.prepaidKwh
+          streetlighting += c.streetlightingKwh
         }
       })
+      // PNS tops up the national/Prepaid totals only -- never a region's
+      // own byMonth (see pnsNationalKwhByMonth above).
+      const pnsKwh = pnsNationalKwhByMonth[mKey] || 0
+      sales += pnsKwh
+      prepaid += pnsKwh
       const lossKwh = purchases - sales
       return {
         month: mKey,
         label: monthLabels[idx],
         purchasesKwh: purchases,
         salesKwh: sales,
+        postpaidKwh: postpaid,
+        prepaidKwh: prepaid,
+        streetlightingKwh: streetlighting,
         lossKwh,
         lossPct: purchases > 0 ? (lossKwh / purchases) * 100 : null,
       }
@@ -623,6 +903,9 @@ export function usePurchasesSalesReport(months: MonthPoint[]): PurchasesSalesRep
 
     const nationalPurchases = national.reduce((s, n) => s + n.purchasesKwh, 0)
     const nationalSales = national.reduce((s, n) => s + n.salesKwh, 0)
+    const nationalPostpaid = national.reduce((s, n) => s + n.postpaidKwh, 0)
+    const nationalPrepaid = national.reduce((s, n) => s + n.prepaidKwh, 0)
+    const nationalStreetlighting = national.reduce((s, n) => s + n.streetlightingKwh, 0)
     const nationalLoss = nationalPurchases - nationalSales
 
     // One entry per REGION, not per region-month -- a region is the same
@@ -655,12 +938,27 @@ export function usePurchasesSalesReport(months: MonthPoint[]): PurchasesSalesRep
       nationalTotals: {
         purchasesKwh: nationalPurchases,
         salesKwh: nationalSales,
+        postpaidKwh: nationalPostpaid,
+        prepaidKwh: nationalPrepaid,
+        streetlightingKwh: nationalStreetlighting,
         lossKwh: nationalLoss,
         lossPct: nationalPurchases > 0 ? (nationalLoss / nationalPurchases) * 100 : null,
       },
       anomalies,
     }
-  }, [zeusPostAmrQueries, zeusPrepaidQueries, botData, bxcData, bspData, mmsQueries, months])
+  }, [
+    zeusPostAmrQueries,
+    zeusPrepaidQueries,
+    botData,
+    bxcData,
+    bspData,
+    mmsQueries,
+    holleyQueries,
+    ecash4Queries,
+    pnsQueries,
+    streetlightingQueries,
+    months,
+  ])
 
   return { ...report, isLoading, isError, erroredSources }
 }
