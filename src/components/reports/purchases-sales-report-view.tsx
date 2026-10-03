@@ -50,6 +50,7 @@ import {
   rgbToCss,
 } from "@/components/reports/report-format"
 import { PurchasesSalesLossMap } from "@/components/reports/purchases-sales-loss-map"
+import { CompareInsightsView } from "@/components/reports/compare-insights-view"
 
 const MAX_WINDOW_MONTHS = 12
 
@@ -91,6 +92,9 @@ export function PurchasesSalesReportView() {
   const [showPurchases, setShowPurchases] = useState(true)
   const [showSales, setShowSales] = useState(true)
   const [showLossPct, setShowLossPct] = useState(true)
+  // Streetlighting (Zeus tariffclasscode E03) is its own toggle, not part
+  // of Sales -- same Category split as everywhere else in this app.
+  const [showStreetlighting, setShowStreetlighting] = useState(true)
   // Region/district filters live on the page itself, not in the app's
   // global header Filters popover -- that popover's state (useAppStore)
   // isn't read anywhere in this page's data hook, so it would just be
@@ -173,6 +177,9 @@ export function PurchasesSalesReportView() {
         byMonth: selectedDistrict.byMonth,
         totalPurchasesKwh: 0,
         totalSalesKwh: selectedDistrict.totalSalesKwh,
+        totalPostpaidKwh: selectedDistrict.totalPostpaidKwh,
+        totalPrepaidKwh: selectedDistrict.totalPrepaidKwh,
+        totalStreetlightingKwh: selectedDistrict.totalStreetlightingKwh,
         lossKwh: 0,
         lossPct: null,
         districts: [],
@@ -181,16 +188,31 @@ export function PurchasesSalesReportView() {
     ]
   }, [report.regions, selectedRegion, selectedDistrict])
 
+  // PNS has no region of its own (see use-purchases-sales-report.ts), so
+  // it's folded into report.national/nationalTotals directly rather than
+  // any one region's byMonth -- re-summing scopeRegions (as below) always
+  // matches report.national exactly EXCEPT for that one non-regional
+  // contributor, which only matters when nothing is filtered (no region
+  // picked, so PNS should still be counted) vs when a region/district IS
+  // selected (PNS genuinely has no data to attribute to it, so being
+  // absent from the region-sum there is correct, not a bug).
   const scopeNational = useMemo(() => {
+    if (!selectedRegion) return report.national
     return report.months.map((m, idx) => {
       const mKey = monthKeys[idx]
       let purchases = 0
       let sales = 0
+      let postpaid = 0
+      let prepaid = 0
+      let streetlighting = 0
       scopeRegions.forEach((r) => {
         const c = r.byMonth[mKey]
         if (c) {
           purchases += c.purchasesKwh
           sales += c.salesKwh
+          postpaid += c.postpaidKwh
+          prepaid += c.prepaidKwh
+          streetlighting += c.streetlightingKwh
         }
       })
       const lossKwh = purchases - sales
@@ -199,18 +221,33 @@ export function PurchasesSalesReportView() {
         label: report.monthLabels[idx],
         purchasesKwh: purchases,
         salesKwh: sales,
+        postpaidKwh: postpaid,
+        prepaidKwh: prepaid,
+        streetlightingKwh: streetlighting,
         lossKwh,
         lossPct: purchases > 0 ? (lossKwh / purchases) * 100 : null,
       }
     })
-  }, [report.months, report.monthLabels, scopeRegions, monthKeys])
+  }, [report.months, report.monthLabels, report.national, selectedRegion, scopeRegions, monthKeys])
 
   const scopeTotals = useMemo(() => {
+    if (!selectedRegion) return report.nationalTotals
     const purchases = scopeRegions.reduce((s, r) => s + r.totalPurchasesKwh, 0)
     const sales = scopeRegions.reduce((s, r) => s + r.totalSalesKwh, 0)
+    const postpaid = scopeRegions.reduce((s, r) => s + r.totalPostpaidKwh, 0)
+    const prepaid = scopeRegions.reduce((s, r) => s + r.totalPrepaidKwh, 0)
+    const streetlighting = scopeRegions.reduce((s, r) => s + r.totalStreetlightingKwh, 0)
     const lossKwh = purchases - sales
-    return { purchasesKwh: purchases, salesKwh: sales, lossKwh, lossPct: purchases > 0 ? (lossKwh / purchases) * 100 : null }
-  }, [scopeRegions])
+    return {
+      purchasesKwh: purchases,
+      salesKwh: sales,
+      postpaidKwh: postpaid,
+      prepaidKwh: prepaid,
+      streetlightingKwh: streetlighting,
+      lossKwh,
+      lossPct: purchases > 0 ? (lossKwh / purchases) * 100 : null,
+    }
+  }, [report.nationalTotals, selectedRegion, scopeRegions])
 
   const scopeAnomalies = selectedRegion
     ? report.anomalies.filter((a) => a.region === selectedRegion.region)
@@ -220,6 +257,9 @@ export function PurchasesSalesReportView() {
     label: n.label,
     purchasesKwh: n.purchasesKwh,
     salesKwh: n.salesKwh,
+    postpaidKwh: n.postpaidKwh,
+    prepaidKwh: n.prepaidKwh,
+    streetlightingKwh: n.streetlightingKwh,
     lossPct: n.lossPct,
   }))
 
@@ -261,7 +301,7 @@ export function PurchasesSalesReportView() {
     return (
       <td
         key={key}
-        className="text-center rounded align-middle px-1.5 py-1.5"
+        className="text-center rounded align-middle px-1.5 py-1.5 border-l"
         style={{ backgroundColor: rgbToCss(rgb), color: textColor, minWidth: 92 }}
         title={title}
       >
@@ -384,7 +424,7 @@ export function PurchasesSalesReportView() {
       )}
 
       {/* National headline */}
-      <div className="grid gap-4 md:grid-cols-3">
+      <div className="grid gap-4 md:grid-cols-4">
         <Card className="border-2 border-blue-200 bg-blue-50/40">
           <CardHeader className="pb-2">
             <div className="flex items-center gap-2">
@@ -441,6 +481,22 @@ export function PurchasesSalesReportView() {
               </>
             ) : (
               <div className="text-3xl font-bold text-muted-foreground">—</div>
+            )}
+          </CardContent>
+        </Card>
+        <Card className="border-2 border-yellow-200 bg-yellow-50/40">
+          <CardHeader className="pb-2">
+            <div className="flex items-center gap-2">
+              <Zap className="h-4 w-4 text-yellow-600" />
+              <CardTitle className="text-sm font-medium text-muted-foreground">Streetlighting</CardTitle>
+            </div>
+            <CardDescription className="text-[11px]">Zeus tariff class E03 — tracked separately from Sales</CardDescription>
+          </CardHeader>
+          <CardContent>
+            {report.isLoading ? (
+              <Skeleton className="h-9 w-40" />
+            ) : (
+              <div className="text-3xl font-bold text-yellow-700">{formatKwh(scopeTotals.streetlightingKwh)}</div>
             )}
           </CardContent>
         </Card>
@@ -547,6 +603,11 @@ export function PurchasesSalesReportView() {
               <span className="inline-block h-2.5 w-2.5 rounded-full" style={{ backgroundColor: "#059669" }} />
               Sales
             </label>
+            <label className="flex items-center gap-2 text-sm cursor-pointer select-none">
+              <Checkbox checked={showStreetlighting} onCheckedChange={(v) => setShowStreetlighting(v === true)} />
+              <span className="inline-block h-2.5 w-2.5 rounded-full" style={{ backgroundColor: "#ca8a04" }} />
+              Streetlighting
+            </label>
             <label
               className={`flex items-center gap-2 text-sm select-none ${purchasesAvailable ? "cursor-pointer" : "cursor-not-allowed opacity-50"}`}
               title={purchasesAvailable ? undefined : "Loss % needs purchases, not tracked below region level"}
@@ -560,7 +621,7 @@ export function PurchasesSalesReportView() {
         <CardContent>
           {report.isLoading ? (
             <Skeleton className="h-[320px] w-full" />
-          ) : !effShowPurchases && !showSales && !effShowLossPct ? (
+          ) : !effShowPurchases && !showSales && !showStreetlighting && !effShowLossPct ? (
             <p className="text-sm text-muted-foreground py-24 text-center">
               Nothing selected — check a box above to show a series.
             </p>
@@ -569,7 +630,7 @@ export function PurchasesSalesReportView() {
               <ComposedChart data={chartData} margin={{ top: 10, right: 8, left: 8, bottom: 20 }}>
                 <CartesianGrid strokeDasharray="3 3" vertical={false} />
                 <XAxis dataKey="label" tick={{ fontSize: 11 }} />
-                {(effShowPurchases || showSales) && (
+                {(effShowPurchases || showSales || showStreetlighting) && (
                   <YAxis
                     yAxisId="kwh"
                     tickFormatter={formatAxisKwh}
@@ -614,6 +675,19 @@ export function PurchasesSalesReportView() {
                     name="Sales"
                     stroke="#059669"
                     fill="#059669"
+                    fillOpacity={0.15}
+                    strokeWidth={2}
+                    isAnimationActive={false}
+                  />
+                )}
+                {showStreetlighting && (
+                  <Area
+                    yAxisId="kwh"
+                    type="monotone"
+                    dataKey="streetlightingKwh"
+                    name="Streetlighting"
+                    stroke="#ca8a04"
+                    fill="#ca8a04"
                     fillOpacity={0.15}
                     strokeWidth={2}
                     isAnimationActive={false}
@@ -664,6 +738,7 @@ export function PurchasesSalesReportView() {
                     <th className="text-left py-2 pr-4 font-medium text-muted-foreground">Region</th>
                     <th className="text-right py-2 px-4 font-medium text-muted-foreground">Purchases</th>
                     <th className="text-right py-2 px-4 font-medium text-muted-foreground">Sales</th>
+                    <th className="text-right py-2 px-4 font-medium text-yellow-700">Streetlighting</th>
                     <th className="text-right py-2 px-4 font-medium text-muted-foreground">Loss</th>
                     <th className="text-right py-2 px-4 font-medium text-muted-foreground">Loss %</th>
                     <th className="text-center py-2 pl-4 font-medium text-muted-foreground" title="First half vs second half of the window's average loss %">
@@ -705,6 +780,9 @@ export function PurchasesSalesReportView() {
                           </td>
                           <td className="py-2.5 px-4 text-right tabular-nums text-emerald-700">
                             {formatKwh(r.totalSalesKwh)}
+                          </td>
+                          <td className="py-2.5 px-4 text-right tabular-nums text-yellow-700">
+                            {formatKwh(r.totalStreetlightingKwh)}
                           </td>
                           <td className="py-2.5 px-4 text-right tabular-nums">
                             {purchasesAvailable ? formatKwh(r.lossKwh) : "—"}
@@ -750,7 +828,7 @@ export function PurchasesSalesReportView() {
                         </tr>
                         {isExpanded && (
                           <tr className="border-b last:border-0 bg-muted/20">
-                            <td colSpan={6} className="py-3 pl-8 pr-4">
+                            <td colSpan={7} className="py-3 pl-8 pr-4">
                               {/* Districts (sales) and stations (purchases) are two
                                   separate breakdowns, not one merged table -- sales are
                                   tracked by district, purchases (BSP) by station, and
@@ -771,8 +849,11 @@ export function PurchasesSalesReportView() {
                                           <th className="text-left py-1.5 pr-4 font-medium text-muted-foreground">
                                             District
                                           </th>
-                                          <th className="text-right py-1.5 pl-4 font-medium text-muted-foreground">
+                                          <th className="text-right py-1.5 px-4 font-medium text-muted-foreground">
                                             Sales
+                                          </th>
+                                          <th className="text-right py-1.5 pl-4 font-medium text-yellow-700">
+                                            Streetlighting
                                           </th>
                                         </tr>
                                       </thead>
@@ -780,8 +861,11 @@ export function PurchasesSalesReportView() {
                                         {r.districts.map((d) => (
                                           <tr key={d.districtKey} className="border-b border-dashed last:border-0">
                                             <td className="py-1.5 pr-4">{d.district}</td>
-                                            <td className="py-1.5 pl-4 text-right tabular-nums text-emerald-700">
+                                            <td className="py-1.5 px-4 text-right tabular-nums text-emerald-700">
                                               {formatKwh(d.totalSalesKwh)}
+                                            </td>
+                                            <td className="py-1.5 pl-4 text-right tabular-nums text-yellow-700">
+                                              {formatKwh(d.totalStreetlightingKwh)}
                                             </td>
                                           </tr>
                                         ))}
@@ -948,15 +1032,13 @@ export function PurchasesSalesReportView() {
                           </td>
                         )
                       })}
-                      <td className="border-l p-0">
-                        {heatTotalCell(
-                          `${r.regionKey}-total`,
-                          r.totalPurchasesKwh,
-                          r.totalSalesKwh,
-                          r.lossPct,
-                          `${r.region}, whole window: purchased ${formatKwh(r.totalPurchasesKwh)}, sold ${formatKwh(r.totalSalesKwh)}, loss ${formatKwh(r.lossKwh)}`,
-                        )}
-                      </td>
+                      {heatTotalCell(
+                        `${r.regionKey}-total`,
+                        r.totalPurchasesKwh,
+                        r.totalSalesKwh,
+                        r.lossPct,
+                        `${r.region}, whole window: purchased ${formatKwh(r.totalPurchasesKwh)}, sold ${formatKwh(r.totalSalesKwh)}, loss ${formatKwh(r.lossKwh)}`,
+                      )}
                     </tr>
                   ))}
                   <tr className="border-t-2">
@@ -971,15 +1053,13 @@ export function PurchasesSalesReportView() {
                         `${report.monthLabels[idx]}, all regions: purchased ${formatKwh(n?.purchasesKwh ?? 0)}, sold ${formatKwh(n?.salesKwh ?? 0)}, loss ${formatKwh(n?.lossKwh ?? 0)}`,
                       )
                     })}
-                    <td className="border-l p-0">
-                      {heatTotalCell(
-                        "grand-total",
-                        scopeTotals.purchasesKwh,
-                        scopeTotals.salesKwh,
-                        scopeTotals.lossPct,
-                        `Whole window, all regions: purchased ${formatKwh(scopeTotals.purchasesKwh)}, sold ${formatKwh(scopeTotals.salesKwh)}, loss ${formatKwh(scopeTotals.lossKwh)}`,
-                      )}
-                    </td>
+                    {heatTotalCell(
+                      "grand-total",
+                      scopeTotals.purchasesKwh,
+                      scopeTotals.salesKwh,
+                      scopeTotals.lossPct,
+                      `Whole window, all regions: purchased ${formatKwh(scopeTotals.purchasesKwh)}, sold ${formatKwh(scopeTotals.salesKwh)}, loss ${formatKwh(scopeTotals.lossKwh)}`,
+                    )}
                   </tr>
                 </tbody>
               </table>
@@ -998,6 +1078,10 @@ export function PurchasesSalesReportView() {
           focusedRegionKey={focusedRegionKey}
           onFocusRegion={setFocusedRegionKey}
         />
+      )}
+
+      {!report.isLoading && report.regions.length > 0 && (
+        <CompareInsightsView report={report} monthKeys={monthKeys} />
       )}
     </div>
   )
