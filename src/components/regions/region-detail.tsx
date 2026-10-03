@@ -3758,6 +3758,12 @@ export function RegionDetail({ region }: RegionDetailProps) {
   const [expandedDistricts, setExpandedDistricts] = useState<Set<string>>(
     new Set(),
   );
+  // Streetlighting Records table below is scoped to at most one district at
+  // a time (click to filter, click again to clear) — a single value, not a
+  // Set like expandedDistricts above, since it drives a live record fetch
+  // rather than expanding already-loaded client-side data.
+  const [selectedStreetlightingDistrict, setSelectedStreetlightingDistrict] =
+    useState<string | null>(null);
   const [expandedStations, setExpandedStations] = useState<Set<string>>(
     new Set(),
   );
@@ -4001,8 +4007,54 @@ export function RegionDetail({ region }: RegionDetailProps) {
       region: regionProperCase,
     });
 
+  // Streetlighting (Zeus tariffclasscode E03) — its own Category on the
+  // canonical endpoint, kept separate from Postpaid/Prepaid everywhere
+  // else in this app (dashboard, customer-sales overview, the Reports
+  // page, the dedicated hub page), so it's fetched and tracked the same
+  // way here rather than folded into customerSalesMetrics below. Postpaid
+  // already excludes E03 server-side by default (zeusbilling's permanent
+  // excludeStreetlighting()), so nothing needs to be "subtracted" from
+  // postpaidSalesSummary — this fetch is what makes that split visible as
+  // its own consumption point on the Energy Flow diagram, rather than E03
+  // simply not existing anywhere on this page.
+  const {
+    data: streetlightingSalesSummary,
+    isLoading: streetlightingSalesSummaryLoading,
+  } = useSalesSummary({
+    category: "streetlighting",
+    dateFrom: dateRange.start,
+    dateTo: dateRange.end,
+    region: regionProperCase,
+  });
+  // District breakdown for the same Streetlighting figure — reused by both
+  // the Energy Flow diagram's drill-down rows and the Streetlighting table
+  // below, one fetch for both rather than two.
+  const {
+    data: streetlightingDistrictSummary,
+    isLoading: streetlightingDistrictLoading,
+  } = useSalesSummary({
+    category: "streetlighting",
+    dateFrom: dateRange.start,
+    dateTo: dateRange.end,
+    region: regionProperCase,
+    groupBy: "district",
+  });
+
   const customerSalesLoading =
     prepaidSalesSummaryLoading || postpaidSalesSummaryLoading;
+
+  // Builds each source's label generically from salessummary's by_source
+  // map instead of a hardcoded list of sources to read — the same "one
+  // list every consumer reads from" rule ea-bknd-3/internal/salessummary's
+  // sourcesFor enforces server-side. A hardcoded list here is exactly what
+  // went stale before (HOLLEY/ECASH4/PNS silently missing from this page's
+  // Energy Flow diagram while already present in by_source).
+  const sourceLabel = (key: string, kind: "Postpaid" | "Prepaid") => {
+    if (key === "zeus_postpaid") return "Zeus (Postpaid)";
+    if (key === "zeus_prepaid") return "Zeus (Prepaid)";
+    if (key === "mms") return "MMS (Prepaid)";
+    return `${key.toUpperCase()} (${kind})`;
+  };
 
   const customerSalesMetrics = useMemo(() => {
     const bySrc = new Map<string, number>();
@@ -4013,20 +4065,24 @@ export function RegionDetail({ region }: RegionDetailProps) {
       total += kwh;
     };
 
-    // Always track these sources, even when one has zero data for the
-    // period, so downstream drill-downs (Energy Flow diagram) can show them
-    // as tracked-but-zero rather than silently absent.
+    // Always track these three, even when one has zero data for the
+    // period, so downstream drill-downs (Energy Flow diagram) can show
+    // them as tracked-but-zero rather than silently absent. Every other
+    // source appears only when salessummary actually reports it, via the
+    // generic loops below.
     add("Zeus (Postpaid)", 0);
     add("Zeus (Prepaid)", 0);
     add("MMS (Prepaid)", 0);
-    add("BOT (Prepaid)", 0);
-    add("BXC (Prepaid)", 0);
 
-    add("Zeus (Postpaid)", postpaidSalesSummary?.by_source?.zeus_postpaid?.kwh ?? 0);
-    add("Zeus (Prepaid)", prepaidSalesSummary?.by_source?.zeus_prepaid?.kwh ?? 0);
-    add("MMS (Prepaid)", prepaidSalesSummary?.by_source?.mms?.kwh ?? 0);
-    add("BOT (Prepaid)", prepaidSalesSummary?.by_source?.bot?.kwh ?? 0);
-    add("BXC (Prepaid)", prepaidSalesSummary?.by_source?.bxc?.kwh ?? 0);
+    // zeus_amr is deliberately excluded here, matching this page's prior
+    // behavior (AMR not shown on this page at all).
+    Object.entries(postpaidSalesSummary?.by_source ?? {}).forEach(([key, stat]) => {
+      if (key === "zeus_amr") return;
+      add(sourceLabel(key, "Postpaid"), stat?.kwh ?? 0);
+    });
+    Object.entries(prepaidSalesSummary?.by_source ?? {}).forEach(([key, stat]) => {
+      add(sourceLabel(key, "Prepaid"), stat?.kwh ?? 0);
+    });
 
     return { total, bySrc };
   }, [prepaidSalesSummary, postpaidSalesSummary]);
@@ -4445,8 +4501,16 @@ export function RegionDetail({ region }: RegionDetailProps) {
     const availableSupply = bspImport + outgoing + boundaryNet + expressNet;
     const dtxConsumption = dtxMetrics.consumption;
     const customerSales = customerSalesMetrics.total;
+    // Streetlighting is real metered consumption (Zeus tariffclasscode
+    // E03), not a loss — already excluded from customerSales above (it's
+    // a separate salessummary Category, never folded into Postpaid), so it
+    // has to come out of availableSupply here too or it would silently
+    // count as "lost" instead of "sold, just not to a regular customer".
+    const streetlightingKwh = streetlightingSalesSummary?.total_kwh ?? 0;
     const systemLosses =
-      availableSupply > 0 ? availableSupply - customerSales : 0;
+      availableSupply > 0
+        ? availableSupply - customerSales - streetlightingKwh
+        : 0;
     const systemLossPct =
       availableSupply > 0 ? (systemLosses / availableSupply) * 100 : 0;
 
@@ -4463,6 +4527,7 @@ export function RegionDetail({ region }: RegionDetailProps) {
       availableSupply,
       dtxConsumption,
       customerSales,
+      streetlightingKwh,
       systemLosses,
       systemLossPct,
     };
@@ -4472,7 +4537,22 @@ export function RegionDetail({ region }: RegionDetailProps) {
     dtxMetrics,
     expressFeederMetrics,
     customerSalesMetrics,
+    streetlightingSalesSummary,
   ]);
+
+  // District breakdown for the Streetlighting node's drill-down and the
+  // Streetlighting table below — derived from the single groupBy=district
+  // fetch above, not a second request.
+  const streetlightingByDistrict = useMemo(() => {
+    const map = new Map<string, { kwh: number; customers: number }>();
+    (streetlightingDistrictSummary?.rows ?? []).forEach((row) => {
+      map.set(row.group_value || "Unknown", {
+        kwh: row.total_kwh,
+        customers: row.total_customers,
+      });
+    });
+    return map;
+  }, [streetlightingDistrictSummary]);
 
   // Enhanced analytics
   const analytics = useMemo(() => {
@@ -6137,6 +6217,10 @@ export function RegionDetail({ region }: RegionDetailProps) {
               expressOutbound={expressFeederMetrics.diagramOutbound}
               customerBySrc={customerSalesMetrics.bySrc}
               customerSalesLoading={customerSalesLoading}
+              streetlightingByDistrict={streetlightingByDistrict}
+              streetlightingLoading={
+                streetlightingSalesSummaryLoading || streetlightingDistrictLoading
+              }
             />
           </div>
         </CardContent>
@@ -7925,11 +8009,12 @@ export function RegionDetail({ region }: RegionDetailProps) {
         </Card>
       )}
 
-      {/* Customer Sales Tables — Postpaid (Zeus billing) / Prepaid (Zeus + MMS). */}
+      {/* Customer Sales Tables — Postpaid (Zeus billing) / Prepaid (Zeus + MMS) / Streetlighting (Zeus tariff class E03). */}
       <Tabs defaultValue="postpaid">
-        <TabsList className="grid w-full grid-cols-2 max-w-md mb-4">
+        <TabsList className="grid w-full grid-cols-3 max-w-lg mb-4">
           <TabsTrigger value="postpaid">Postpaid</TabsTrigger>
           <TabsTrigger value="prepaid">Prepaid</TabsTrigger>
+          <TabsTrigger value="streetlighting">Streetlighting</TabsTrigger>
         </TabsList>
         <TabsContent value="postpaid" className="space-y-6">
           <RegionalCustomerSalesTable
@@ -7947,6 +8032,103 @@ export function RegionDetail({ region }: RegionDetailProps) {
           <MmsCustomerSalesDetail
             dateRange={dateRange}
             region={mmsRegion}
+          />
+        </TabsContent>
+        <TabsContent value="streetlighting" className="space-y-6">
+          <Card>
+            <CardHeader className="flex flex-row items-center justify-between gap-2">
+              <div>
+                <CardTitle>Streetlighting by district</CardTitle>
+                <CardDescription>
+                  Zeus tariff class E03 — click a district to filter the records below
+                </CardDescription>
+              </div>
+              {selectedStreetlightingDistrict && (
+                <button
+                  type="button"
+                  onClick={() => setSelectedStreetlightingDistrict(null)}
+                  className="text-xs text-amber-700 hover:underline"
+                >
+                  Clear
+                </button>
+              )}
+            </CardHeader>
+            <CardContent>
+              {streetlightingDistrictLoading ? (
+                <Skeleton className="h-32 w-full" />
+              ) : streetlightingByDistrict.size === 0 ? (
+                <p className="text-sm text-muted-foreground py-8 text-center">
+                  No streetlighting data for this region in the selected period.
+                </p>
+              ) : (
+                <div className="overflow-x-auto">
+                  <table className="w-full text-sm">
+                    <thead>
+                      <tr className="border-b">
+                        <th className="text-left py-2 pr-4 font-medium text-muted-foreground">
+                          District
+                        </th>
+                        <th className="text-right py-2 px-4 font-medium text-amber-700">
+                          Consumption (kWh)
+                        </th>
+                        <th className="text-right py-2 pl-4 font-medium text-muted-foreground">
+                          Accounts
+                        </th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {Array.from(streetlightingByDistrict.entries())
+                        .sort((a, b) => b[1].kwh - a[1].kwh)
+                        .map(([district, data]) => {
+                          const isSelected = selectedStreetlightingDistrict === district;
+                          return (
+                            <tr
+                              key={district}
+                              onClick={() =>
+                                setSelectedStreetlightingDistrict((prev) =>
+                                  prev === district ? null : district,
+                                )
+                              }
+                              className={`border-b last:border-0 hover:bg-muted/40 cursor-pointer ${isSelected ? "bg-amber-50" : ""}`}
+                            >
+                              <td className="py-2.5 pr-4 font-medium">{district}</td>
+                              <td className="py-2.5 px-4 text-right font-semibold text-amber-700 tabular-nums">
+                                {formatNumber(data.kwh)}
+                              </td>
+                              <td className="py-2.5 pl-4 text-right tabular-nums">
+                                {formatNumber(data.customers, 0)}
+                              </td>
+                            </tr>
+                          );
+                        })}
+                    </tbody>
+                    <tfoot>
+                      <tr className="border-t bg-muted/30">
+                        <td className="py-2.5 pr-4 font-semibold">Total</td>
+                        <td className="py-2.5 px-4 text-right font-bold text-amber-700 tabular-nums">
+                          {formatNumber(energyFlow.streetlightingKwh)}
+                        </td>
+                        <td className="py-2.5 pl-4 text-right font-semibold tabular-nums">
+                          {formatNumber(
+                            Array.from(streetlightingByDistrict.values()).reduce(
+                              (s, d) => s + d.customers,
+                              0,
+                            ),
+                            0,
+                          )}
+                        </td>
+                      </tr>
+                    </tfoot>
+                  </table>
+                </div>
+              )}
+            </CardContent>
+          </Card>
+          <RegionalCustomerSalesTable
+            region={zeusRegion}
+            district={selectedStreetlightingDistrict ?? undefined}
+            dateRange={dateRange}
+            tariffClassCode="E03"
           />
         </TabsContent>
       </Tabs>

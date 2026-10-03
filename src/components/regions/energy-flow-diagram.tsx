@@ -8,13 +8,14 @@ import { formatNumber } from "@/lib/utils";
 const useIsomorphicLayoutEffect =
     typeof window !== "undefined" ? useLayoutEffect : useEffect;
 
-type ColorKey = "emerald" | "blue" | "purple" | "slate";
+type ColorKey = "emerald" | "blue" | "purple" | "slate" | "amber";
 
 const COLORS: Record<ColorKey, string> = {
     emerald: "#10b981",
     blue: "#3b82f6",
     purple: "#8b5cf6",
     slate: "#64748b",
+    amber: "#ca8a04",
 };
 
 const TINTS: Record<ColorKey, { bg: string; border: string; text: string }> = {
@@ -22,6 +23,7 @@ const TINTS: Record<ColorKey, { bg: string; border: string; text: string }> = {
     blue: { bg: "bg-blue-50", border: "border-blue-300", text: "text-blue-700" },
     purple: { bg: "bg-purple-50", border: "border-purple-300", text: "text-purple-700" },
     slate: { bg: "bg-slate-50", border: "border-slate-300", text: "text-slate-700" },
+    amber: { bg: "bg-amber-50", border: "border-amber-300", text: "text-amber-700" },
 };
 
 interface DrillRow {
@@ -43,6 +45,7 @@ interface EnergyFlowShape {
     availableSupply: number;
     dtxConsumption: number;
     customerSales: number;
+    streetlightingKwh: number;
 }
 
 interface BoundaryPartner {
@@ -81,6 +84,11 @@ interface EnergyFlowDiagramProps {
     customerBySrc: Map<string, number>;
     /** True while Zeus / MMS sales aggregates are still fetching */
     customerSalesLoading?: boolean;
+    /** District -> {kwh, customers} for Streetlighting (Zeus tariffclasscode
+     * E03) within this region — a separate consumption point from Customer
+     * Sales, never folded into Postpaid/Prepaid. */
+    streetlightingByDistrict: Map<string, { kwh: number; customers: number }>;
+    streetlightingLoading?: boolean;
 }
 
 interface NodeConfig {
@@ -121,6 +129,7 @@ const LINKS: LinkDef[] = [
     { from: "exp", to: "pool", color: "purple", volKey: "expressFeederInbound", fromSide: "r", toSide: "l" },
     { from: "pool", to: "dtx", color: "slate", volKey: "dtxConsumption", fromSide: "r", toSide: "l" },
     { from: "dtx", to: "cust", color: "emerald", volKey: "customerSales", fromSide: "r", toSide: "l" },
+    { from: "dtx", to: "street", color: "amber", volKey: "streetlightingKwh", fromSide: "r", toSide: "l" },
     // Exports leave the region — routed downward, crossing the region boundary
     { from: "pool", to: "bexp", color: "blue", volKey: "boundaryExport", fromSide: "b", toSide: "t" },
     { from: "pool", to: "xexp", color: "purple", volKey: "expressFeederExport", fromSide: "b", toSide: "t" },
@@ -137,6 +146,8 @@ export function EnergyFlowDiagram({
     expressOutbound,
     customerBySrc,
     customerSalesLoading = false,
+    streetlightingByDistrict,
+    streetlightingLoading = false,
 }: EnergyFlowDiagramProps) {
     const containerRef = useRef<HTMLDivElement>(null);
     const headerRefs = useRef<Record<string, HTMLDivElement | null>>({});
@@ -306,6 +317,14 @@ export function EnergyFlowDiagram({
         ? "loading…"
         : customerRows.map((r) => r.label).join(" + ");
 
+    const streetlightingRows: DrillRow[] = Array.from(streetlightingByDistrict.entries())
+        .sort((a, b) => b[1].kwh - a[1].kwh)
+        .map(([district, data]) => ({
+            label: district,
+            sub: `${formatNumber(data.customers)} account${data.customers === 1 ? "" : "s"}`,
+            value: data.kwh,
+        }));
+
     const nodeMap: Record<string, NodeConfig> = {
         bsp: { id: "bsp", title: "BSP Import", value: energyFlow.bspImport, color: "emerald", sub: `${bspByStation.size} stations`, rows: bspRows },
         bnd: { id: "bnd", title: "Boundary Import", value: energyFlow.boundaryImport, color: "blue", sub: `${boundaryImports.length} partners`, rows: boundaryImportRows },
@@ -324,12 +343,21 @@ export function EnergyFlowDiagram({
             big: true,
             loading: customerSalesLoading,
         },
+        street: {
+            id: "street",
+            title: "Streetlighting",
+            value: energyFlow.streetlightingKwh,
+            color: "amber",
+            sub: streetlightingLoading ? "loading…" : "Zeus tariff class E03",
+            rows: streetlightingLoading ? [] : streetlightingRows,
+            loading: streetlightingLoading,
+        },
     };
 
     // Required nodes always render. Express nodes also show when feeders exist
     // (even if kWh is currently 0) so EXPRESS_FEEDER meters are never hidden.
     const isVisible = (id: string) => {
-        if (["bsp", "pool", "dtx", "cust"].includes(id)) return true;
+        if (["bsp", "pool", "dtx", "cust", "street"].includes(id)) return true;
         if (id === "exp") return nodeMap.exp.value > 0 || expressInbound.length > 0;
         if (id === "xexp") return nodeMap.xexp.value > 0 || expressOutbound.length > 0;
         return nodeMap[id].value > 0;
@@ -541,7 +569,7 @@ export function EnergyFlowDiagram({
                                     Loading sales…
                                 </span>
                                 <div className="text-[11px] text-muted-foreground">
-                                    Zeus · MMS · BOT · BXC
+                                    Zeus · MMS · legacy sources
                                 </div>
                             </div>
                         ) : (
@@ -654,7 +682,10 @@ export function EnergyFlowDiagram({
                                 ))}
                                 <NodeCard node={nodeMap.pool} />
                                 <NodeCard node={nodeMap.dtx} />
-                                <NodeCard node={nodeMap.cust} />
+                                <div className="space-y-4">
+                                    <NodeCard node={nodeMap.cust} />
+                                    <NodeCard node={nodeMap.street} />
+                                </div>
                             </div>
                         </div>
 
@@ -682,6 +713,7 @@ export function EnergyFlowDiagram({
                 <span className="flex items-center gap-1.5"><i className="w-3 h-3 rounded-sm" style={{ background: COLORS.blue }} />Boundary</span>
                 <span className="flex items-center gap-1.5"><i className="w-3 h-3 rounded-sm" style={{ background: COLORS.purple }} />Express feeder</span>
                 <span className="flex items-center gap-1.5"><i className="w-3 h-3 rounded-sm" style={{ background: COLORS.slate }} />Distribution (DTX)</span>
+                <span className="flex items-center gap-1.5"><i className="w-3 h-3 rounded-sm" style={{ background: COLORS.amber }} />Streetlighting</span>
                 <span className="ml-auto">Pipe thickness ≈ volume · click a card to drill in</span>
             </div>
 
@@ -731,9 +763,21 @@ export function EnergyFlowDiagram({
                             <p className="mt-0.5 leading-relaxed">
                                 Energy billed or metered to customers, drawn from DTX distribution.
                                 Expand Customer Sales for Postpaid (Zeus Postpaid billing) and
-                                Prepaid (Zeus Prepaid / MMS / BOT / BXC), then drill into each source. The gap
-                                between DTX Distribution and Customer Sales reflects unbilled
+                                Prepaid (Zeus Prepaid / MMS / every legacy meter source with a real
+                                backend — BOT, BXC, PNS, HOLLEY, ECASH4), then drill into each
+                                source. Streetlighting (tariff class E03) is billed separately and
+                                never counted here — see its own node. The gap between DTX
+                                Distribution and Customer Sales + Streetlighting reflects unbilled
                                 energy and system losses.
+                            </p>
+                        </div>
+                        <div>
+                            <span className="font-medium text-foreground">Distribution — Streetlighting</span>
+                            <p className="mt-0.5 leading-relaxed">
+                                Zeus Sales billed under tariff class E03 — flat-rate, government
+                                (MDA-billed) streetlighting consumption, drawn from the same DTX
+                                distribution as Customer Sales but tracked and billed separately.
+                                Excluded from Postpaid by default. Expand for a district breakdown.
                             </p>
                         </div>
                         <div>

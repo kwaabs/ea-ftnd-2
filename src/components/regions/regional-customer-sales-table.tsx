@@ -21,6 +21,11 @@ interface RegionalCustomerSalesTableProps {
   dateRange: { start: string; end: string }
   /** Locks the table to this Zeus meter model type (e.g. "Postpaid" / "Prepaid"). */
   meterModelType?: string
+  /** Locks the table to this Zeus tariff class code (e.g. "E03" for
+   * Streetlighting). Mutually exclusive in practice with meterModelType —
+   * Streetlighting rows are excluded from Postpaid/AMR by default server-
+   * side, so a caller only ever sets one or the other. */
+  tariffClassCode?: string
 }
 
 // "billingPeriod" is a virtual sort key (billingYear*100 + billingMonth) —
@@ -98,7 +103,7 @@ function SortButton({
   )
 }
 
-export function RegionalCustomerSalesTable({ region, district, dateRange, meterModelType }: RegionalCustomerSalesTableProps) {
+export function RegionalCustomerSalesTable({ region, district, dateRange, meterModelType, tariffClassCode }: RegionalCustomerSalesTableProps) {
   const [page, setPage] = useState(1)
   const pageSize = 20
   const [searchTerm, setSearchTerm] = useState("")
@@ -116,6 +121,7 @@ export function RegionalCustomerSalesTable({ region, district, dateRange, meterM
     region,
     district,
     meterModelType,
+    tariffClassCode,
     page: 1,
     limit: 1000,
   })
