@@ -3,6 +3,17 @@
 // decision) and pptx-renderer.ts (the other output format) so each file
 // only deals with one concern: this one is purely "given the data, lay
 // it out on A4 pages."
+//
+// Layout model: a single running `y` cursor flows continuously down the
+// document: every block (a chart image, a section heading + table) is
+// placed right after the previous one and only pushed to a fresh page via
+// ensureSpace when it genuinely wouldn't fit in what's left of the current
+// one. Nothing gets a page to itself just because it's "a new section" --
+// a chart image is naturally wide-and-short (capped by page width, so its
+// height is whatever the aspect ratio gives), and a one-image-per-page /
+// one-table-per-page model left most of every page blank. The title page
+// is the one deliberate exception (a report's cover page is conventionally
+// its own page).
 import { jsPDF } from "jspdf"
 import autoTable from "jspdf-autotable"
 import type { DistrictSection, ReportExportData, RegionSection, ReportTableRow } from "./build-report-data"
@@ -12,6 +23,7 @@ const PAGE_MARGIN = 40
 const BRAND_BLUE = "#1d4ed8"
 const INK = "#0f172a"
 const MUTED = "#64748b"
+const BLOCK_GAP = 22 // vertical gap left after each flowed block
 
 function regionRow(r: ReportTableRow): (string | number)[] {
   return [r.label, formatKwhPlain(r.purchasesKwh), formatKwhPlain(r.salesKwh), formatKwhPlain(r.postpaidKwh), formatKwhPlain(r.prepaidKwh), formatKwhPlain(r.streetlightingKwh), formatKwhPlain(r.lossKwh), formatPctPlain(r.lossPct)]
@@ -34,20 +46,29 @@ function addFooter(doc: jsPDF) {
   }
 }
 
-function addImageFitted(doc: jsPDF, dataUrl: string, pxWidth: number, pxHeight: number, y: number): number {
-  const pageWidth = doc.internal.pageSize.getWidth()
+/** Starts a fresh page (resetting y to the top margin) only if `neededHeight`
+ * of content wouldn't fit below the current `y` on the current page --
+ * the one primitive the whole flowing layout is built from. */
+function ensureSpace(doc: jsPDF, y: number, neededHeight: number): number {
   const pageHeight = doc.internal.pageSize.getHeight()
-  const maxW = pageWidth - PAGE_MARGIN * 2
-  const maxAvailableH = pageHeight - PAGE_MARGIN - y
-  const aspect = pxHeight / pxWidth
-  let w = maxW
-  let h = w * aspect
-  if (h > maxAvailableH) {
-    h = maxAvailableH
-    w = h / aspect
+  if (y + neededHeight > pageHeight - PAGE_MARGIN) {
+    doc.addPage()
+    return PAGE_MARGIN
   }
-  doc.addImage(dataUrl, "PNG", PAGE_MARGIN, y, w, h)
-  return y + h
+  return y
+}
+
+/** A table's height isn't known until jspdf-autotable actually lays it
+ * out (word-wrap, row striping, etc. all affect it), so this is a
+ * deliberately conservative estimate used only to decide whether a
+ * heading would otherwise be stranded alone at the bottom of a page --
+ * not an exact figure. A table longer than fits on the remainder of a
+ * page still paginates correctly mid-table via autoTable's own built-in
+ * page-break handling; this estimate only ever needs to be "right enough"
+ * to avoid an orphaned heading. */
+function estimateTableHeight(rowCount: number, rowHeight = 17): number {
+  const headerHeight = 22
+  return headerHeight + Math.min(rowCount, 5) * rowHeight + 10
 }
 
 function addSectionHeading(doc: jsPDF, text: string, y: number): number {
@@ -89,9 +110,24 @@ function finalY(doc: jsPDF): number {
   return (doc as unknown as { lastAutoTable: { finalY: number } }).lastAutoTable.finalY
 }
 
-function renderRegionSection(doc: jsPDF, region: RegionSection) {
-  doc.addPage()
-  let y = PAGE_MARGIN
+/** Fits an image to the given max width, scaling further down only if
+ * that would still overflow maxHeight (e.g. a page fresh out of ensureSpace
+ * is still too short for it) -- otherwise the image keeps its natural,
+ * width-constrained height rather than being stretched to fill unrelated
+ * vertical space. */
+function fitImageSize(pxWidth: number, pxHeight: number, maxW: number, maxH: number): { w: number; h: number } {
+  const aspect = pxHeight / pxWidth
+  let w = maxW
+  let h = w * aspect
+  if (h > maxH) {
+    h = maxH
+    w = h / aspect
+  }
+  return { w, h }
+}
+
+function renderRegionSection(doc: jsPDF, region: RegionSection, y: number): number {
+  y = ensureSpace(doc, y, 18 + 14 + estimateTableHeight(region.monthly.length))
   y = addSectionHeading(doc, region.region, y)
   doc.setFontSize(9)
   doc.setTextColor(MUTED)
@@ -105,12 +141,7 @@ function renderRegionSection(doc: jsPDF, region: RegionSection) {
   y = finalY(doc) + 20
 
   region.districts.forEach((d: DistrictSection) => {
-    const estRows = d.monthly.length + 2
-    const estHeight = estRows * 16 + 40
-    if (y + estHeight > doc.internal.pageSize.getHeight() - PAGE_MARGIN) {
-      doc.addPage()
-      y = PAGE_MARGIN
-    }
+    y = ensureSpace(doc, y, 20 + estimateTableHeight(d.monthly.length))
     doc.setFontSize(11)
     doc.setTextColor(INK)
     doc.setFont("helvetica", "bold")
@@ -127,6 +158,8 @@ function renderRegionSection(doc: jsPDF, region: RegionSection) {
     districtTable(doc, y, d.monthly)
     y = finalY(doc) + 16
   })
+
+  return y + 6
 }
 
 export function renderReportPdf(data: ReportExportData): jsPDF {
@@ -135,6 +168,7 @@ export function renderReportPdf(data: ReportExportData): jsPDF {
   // alone was ballooning an executive report (5 chart images) to 20MB+.
   const doc = new jsPDF({ unit: "pt", format: "a4", compress: true })
   const pageWidth = doc.internal.pageSize.getWidth()
+  const contentWidth = pageWidth - PAGE_MARGIN * 2
 
   // -- Title page --
   doc.setFillColor(BRAND_BLUE)
@@ -181,38 +215,49 @@ export function renderReportPdf(data: ReportExportData): jsPDF {
     if (data.narrative) {
       doc.setFontSize(9.5)
       doc.setTextColor(INK)
-      const narrativeLines = doc.splitTextToSize(data.narrative, pageWidth - PAGE_MARGIN * 2)
+      const narrativeLines = doc.splitTextToSize(data.narrative, contentWidth)
       doc.text(narrativeLines, PAGE_MARGIN, y)
       y += narrativeLines.length * 12 + 16
     }
   }
 
-  // -- Chart images (one per page from here, each sized to fit) --
+  // -- From here on: one continuous flow (chart images, then the national
+  // monthly table, region ranking, and anomalies), each block placed right
+  // after the last and only pushed to a new page when it doesn't fit. --
+  doc.addPage()
+  y = PAGE_MARGIN
+
   data.chartImages.forEach((img) => {
-    doc.addPage()
-    let iy = PAGE_MARGIN
+    // Compute the image's own natural (width-constrained) size first so
+    // ensureSpace can reserve exactly what it needs -- not a guess.
+    const natural = fitImageSize(img.width, img.height, contentWidth, Number.POSITIVE_INFINITY)
+    const neededHeight = 16 + natural.h
+    y = ensureSpace(doc, y, neededHeight)
+    // ensureSpace may have just started a fresh page -- re-fit against
+    // that page's full available height in case the image is tall enough
+    // to still overflow even a blank page (rare, but cheap to guard).
+    const pageHeight = doc.internal.pageSize.getHeight()
+    const { w, h } = fitImageSize(img.width, img.height, contentWidth, pageHeight - PAGE_MARGIN - y - 16)
+
     doc.setFontSize(11)
     doc.setTextColor(INK)
     doc.setFont("helvetica", "bold")
-    doc.text(img.label, PAGE_MARGIN, iy)
+    doc.text(img.label, PAGE_MARGIN, y)
     doc.setFont("helvetica", "normal")
-    iy += 16
-    addImageFitted(doc, img.dataUrl, img.width, img.height, iy)
+    y += 16
+    doc.addImage(img.dataUrl, "PNG", PAGE_MARGIN, y, w, h)
+    y += h + BLOCK_GAP
   })
 
-  // -- National monthly table --
   if (data.national) {
-    doc.addPage()
-    y = PAGE_MARGIN
+    y = ensureSpace(doc, y, 18 + estimateTableHeight(data.national.monthly.length))
     y = addSectionHeading(doc, "National — month by month", y)
     regionTable(doc, y, data.national.monthly)
+    y = finalY(doc) + BLOCK_GAP
   }
 
-  // -- Region ranking (always included when at least one region is in
-  // scope -- executive stops here) --
   if (data.regionRanking.length > 0) {
-    doc.addPage()
-    y = PAGE_MARGIN
+    y = ensureSpace(doc, y, 18 + estimateTableHeight(data.regionRanking.length))
     y = addSectionHeading(doc, "Region ranking — highest loss % first", y)
     autoTable(doc, {
       startY: y,
@@ -231,14 +276,11 @@ export function renderReportPdf(data: ReportExportData): jsPDF {
       styles: { fontSize: 9, cellPadding: 5 },
       theme: "grid",
     })
-    y = finalY(doc) + 20
+    y = finalY(doc) + BLOCK_GAP
   }
 
   if (data.anomalies.length > 0) {
-    if (y > doc.internal.pageSize.getHeight() - 120) {
-      doc.addPage()
-      y = PAGE_MARGIN
-    }
+    y = ensureSpace(doc, y, 18 + estimateTableHeight(data.anomalies.length))
     y = addSectionHeading(doc, "Anomalies — sold more than purchased", y)
     autoTable(doc, {
       startY: y,
@@ -249,11 +291,16 @@ export function renderReportPdf(data: ReportExportData): jsPDF {
       styles: { fontSize: 9, cellPadding: 5 },
       theme: "grid",
     })
+    y = finalY(doc) + BLOCK_GAP
   }
 
-  // -- Full region + district drill-down (detailed only) --
+  // -- Full region + district drill-down (detailed only) -- continues the
+  // same flow; a region only starts a fresh page if it genuinely doesn't
+  // fit in what's left, not automatically. --
   if (data.reportType === "detailed") {
-    data.regions.forEach((region) => renderRegionSection(doc, region))
+    data.regions.forEach((region) => {
+      y = renderRegionSection(doc, region, y)
+    })
   }
 
   addFooter(doc)
