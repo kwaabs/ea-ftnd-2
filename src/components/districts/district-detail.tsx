@@ -1132,18 +1132,35 @@ export function DistrictDetail({ district }: DistrictDetailProps) {
                     </Card>
                 </div>
 
+                {/* Postpaid (Zeus billing, with Streetlighting nested under it as a
+                    subset — Zeus tariff class E03 is billed the same non-prepaid
+                    way, not a sibling category) / Prepaid (Zeus + MMS). */}
                 <Tabs defaultValue="postpaid">
-                    <TabsList className="grid w-full grid-cols-3 max-w-lg">
+                    <TabsList className="grid w-full grid-cols-2 max-w-xs">
                         <TabsTrigger value="postpaid">Postpaid</TabsTrigger>
                         <TabsTrigger value="prepaid">Prepaid</TabsTrigger>
-                        <TabsTrigger value="streetlighting">Streetlighting</TabsTrigger>
                     </TabsList>
                     <TabsContent value="postpaid" className="space-y-4 mt-4">
-                        <RegionalCustomerSalesTable
-                            district={zeusDistrict}
-                            dateRange={dateRange}
-                            meterModelType="Postpaid"
-                        />
+                        <Tabs defaultValue="all">
+                            <TabsList className="grid w-full grid-cols-2 max-w-xs">
+                                <TabsTrigger value="all">All Postpaid</TabsTrigger>
+                                <TabsTrigger value="streetlighting">Streetlighting</TabsTrigger>
+                            </TabsList>
+                            <TabsContent value="all" className="space-y-4 mt-4">
+                                <RegionalCustomerSalesTable
+                                    district={zeusDistrict}
+                                    dateRange={dateRange}
+                                    meterModelType="Postpaid"
+                                />
+                            </TabsContent>
+                            <TabsContent value="streetlighting" className="space-y-4 mt-4">
+                                <RegionalCustomerSalesTable
+                                    district={zeusDistrict}
+                                    dateRange={dateRange}
+                                    tariffClassCode="E03"
+                                />
+                            </TabsContent>
+                        </Tabs>
                     </TabsContent>
                     <TabsContent value="prepaid" className="space-y-4 mt-4">
                         <RegionalCustomerSalesTable
@@ -1154,13 +1171,6 @@ export function DistrictDetail({ district }: DistrictDetailProps) {
                         <MmsCustomerSalesDetail
                             dateRange={dateRange}
                             district={mmsDistrict}
-                        />
-                    </TabsContent>
-                    <TabsContent value="streetlighting" className="space-y-4 mt-4">
-                        <RegionalCustomerSalesTable
-                            district={zeusDistrict}
-                            dateRange={dateRange}
-                            tariffClassCode="E03"
                         />
                     </TabsContent>
                 </Tabs>

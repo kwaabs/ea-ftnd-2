@@ -28,6 +28,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Badge } from "@/components/ui/badge"
 import { Input } from "@/components/ui/input"
 import { Checkbox } from "@/components/ui/checkbox"
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import {
   Carousel,
   type CarouselApi,
@@ -1156,37 +1157,51 @@ export function PurchasesSalesReportView() {
             </CarouselItem>
 
             <CarouselItem>
-              <MetricHeatMap
-                title="Postpaid heat map — region × month"
-                description="Zeus postpaid (non-AMR + AMR) sales by region and month. Darker indigo is more sold."
-                hue={METRIC_HEAT_HUES.postpaid}
-                isLoading={report.isLoading}
-                regions={scopeRegions}
-                monthKeys={monthKeys}
-                monthLabels={report.monthLabels}
-                national={scopeNational}
-                cellValue={(cell) => cell?.postpaidKwh ?? 0}
-                regionTotal={(r) => r.totalPostpaidKwh}
-                nationalValue={(n) => n?.postpaidKwh ?? 0}
-                grandTotal={scopeTotals.postpaidKwh}
-              />
-            </CarouselItem>
-
-            <CarouselItem>
-              <MetricHeatMap
-                title="Streetlighting heat map — region × month"
-                description="Zeus streetlighting (tariff class E03) sales by region and month. Darker amber is more sold."
-                hue={METRIC_HEAT_HUES.streetlighting}
-                isLoading={report.isLoading}
-                regions={scopeRegions}
-                monthKeys={monthKeys}
-                monthLabels={report.monthLabels}
-                national={scopeNational}
-                cellValue={(cell) => cell?.streetlightingKwh ?? 0}
-                regionTotal={(r) => r.totalStreetlightingKwh}
-                nationalValue={(n) => n?.streetlightingKwh ?? 0}
-                grandTotal={scopeTotals.streetlightingKwh}
-              />
+              {/* Streetlighting (Zeus tariff class E03) is billed the same
+                  non-prepaid way as Postpaid, not a sibling sales category --
+                  nested here as a sub-view of the same slide rather than its
+                  own carousel slide, same relationship as the region/district
+                  detail pages' Postpaid tab. Postpaid totals elsewhere on
+                  this page (KPIs, national Loss %) are unchanged by this --
+                  still Postpaid-AMR + Postpaid-non-AMR only, same as before. */}
+              <Tabs defaultValue="all">
+                <TabsList className="grid w-full grid-cols-2 max-w-xs mb-2">
+                  <TabsTrigger value="all">All Postpaid</TabsTrigger>
+                  <TabsTrigger value="streetlighting">Streetlighting</TabsTrigger>
+                </TabsList>
+                <TabsContent value="all">
+                  <MetricHeatMap
+                    title="Postpaid heat map — region × month"
+                    description="Zeus postpaid (non-AMR + AMR) sales by region and month. Darker indigo is more sold."
+                    hue={METRIC_HEAT_HUES.postpaid}
+                    isLoading={report.isLoading}
+                    regions={scopeRegions}
+                    monthKeys={monthKeys}
+                    monthLabels={report.monthLabels}
+                    national={scopeNational}
+                    cellValue={(cell) => cell?.postpaidKwh ?? 0}
+                    regionTotal={(r) => r.totalPostpaidKwh}
+                    nationalValue={(n) => n?.postpaidKwh ?? 0}
+                    grandTotal={scopeTotals.postpaidKwh}
+                  />
+                </TabsContent>
+                <TabsContent value="streetlighting">
+                  <MetricHeatMap
+                    title="Postpaid heat map — Streetlighting — region × month"
+                    description="Subset of Postpaid: Zeus streetlighting (tariff class E03) sales by region and month. Darker amber is more sold."
+                    hue={METRIC_HEAT_HUES.streetlighting}
+                    isLoading={report.isLoading}
+                    regions={scopeRegions}
+                    monthKeys={monthKeys}
+                    monthLabels={report.monthLabels}
+                    national={scopeNational}
+                    cellValue={(cell) => cell?.streetlightingKwh ?? 0}
+                    regionTotal={(r) => r.totalStreetlightingKwh}
+                    nationalValue={(n) => n?.streetlightingKwh ?? 0}
+                    grandTotal={scopeTotals.streetlightingKwh}
+                  />
+                </TabsContent>
+              </Tabs>
             </CarouselItem>
         </CarouselContent>
       </Carousel>

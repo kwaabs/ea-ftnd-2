@@ -211,16 +211,25 @@ export function Sidebar() {
                     id: "customer-postpaid",
                     label: "Postpaid",
                     href: "/customer-sales/postpaid",
+                    hasSubItems: true,
+                    menuId: "customer-postpaid",
+                    onChevronClick: () => toggleMenu("customer-postpaid"),
+                    // Streetlighting (Zeus tariff class E03) is billed the
+                    // same way as Postpaid, not prepaid-metered -- nested
+                    // here rather than a sibling tab, same relationship as
+                    // the region/district detail pages.
+                    children: [
+                        {
+                            id: "customer-streetlighting",
+                            label: "Streetlighting",
+                            href: "/customer-sales/streetlighting",
+                        },
+                    ],
                 },
                 {
                     id: "customer-prepaid",
                     label: "Prepaid",
                     href: "/customer-sales/prepaid",
-                },
-                {
-                    id: "customer-streetlighting",
-                    label: "Streetlighting",
-                    href: "/customer-sales/streetlighting",
                 },
             ],
         },
