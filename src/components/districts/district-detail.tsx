@@ -1035,6 +1035,27 @@ export function DistrictDetail({ district }: DistrictDetailProps) {
                     <Card>
                         <CardHeader className="pb-3">
                             <CardTitle className="text-sm font-medium text-muted-foreground flex items-center gap-2">
+                                <Zap className="h-4 w-4 text-yellow-600" />
+                                Streetlighting
+                            </CardTitle>
+                        </CardHeader>
+                        <CardContent>
+                            {customerSalesLoading ? (
+                                <Skeleton className="h-10 w-32" />
+                            ) : (
+                                <>
+                                    <div className="text-2xl font-bold text-yellow-700">{formatNumber(customerSalesStats.streetlightingKwh)} kWh</div>
+                                    <p className="text-xs text-muted-foreground mt-1">
+                                        Zeus tariff class E03 · {formatNumber(customerSalesStats.streetlightingCustomers)} accounts
+                                    </p>
+                                </>
+                            )}
+                        </CardContent>
+                    </Card>
+
+                    <Card>
+                        <CardHeader className="pb-3">
+                            <CardTitle className="text-sm font-medium text-muted-foreground flex items-center gap-2">
                                 <Scale className="h-4 w-4 text-sky-600" />
                                 Debt
                             </CardTitle>
@@ -1104,27 +1125,6 @@ export function DistrictDetail({ district }: DistrictDetailProps) {
                                     <div className="text-2xl font-bold text-purple-700">{formatNumber(customerSalesStats.totalCustomers)}</div>
                                     <p className="text-xs text-muted-foreground mt-1">
                                         Postpaid {formatNumber(customerSalesStats.postpaidCustomers)} · Prepaid {formatNumber(customerSalesStats.prepaidCustomers)}
-                                    </p>
-                                </>
-                            )}
-                        </CardContent>
-                    </Card>
-
-                    <Card>
-                        <CardHeader className="pb-3">
-                            <CardTitle className="text-sm font-medium text-muted-foreground flex items-center gap-2">
-                                <Zap className="h-4 w-4 text-yellow-600" />
-                                Streetlighting
-                            </CardTitle>
-                        </CardHeader>
-                        <CardContent>
-                            {customerSalesLoading ? (
-                                <Skeleton className="h-10 w-32" />
-                            ) : (
-                                <>
-                                    <div className="text-2xl font-bold text-yellow-700">{formatNumber(customerSalesStats.streetlightingKwh)} kWh</div>
-                                    <p className="text-xs text-muted-foreground mt-1">
-                                        Zeus tariff class E03 · {formatNumber(customerSalesStats.streetlightingCustomers)} accounts
                                     </p>
                                 </>
                             )}
