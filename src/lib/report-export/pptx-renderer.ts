@@ -40,20 +40,29 @@ function addTitleSlide(pptx: PptxGenJS, data: ReportExportData) {
   const slide = pptx.addSlide()
   slide.background = { color: "FFFFFF" }
   slide.addShape(pptx.ShapeType.rect, { x: 0, y: 0, w: SLIDE_W, h: 0.12, fill: { color: BRAND_BLUE } })
-  slide.addText(data.title, { x: MARGIN, y: 2.4, w: SLIDE_W - MARGIN * 2, h: 1, fontSize: 32, bold: true, color: INK })
-  slide.addText(data.periodLabel, { x: MARGIN, y: 3.3, w: SLIDE_W - MARGIN * 2, h: 0.5, fontSize: 16, color: MUTED })
-  slide.addText(`Generated ${data.generatedAtLabel}`, { x: MARGIN, y: 3.8, w: SLIDE_W - MARGIN * 2, h: 0.4, fontSize: 12, color: MUTED })
+
+  let titleY = 2.4
+  if (data.logo) {
+    const logoH = 0.9
+    const logoW = logoH * (data.logo.width / data.logo.height)
+    slide.addImage({ data: data.logo.dataUrl, x: MARGIN, y: 0.7, w: logoW, h: logoH })
+    titleY = 0.7 + logoH + 0.5
+  }
+
+  slide.addText(data.title, { x: MARGIN, y: titleY, w: SLIDE_W - MARGIN * 2, h: 1, fontSize: 32, bold: true, color: INK })
+  slide.addText(data.periodLabel, { x: MARGIN, y: titleY + 0.9, w: SLIDE_W - MARGIN * 2, h: 0.5, fontSize: 16, color: MUTED })
+  slide.addText(`Generated ${data.generatedAtLabel}`, { x: MARGIN, y: titleY + 1.4, w: SLIDE_W - MARGIN * 2, h: 0.4, fontSize: 12, color: MUTED })
 }
 
-function addNationalSummarySlide(pptx: PptxGenJS, data: ReportExportData) {
+function addNationalSummarySlide(pptx: PptxGenJS, national: NonNullable<ReportExportData["national"]>, narrative: string) {
   const slide = pptx.addSlide()
   slide.addText("National summary", { x: MARGIN, y: 0.3, w: SLIDE_W - MARGIN * 2, h: 0.5, fontSize: 20, bold: true, color: INK })
 
   const kpis: { label: string; value: string }[] = [
-    { label: "Purchases", value: formatKwhPlain(data.national.totals.purchasesKwh) },
-    { label: "Sales (Postpaid + Prepaid)", value: formatKwhPlain(data.national.totals.salesKwh) },
-    { label: "Loss", value: `${formatKwhPlain(data.national.totals.lossKwh)}  (${formatPctPlain(data.national.totals.lossPct)})` },
-    { label: "Streetlighting (separate from Sales)", value: formatKwhPlain(data.national.totals.streetlightingKwh) },
+    { label: "Purchases", value: formatKwhPlain(national.totals.purchasesKwh) },
+    { label: "Sales (Postpaid + Prepaid)", value: formatKwhPlain(national.totals.salesKwh) },
+    { label: "Loss", value: `${formatKwhPlain(national.totals.lossKwh)}  (${formatPctPlain(national.totals.lossPct)})` },
+    { label: "Streetlighting (separate from Sales)", value: formatKwhPlain(national.totals.streetlightingKwh) },
   ]
   const kpiW = (SLIDE_W - MARGIN * 2 - 0.3 * 3) / 4
   kpis.forEach((kpi, i) => {
@@ -63,7 +72,9 @@ function addNationalSummarySlide(pptx: PptxGenJS, data: ReportExportData) {
     slide.addText(kpi.value, { x: x + 0.12, y: 1.5, w: kpiW - 0.24, h: 0.6, fontSize: 13, bold: true, color: INK })
   })
 
-  slide.addText(data.narrative, { x: MARGIN, y: 2.6, w: SLIDE_W - MARGIN * 2, h: 1.5, fontSize: 12, color: INK, valign: "top" })
+  if (narrative) {
+    slide.addText(narrative, { x: MARGIN, y: 2.6, w: SLIDE_W - MARGIN * 2, h: 1.5, fontSize: 12, color: INK, valign: "top" })
+  }
 }
 
 function addImageSlide(pptx: PptxGenJS, label: string, dataUrl: string, pxWidth: number, pxHeight: number) {
@@ -126,22 +137,29 @@ export async function renderReportPptx(data: ReportExportData): Promise<PptxGenJ
   pptx.layout = "WIDE"
 
   addTitleSlide(pptx, data)
-  addNationalSummarySlide(pptx, data)
+
+  if (data.national) {
+    addNationalSummarySlide(pptx, data.national, data.narrative)
+  }
 
   data.chartImages.forEach((img) => addImageSlide(pptx, img.label, img.dataUrl, img.width, img.height))
 
-  addTable(pptx, "National — month by month", ["Month", "Purchases", "Sales", "Postpaid", "Prepaid", "Streetlighting", "Loss", "Loss %"], data.national.monthly.map(regionRowCells))
+  if (data.national) {
+    addTable(pptx, "National — month by month", ["Month", "Purchases", "Sales", "Postpaid", "Prepaid", "Streetlighting", "Loss", "Loss %"], data.national.monthly.map(regionRowCells))
+  }
 
-  addTable(
-    pptx,
-    "Region ranking — highest loss % first",
-    ["Region", "Districts", "Purchases", "Sales", "Streetlighting", "Loss", "Loss %"],
-    data.regionRanking.map((r) =>
-      [r.region, String(r.districtCount), formatKwhPlain(r.purchasesKwh), formatKwhPlain(r.salesKwh), formatKwhPlain(r.streetlightingKwh), formatKwhPlain(r.lossKwh), formatPctPlain(r.lossPct)].map(
-        (text) => ({ text, options: { fontSize: 8 } }),
+  if (data.regionRanking.length > 0) {
+    addTable(
+      pptx,
+      "Region ranking — highest loss % first",
+      ["Region", "Districts", "Purchases", "Sales", "Streetlighting", "Loss", "Loss %"],
+      data.regionRanking.map((r) =>
+        [r.region, String(r.districtCount), formatKwhPlain(r.purchasesKwh), formatKwhPlain(r.salesKwh), formatKwhPlain(r.streetlightingKwh), formatKwhPlain(r.lossKwh), formatPctPlain(r.lossPct)].map(
+          (text) => ({ text, options: { fontSize: 8 } }),
+        ),
       ),
-    ),
-  )
+    )
+  }
 
   if (data.anomalies.length > 0) {
     addTable(

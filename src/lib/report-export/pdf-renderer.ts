@@ -139,38 +139,53 @@ export function renderReportPdf(data: ReportExportData): jsPDF {
   // -- Title page --
   doc.setFillColor(BRAND_BLUE)
   doc.rect(0, 0, pageWidth, 8, "F")
+
+  let titleY = 100
+  if (data.logo) {
+    const logoSize = 56
+    const aspect = data.logo.height / data.logo.width
+    const logoW = logoSize
+    const logoH = logoSize * aspect
+    doc.addImage(data.logo.dataUrl, "JPEG", PAGE_MARGIN, 32, logoW, logoH)
+    titleY = 32 + logoH + 36
+  }
+
   doc.setFontSize(22)
   doc.setTextColor(INK)
   doc.setFont("helvetica", "bold")
-  doc.text(data.title, PAGE_MARGIN, 100)
+  doc.text(data.title, PAGE_MARGIN, titleY)
   doc.setFont("helvetica", "normal")
   doc.setFontSize(12)
   doc.setTextColor(MUTED)
-  doc.text(data.periodLabel, PAGE_MARGIN, 124)
-  doc.text(`Generated ${data.generatedAtLabel}`, PAGE_MARGIN, 142)
+  doc.text(data.periodLabel, PAGE_MARGIN, titleY + 24)
+  doc.text(`Generated ${data.generatedAtLabel}`, PAGE_MARGIN, titleY + 42)
 
-  let y = 180
-  y = addSectionHeading(doc, "National summary", y)
-  autoTable(doc, {
-    startY: y,
-    margin: { left: PAGE_MARGIN, right: PAGE_MARGIN },
-    body: [
-      ["Purchases", formatKwhPlain(data.national.totals.purchasesKwh)],
-      ["Sales (Postpaid + Prepaid)", formatKwhPlain(data.national.totals.salesKwh)],
-      ["Loss", `${formatKwhPlain(data.national.totals.lossKwh)}  (${formatPctPlain(data.national.totals.lossPct)})`],
-      ["Streetlighting", `${formatKwhPlain(data.national.totals.streetlightingKwh)}  (tracked separately, not included in Sales)`],
-    ],
-    styles: { fontSize: 10, cellPadding: 5 },
-    theme: "plain",
-    columnStyles: { 0: { fontStyle: "bold", cellWidth: 180 } },
-  })
-  y = finalY(doc) + 16
+  let y = titleY + 80
+  if (data.national) {
+    y = addSectionHeading(doc, "National summary", y)
+    autoTable(doc, {
+      startY: y,
+      margin: { left: PAGE_MARGIN, right: PAGE_MARGIN },
+      body: [
+        ["Purchases", formatKwhPlain(data.national.totals.purchasesKwh)],
+        ["Sales (Postpaid + Prepaid)", formatKwhPlain(data.national.totals.salesKwh)],
+        ["Loss", `${formatKwhPlain(data.national.totals.lossKwh)}  (${formatPctPlain(data.national.totals.lossPct)})`],
+        ["Streetlighting", `${formatKwhPlain(data.national.totals.streetlightingKwh)}  (tracked separately, not included in Sales)`],
+      ],
+      styles: { fontSize: 10, cellPadding: 5 },
+      theme: "plain",
+      columnStyles: { 0: { fontStyle: "bold", cellWidth: 180 } },
+    })
+    y = finalY(doc) + 16
 
-  doc.setFontSize(9.5)
-  doc.setTextColor(INK)
-  const narrativeLines = doc.splitTextToSize(data.narrative, pageWidth - PAGE_MARGIN * 2)
-  doc.text(narrativeLines, PAGE_MARGIN, y)
-  y += narrativeLines.length * 12 + 16
+    if (data.narrative) {
+      doc.setFontSize(9.5)
+      doc.setTextColor(INK)
+      const narrativeLines = doc.splitTextToSize(data.narrative, pageWidth - PAGE_MARGIN * 2)
+      doc.text(narrativeLines, PAGE_MARGIN, y)
+      y += narrativeLines.length * 12 + 16
+    }
+  }
 
   // -- Chart images (one per page from here, each sized to fit) --
   data.chartImages.forEach((img) => {
@@ -186,33 +201,38 @@ export function renderReportPdf(data: ReportExportData): jsPDF {
   })
 
   // -- National monthly table --
-  doc.addPage()
-  y = PAGE_MARGIN
-  y = addSectionHeading(doc, "National — month by month", y)
-  regionTable(doc, y, data.national.monthly)
+  if (data.national) {
+    doc.addPage()
+    y = PAGE_MARGIN
+    y = addSectionHeading(doc, "National — month by month", y)
+    regionTable(doc, y, data.national.monthly)
+  }
 
-  // -- Region ranking (always included, executive stops here) --
-  doc.addPage()
-  y = PAGE_MARGIN
-  y = addSectionHeading(doc, "Region ranking — highest loss % first", y)
-  autoTable(doc, {
-    startY: y,
-    margin: { left: PAGE_MARGIN, right: PAGE_MARGIN },
-    head: [["Region", "Districts", "Purchases", "Sales", "Streetlighting", "Loss", "Loss %"]],
-    body: data.regionRanking.map((r) => [
-      r.region,
-      r.districtCount,
-      formatKwhPlain(r.purchasesKwh),
-      formatKwhPlain(r.salesKwh),
-      formatKwhPlain(r.streetlightingKwh),
-      formatKwhPlain(r.lossKwh),
-      formatPctPlain(r.lossPct),
-    ]),
-    headStyles: { fillColor: [29, 78, 216] },
-    styles: { fontSize: 9, cellPadding: 5 },
-    theme: "grid",
-  })
-  y = finalY(doc) + 20
+  // -- Region ranking (always included when at least one region is in
+  // scope -- executive stops here) --
+  if (data.regionRanking.length > 0) {
+    doc.addPage()
+    y = PAGE_MARGIN
+    y = addSectionHeading(doc, "Region ranking — highest loss % first", y)
+    autoTable(doc, {
+      startY: y,
+      margin: { left: PAGE_MARGIN, right: PAGE_MARGIN },
+      head: [["Region", "Districts", "Purchases", "Sales", "Streetlighting", "Loss", "Loss %"]],
+      body: data.regionRanking.map((r) => [
+        r.region,
+        r.districtCount,
+        formatKwhPlain(r.purchasesKwh),
+        formatKwhPlain(r.salesKwh),
+        formatKwhPlain(r.streetlightingKwh),
+        formatKwhPlain(r.lossKwh),
+        formatPctPlain(r.lossPct),
+      ]),
+      headStyles: { fillColor: [29, 78, 216] },
+      styles: { fontSize: 9, cellPadding: 5 },
+      theme: "grid",
+    })
+    y = finalY(doc) + 20
+  }
 
   if (data.anomalies.length > 0) {
     if (y > doc.internal.pageSize.getHeight() - 120) {
