@@ -59,12 +59,11 @@ function triggerDownload(dataUrl: string, filename: string) {
   document.body.removeChild(link)
 }
 
-/** Rasterize an SVG element to PNG via canvas (reliable for Recharts). */
-async function exportSvgAsPng(
+/** Rasterize an SVG element to a PNG data URL via canvas (reliable for Recharts). */
+async function svgToPngDataUrl(
   svg: SVGSVGElement,
-  filename: string,
   options?: { backgroundColor?: string; pixelRatio?: number },
-) {
+): Promise<{ dataUrl: string; width: number; height: number }> {
   const rect = svg.getBoundingClientRect()
   const width = Math.max(rect.width || svg.clientWidth || 0, 1)
   const height = Math.max(rect.height || svg.clientHeight || 0, 1)
@@ -108,24 +107,24 @@ async function exportSvgAsPng(
     ctx.setTransform(scale, 0, 0, scale, 0, 0)
     ctx.drawImage(img, 0, 0, width, height)
 
-    triggerDownload(canvas.toDataURL("image/png"), `${filename}.png`)
+    return { dataUrl: canvas.toDataURL("image/png"), width: canvas.width, height: canvas.height }
   } finally {
     URL.revokeObjectURL(url)
   }
 }
 
 /**
- * Capture a chart/diagram container as PNG.
+ * Capture a chart/diagram container as a PNG data URL (no download).
  * Prefers SVG→canvas for Recharts (avoids Tailwind oklch parse errors).
- * Falls back to html-to-image for HTML+SVG diagrams (e.g. energy flow).
+ * Falls back to html-to-image for HTML+SVG diagrams/tables (e.g. energy
+ * flow, the Reports page's heat map tables).
  */
-export async function exportElementAsPng(
+export async function captureElementAsPngDataUrl(
   element: HTMLElement | null | undefined,
-  filename: string,
   options?: { backgroundColor?: string; pixelRatio?: number },
-) {
+): Promise<{ dataUrl: string; width: number; height: number }> {
   if (!element) {
-    throw new Error("No element to export as image")
+    throw new Error("No element to capture as image")
   }
 
   const bg = options?.backgroundColor ?? "#ffffff"
@@ -146,24 +145,39 @@ export async function exportElementAsPng(
     element.querySelectorAll("button, a, table, input, [class*='rounded']").length > 3
 
   if (primarySvg && !hasComplexHtml) {
-    await exportSvgAsPng(primarySvg, filename, { backgroundColor: bg, pixelRatio })
-    return
+    return svgToPngDataUrl(primarySvg, { backgroundColor: bg, pixelRatio })
   }
 
-  // HTML diagrams (energy flow cards + pipes): modern-screenshot handles Tailwind oklch
+  // HTML diagrams/tables: modern-screenshot handles Tailwind oklch
   const { domToPng } = await import("modern-screenshot")
   const rect = element.getBoundingClientRect()
+  const width = Math.max(rect.width, element.scrollWidth, 1)
+  const height = Math.max(rect.height, element.scrollHeight, 1)
 
   const dataUrl = await domToPng(element, {
     scale: pixelRatio,
     backgroundColor: bg,
-    width: Math.max(rect.width, element.scrollWidth, 1),
-    height: Math.max(rect.height, element.scrollHeight, 1),
+    width,
+    height,
     style: {
       transform: "none",
       color: "#0f172a",
     },
   })
 
+  return { dataUrl, width: width * pixelRatio, height: height * pixelRatio }
+}
+
+/**
+ * Capture a chart/diagram container as PNG and trigger a download.
+ * Prefers SVG→canvas for Recharts (avoids Tailwind oklch parse errors).
+ * Falls back to html-to-image for HTML+SVG diagrams (e.g. energy flow).
+ */
+export async function exportElementAsPng(
+  element: HTMLElement | null | undefined,
+  filename: string,
+  options?: { backgroundColor?: string; pixelRatio?: number },
+) {
+  const { dataUrl } = await captureElementAsPngDataUrl(element, options)
   triggerDownload(dataUrl, `${filename}.png`)
 }

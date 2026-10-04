@@ -1,6 +1,6 @@
 "use client"
 
-import { Fragment, useEffect, useMemo, useState } from "react"
+import { Fragment, useEffect, useMemo, useRef, useState } from "react"
 import {
   Area,
   CartesianGrid,
@@ -62,6 +62,7 @@ import {
 import { PurchasesSalesLossMap } from "@/components/reports/purchases-sales-loss-map"
 import { CompareInsightsView } from "@/components/reports/compare-insights-view"
 import { MetricHeatMap } from "@/components/reports/metric-heat-map"
+import { GenerateReportDialog } from "@/components/reports/generate-report-dialog"
 
 const MAX_WINDOW_MONTHS = 12
 
@@ -126,6 +127,16 @@ export function PurchasesSalesReportView() {
   // the ranking table highlights the same selection in both, rather than
   // being two disconnected views of the same data.
   const [focusedRegionKey, setFocusedRegionKey] = useState<string | null>(null)
+
+  // Capture targets for the "Generate Report" export -- plain refs rather
+  // than passing the chart data back out, since the export reuses the
+  // already-rendered DOM (via captureElementAsPngDataUrl) instead of
+  // redrawing each chart a second time just for the file.
+  const trendChartRef = useRef<HTMLDivElement>(null)
+  const lossHeatMapRef = useRef<HTMLDivElement>(null)
+  const purchasesHeatMapRef = useRef<HTMLDivElement>(null)
+  const prepaidHeatMapRef = useRef<HTMLDivElement>(null)
+  const postpaidHeatMapRef = useRef<HTMLDivElement>(null)
 
   // Heat map carousel: Embla lays every slide out in one row and sizes its
   // own viewport to the tallest of them, so without this the carousel stays
@@ -367,6 +378,21 @@ export function PurchasesSalesReportView() {
           </p>
         </div>
         <div className="flex items-start gap-2 flex-wrap">
+          <GenerateReportDialog
+            report={report}
+            periodLabel={
+              report.monthLabels.length <= 1
+                ? (report.monthLabels[0] ?? "")
+                : `${report.monthLabels[0]} – ${report.monthLabels[report.monthLabels.length - 1]}`
+            }
+            chartRefs={{
+              trend: trendChartRef,
+              lossHeatMap: lossHeatMapRef,
+              purchasesHeatMap: purchasesHeatMapRef,
+              prepaidHeatMap: prepaidHeatMapRef,
+              postpaidHeatMap: postpaidHeatMapRef,
+            }}
+          />
           <Select value={periodMode} onValueChange={(v) => setPeriodMode(v as PeriodMode)}>
             <SelectTrigger className="w-[180px]">
               <SelectValue />
@@ -619,6 +645,7 @@ export function PurchasesSalesReportView() {
       {/* Monthly trend — Purchases + Sales (left axis, kWh) and Loss %
           (right axis, %) combined into one chart, each series toggleable
           via the checkboxes instead of split across two charts. */}
+      <div ref={trendChartRef}>
       <Card>
         <CardHeader>
           <CardTitle>Purchases vs Sales vs Loss % — monthly trend</CardTitle>
@@ -749,6 +776,7 @@ export function PurchasesSalesReportView() {
           )}
         </CardContent>
       </Card>
+      </div>
 
       {/* Region ranking */}
       <Card>
@@ -1008,6 +1036,7 @@ export function PurchasesSalesReportView() {
         </div>
         <CarouselContent className="items-start">
             <CarouselItem>
+              <div ref={lossHeatMapRef}>
               <Card>
                 <CardHeader>
                   <CardTitle>Loss % heat map — region × month</CardTitle>
@@ -1120,9 +1149,11 @@ export function PurchasesSalesReportView() {
                   )}
                 </CardContent>
               </Card>
+              </div>
             </CarouselItem>
 
             <CarouselItem>
+              <div ref={purchasesHeatMapRef}>
               <MetricHeatMap
                 title="Purchases heat map — region × month"
                 description="BSP incomer imports by region and month. Darker blue is more purchased."
@@ -1137,9 +1168,11 @@ export function PurchasesSalesReportView() {
                 nationalValue={(n) => n?.purchasesKwh ?? 0}
                 grandTotal={scopeTotals.purchasesKwh}
               />
+              </div>
             </CarouselItem>
 
             <CarouselItem>
+              <div ref={prepaidHeatMapRef}>
               <MetricHeatMap
                 title="Prepaid heat map — region × month"
                 description="Zeus prepaid + MMS + Legacy (BOT/BXC/Holley/eCash4/PNS) prepaid sales by region and month. Darker green is more sold."
@@ -1154,6 +1187,7 @@ export function PurchasesSalesReportView() {
                 nationalValue={(n) => n?.prepaidKwh ?? 0}
                 grandTotal={scopeTotals.prepaidKwh}
               />
+              </div>
             </CarouselItem>
 
             <CarouselItem>
@@ -1170,6 +1204,7 @@ export function PurchasesSalesReportView() {
                   <TabsTrigger value="streetlighting">Streetlighting</TabsTrigger>
                 </TabsList>
                 <TabsContent value="all">
+                  <div ref={postpaidHeatMapRef}>
                   <MetricHeatMap
                     title="Postpaid heat map — region × month"
                     description="Zeus postpaid (non-AMR + AMR) sales by region and month. Darker indigo is more sold."
@@ -1184,6 +1219,7 @@ export function PurchasesSalesReportView() {
                     nationalValue={(n) => n?.postpaidKwh ?? 0}
                     grandTotal={scopeTotals.postpaidKwh}
                   />
+                  </div>
                 </TabsContent>
                 <TabsContent value="streetlighting">
                   <MetricHeatMap
