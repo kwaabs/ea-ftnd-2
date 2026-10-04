@@ -47,7 +47,7 @@ export function MetricHeatMap({
   }, 0)
 
   return (
-    <Card className="h-full">
+    <Card>
       <CardHeader>
         <CardTitle>{title}</CardTitle>
         <CardDescription>{description}</CardDescription>

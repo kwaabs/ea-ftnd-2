@@ -1,6 +1,6 @@
 "use client"
 
-import { Fragment, useMemo, useState } from "react"
+import { Fragment, useEffect, useMemo, useRef, useState } from "react"
 import {
   Area,
   CartesianGrid,
@@ -28,7 +28,15 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Badge } from "@/components/ui/badge"
 import { Input } from "@/components/ui/input"
 import { Checkbox } from "@/components/ui/checkbox"
-import { Carousel, CarouselContent, CarouselItem, CarouselNext, CarouselPrevious } from "@/components/ui/carousel"
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
+import {
+  Carousel,
+  type CarouselApi,
+  CarouselContent,
+  CarouselItem,
+  CarouselNext,
+  CarouselPrevious,
+} from "@/components/ui/carousel"
 import {
   currentMonthPoint,
   monthKey,
@@ -54,6 +62,7 @@ import {
 import { PurchasesSalesLossMap } from "@/components/reports/purchases-sales-loss-map"
 import { CompareInsightsView } from "@/components/reports/compare-insights-view"
 import { MetricHeatMap } from "@/components/reports/metric-heat-map"
+import { GenerateReportDialog } from "@/components/reports/generate-report-dialog"
 
 const MAX_WINDOW_MONTHS = 12
 
@@ -118,6 +127,43 @@ export function PurchasesSalesReportView() {
   // the ranking table highlights the same selection in both, rather than
   // being two disconnected views of the same data.
   const [focusedRegionKey, setFocusedRegionKey] = useState<string | null>(null)
+
+  // Capture targets for the "Generate Report" export -- plain refs rather
+  // than passing the chart data back out, since the export reuses the
+  // already-rendered DOM (via captureElementAsPngDataUrl) instead of
+  // redrawing each chart a second time just for the file.
+  const trendChartRef = useRef<HTMLDivElement>(null)
+  const lossHeatMapRef = useRef<HTMLDivElement>(null)
+  const purchasesHeatMapRef = useRef<HTMLDivElement>(null)
+  const prepaidHeatMapRef = useRef<HTMLDivElement>(null)
+  const postpaidHeatMapRef = useRef<HTMLDivElement>(null)
+
+  // Heat map carousel: Embla lays every slide out in one row and sizes its
+  // own viewport to the tallest of them, so without this the carousel stays
+  // exactly as tall as the Loss % slide (the longest one) even while a much
+  // shorter slide like Purchases is showing -- leaving visible dead space
+  // below its card. Tracking the active slide's own height and applying it
+  // to Embla's root node keeps the carousel's box matching whatever's
+  // actually on screen. Re-measured on slide change and on resize (a slide
+  // whose data is still loading is shorter than once its table renders).
+  const [heatCarouselApi, setHeatCarouselApi] = useState<CarouselApi>()
+  useEffect(() => {
+    if (!heatCarouselApi) return
+    const updateHeight = () => {
+      const slide = heatCarouselApi.slideNodes()[heatCarouselApi.selectedScrollSnap()]
+      if (slide) heatCarouselApi.rootNode().style.height = `${slide.offsetHeight}px`
+    }
+    updateHeight()
+    heatCarouselApi.on("select", updateHeight)
+    heatCarouselApi.on("reInit", updateHeight)
+    const resizeObserver = new ResizeObserver(updateHeight)
+    heatCarouselApi.slideNodes().forEach((node) => resizeObserver.observe(node))
+    return () => {
+      heatCarouselApi.off("select", updateHeight)
+      heatCarouselApi.off("reInit", updateHeight)
+      resizeObserver.disconnect()
+    }
+  }, [heatCarouselApi])
 
   // Custom range is clamped, not rejected: picking a span over 12 months
   // keeps the most recent 12 of whatever was selected rather than blocking
@@ -332,6 +378,21 @@ export function PurchasesSalesReportView() {
           </p>
         </div>
         <div className="flex items-start gap-2 flex-wrap">
+          <GenerateReportDialog
+            report={report}
+            periodLabel={
+              report.monthLabels.length <= 1
+                ? (report.monthLabels[0] ?? "")
+                : `${report.monthLabels[0]} – ${report.monthLabels[report.monthLabels.length - 1]}`
+            }
+            chartRefs={{
+              trend: trendChartRef,
+              lossHeatMap: lossHeatMapRef,
+              purchasesHeatMap: purchasesHeatMapRef,
+              prepaidHeatMap: prepaidHeatMapRef,
+              postpaidHeatMap: postpaidHeatMapRef,
+            }}
+          />
           <Select value={periodMode} onValueChange={(v) => setPeriodMode(v as PeriodMode)}>
             <SelectTrigger className="w-[180px]">
               <SelectValue />
@@ -584,6 +645,7 @@ export function PurchasesSalesReportView() {
       {/* Monthly trend — Purchases + Sales (left axis, kWh) and Loss %
           (right axis, %) combined into one chart, each series toggleable
           via the checkboxes instead of split across two charts. */}
+      <div ref={trendChartRef}>
       <Card>
         <CardHeader>
           <CardTitle>Purchases vs Sales vs Loss % — monthly trend</CardTitle>
@@ -714,6 +776,7 @@ export function PurchasesSalesReportView() {
           )}
         </CardContent>
       </Card>
+      </div>
 
       {/* Region ranking */}
       <Card>
@@ -966,14 +1029,15 @@ export function PurchasesSalesReportView() {
           buttons sit above the card, top-right, rather than pinned to the
           viewport's side edges -- the side position put them well outside
           this (narrower, padded) content column on real layouts. */}
-      <Carousel opts={{ align: "start" }}>
+      <Carousel opts={{ align: "start" }} setApi={setHeatCarouselApi} className="[&_[data-slot=carousel-content]]:transition-[height] [&_[data-slot=carousel-content]]:duration-300">
         <div className="flex justify-end gap-2 mb-2">
           <CarouselPrevious className="static translate-y-0" />
           <CarouselNext className="static translate-y-0" />
         </div>
-        <CarouselContent>
+        <CarouselContent className="items-start">
             <CarouselItem>
-              <Card className="h-full">
+              <div ref={lossHeatMapRef}>
+              <Card>
                 <CardHeader>
                   <CardTitle>Loss % heat map — region × month</CardTitle>
                   <CardDescription>
@@ -1085,9 +1149,11 @@ export function PurchasesSalesReportView() {
                   )}
                 </CardContent>
               </Card>
+              </div>
             </CarouselItem>
 
             <CarouselItem>
+              <div ref={purchasesHeatMapRef}>
               <MetricHeatMap
                 title="Purchases heat map — region × month"
                 description="BSP incomer imports by region and month. Darker blue is more purchased."
@@ -1102,9 +1168,11 @@ export function PurchasesSalesReportView() {
                 nationalValue={(n) => n?.purchasesKwh ?? 0}
                 grandTotal={scopeTotals.purchasesKwh}
               />
+              </div>
             </CarouselItem>
 
             <CarouselItem>
+              <div ref={prepaidHeatMapRef}>
               <MetricHeatMap
                 title="Prepaid heat map — region × month"
                 description="Zeus prepaid + MMS + Legacy (BOT/BXC/Holley/eCash4/PNS) prepaid sales by region and month. Darker green is more sold."
@@ -1119,40 +1187,57 @@ export function PurchasesSalesReportView() {
                 nationalValue={(n) => n?.prepaidKwh ?? 0}
                 grandTotal={scopeTotals.prepaidKwh}
               />
+              </div>
             </CarouselItem>
 
             <CarouselItem>
-              <MetricHeatMap
-                title="Postpaid heat map — region × month"
-                description="Zeus postpaid (non-AMR + AMR) sales by region and month. Darker indigo is more sold."
-                hue={METRIC_HEAT_HUES.postpaid}
-                isLoading={report.isLoading}
-                regions={scopeRegions}
-                monthKeys={monthKeys}
-                monthLabels={report.monthLabels}
-                national={scopeNational}
-                cellValue={(cell) => cell?.postpaidKwh ?? 0}
-                regionTotal={(r) => r.totalPostpaidKwh}
-                nationalValue={(n) => n?.postpaidKwh ?? 0}
-                grandTotal={scopeTotals.postpaidKwh}
-              />
-            </CarouselItem>
-
-            <CarouselItem>
-              <MetricHeatMap
-                title="Streetlighting heat map — region × month"
-                description="Zeus streetlighting (tariff class E03) sales by region and month. Darker amber is more sold."
-                hue={METRIC_HEAT_HUES.streetlighting}
-                isLoading={report.isLoading}
-                regions={scopeRegions}
-                monthKeys={monthKeys}
-                monthLabels={report.monthLabels}
-                national={scopeNational}
-                cellValue={(cell) => cell?.streetlightingKwh ?? 0}
-                regionTotal={(r) => r.totalStreetlightingKwh}
-                nationalValue={(n) => n?.streetlightingKwh ?? 0}
-                grandTotal={scopeTotals.streetlightingKwh}
-              />
+              {/* Streetlighting (Zeus tariff class E03) is billed the same
+                  non-prepaid way as Postpaid, not a sibling sales category --
+                  nested here as a sub-view of the same slide rather than its
+                  own carousel slide, same relationship as the region/district
+                  detail pages' Postpaid tab. Postpaid totals elsewhere on
+                  this page (KPIs, national Loss %) are unchanged by this --
+                  still Postpaid-AMR + Postpaid-non-AMR only, same as before. */}
+              <Tabs defaultValue="all">
+                <TabsList className="grid w-full grid-cols-2 max-w-xs mb-2">
+                  <TabsTrigger value="all">All Postpaid</TabsTrigger>
+                  <TabsTrigger value="streetlighting">Streetlighting</TabsTrigger>
+                </TabsList>
+                <TabsContent value="all">
+                  <div ref={postpaidHeatMapRef}>
+                  <MetricHeatMap
+                    title="Postpaid heat map — region × month"
+                    description="Zeus postpaid (non-AMR + AMR) sales by region and month. Darker indigo is more sold."
+                    hue={METRIC_HEAT_HUES.postpaid}
+                    isLoading={report.isLoading}
+                    regions={scopeRegions}
+                    monthKeys={monthKeys}
+                    monthLabels={report.monthLabels}
+                    national={scopeNational}
+                    cellValue={(cell) => cell?.postpaidKwh ?? 0}
+                    regionTotal={(r) => r.totalPostpaidKwh}
+                    nationalValue={(n) => n?.postpaidKwh ?? 0}
+                    grandTotal={scopeTotals.postpaidKwh}
+                  />
+                  </div>
+                </TabsContent>
+                <TabsContent value="streetlighting">
+                  <MetricHeatMap
+                    title="Postpaid heat map — Streetlighting — region × month"
+                    description="Subset of Postpaid: Zeus streetlighting (tariff class E03) sales by region and month. Darker amber is more sold."
+                    hue={METRIC_HEAT_HUES.streetlighting}
+                    isLoading={report.isLoading}
+                    regions={scopeRegions}
+                    monthKeys={monthKeys}
+                    monthLabels={report.monthLabels}
+                    national={scopeNational}
+                    cellValue={(cell) => cell?.streetlightingKwh ?? 0}
+                    regionTotal={(r) => r.totalStreetlightingKwh}
+                    nationalValue={(n) => n?.streetlightingKwh ?? 0}
+                    grandTotal={scopeTotals.streetlightingKwh}
+                  />
+                </TabsContent>
+              </Tabs>
             </CarouselItem>
         </CarouselContent>
       </Carousel>

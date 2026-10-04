@@ -8009,19 +8009,125 @@ export function RegionDetail({ region }: RegionDetailProps) {
         </Card>
       )}
 
-      {/* Customer Sales Tables — Postpaid (Zeus billing) / Prepaid (Zeus + MMS) / Streetlighting (Zeus tariff class E03). */}
+      {/* Customer Sales Tables — Postpaid (Zeus billing, with Streetlighting
+          nested under it as a subset — Zeus tariff class E03 is billed the
+          same non-prepaid way, not a sibling category) / Prepaid (Zeus + MMS). */}
       <Tabs defaultValue="postpaid">
-        <TabsList className="grid w-full grid-cols-3 max-w-lg mb-4">
+        <TabsList className="grid w-full grid-cols-2 max-w-sm mb-4">
           <TabsTrigger value="postpaid">Postpaid</TabsTrigger>
           <TabsTrigger value="prepaid">Prepaid</TabsTrigger>
-          <TabsTrigger value="streetlighting">Streetlighting</TabsTrigger>
         </TabsList>
         <TabsContent value="postpaid" className="space-y-6">
-          <RegionalCustomerSalesTable
-            region={zeusRegion}
-            dateRange={dateRange}
-            meterModelType="Postpaid"
-          />
+          <Tabs defaultValue="all">
+            <TabsList className="grid w-full grid-cols-2 max-w-xs">
+              <TabsTrigger value="all">All Postpaid</TabsTrigger>
+              <TabsTrigger value="streetlighting">Streetlighting</TabsTrigger>
+            </TabsList>
+            <TabsContent value="all" className="space-y-6 mt-4">
+              <RegionalCustomerSalesTable
+                region={zeusRegion}
+                dateRange={dateRange}
+                meterModelType="Postpaid"
+              />
+            </TabsContent>
+            <TabsContent value="streetlighting" className="space-y-6 mt-4">
+              <Card>
+                <CardHeader className="flex flex-row items-center justify-between gap-2">
+                  <div>
+                    <CardTitle>Streetlighting by district</CardTitle>
+                    <CardDescription>
+                      Zeus tariff class E03 — click a district to filter the records below
+                    </CardDescription>
+                  </div>
+                  {selectedStreetlightingDistrict && (
+                    <button
+                      type="button"
+                      onClick={() => setSelectedStreetlightingDistrict(null)}
+                      className="text-xs text-amber-700 hover:underline"
+                    >
+                      Clear
+                    </button>
+                  )}
+                </CardHeader>
+                <CardContent>
+                  {streetlightingDistrictLoading ? (
+                    <Skeleton className="h-32 w-full" />
+                  ) : streetlightingByDistrict.size === 0 ? (
+                    <p className="text-sm text-muted-foreground py-8 text-center">
+                      No streetlighting data for this region in the selected period.
+                    </p>
+                  ) : (
+                    <div className="overflow-x-auto">
+                      <table className="w-full text-sm">
+                        <thead>
+                          <tr className="border-b">
+                            <th className="text-left py-2 pr-4 font-medium text-muted-foreground">
+                              District
+                            </th>
+                            <th className="text-right py-2 px-4 font-medium text-amber-700">
+                              Consumption (kWh)
+                            </th>
+                            <th className="text-right py-2 pl-4 font-medium text-muted-foreground">
+                              Accounts
+                            </th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {Array.from(streetlightingByDistrict.entries())
+                            .sort((a, b) => b[1].kwh - a[1].kwh)
+                            .map(([district, data]) => {
+                              const isSelected = selectedStreetlightingDistrict === district;
+                              return (
+                                <tr
+                                  key={district}
+                                  onClick={() =>
+                                    setSelectedStreetlightingDistrict((prev) =>
+                                      prev === district ? null : district,
+                                    )
+                                  }
+                                  className={`border-b last:border-0 hover:bg-muted/40 cursor-pointer ${isSelected ? "bg-amber-50" : ""}`}
+                                >
+                                  <td className="py-2.5 pr-4 font-medium">{district}</td>
+                                  <td className="py-2.5 px-4 text-right font-semibold text-amber-700 tabular-nums">
+                                    {formatNumber(data.kwh)}
+                                  </td>
+                                  <td className="py-2.5 pl-4 text-right tabular-nums">
+                                    {formatNumber(data.customers, 0)}
+                                  </td>
+                                </tr>
+                              );
+                            })}
+                        </tbody>
+                        <tfoot>
+                          <tr className="border-t bg-muted/30">
+                            <td className="py-2.5 pr-4 font-semibold">Total</td>
+                            <td className="py-2.5 px-4 text-right font-bold text-amber-700 tabular-nums">
+                              {formatNumber(energyFlow.streetlightingKwh)}
+                            </td>
+                            <td className="py-2.5 pl-4 text-right font-semibold tabular-nums">
+                              {formatNumber(
+                                Array.from(streetlightingByDistrict.values()).reduce(
+                                  (s, d) => s + d.customers,
+                                  0,
+                                ),
+                                0,
+                              )}
+                            </td>
+                          </tr>
+                        </tfoot>
+                      </table>
+                    </div>
+                  )}
+                </CardContent>
+              </Card>
+              <RegionalCustomerSalesTable
+                region={zeusRegion}
+                district={selectedStreetlightingDistrict ?? undefined}
+                dateRange={dateRange}
+                tariffClassCode="E03"
+              />
+            </TabsContent>
+          </Tabs>
         </TabsContent>
         <TabsContent value="prepaid" className="space-y-6">
           <RegionalCustomerSalesTable
@@ -8032,103 +8138,6 @@ export function RegionDetail({ region }: RegionDetailProps) {
           <MmsCustomerSalesDetail
             dateRange={dateRange}
             region={mmsRegion}
-          />
-        </TabsContent>
-        <TabsContent value="streetlighting" className="space-y-6">
-          <Card>
-            <CardHeader className="flex flex-row items-center justify-between gap-2">
-              <div>
-                <CardTitle>Streetlighting by district</CardTitle>
-                <CardDescription>
-                  Zeus tariff class E03 — click a district to filter the records below
-                </CardDescription>
-              </div>
-              {selectedStreetlightingDistrict && (
-                <button
-                  type="button"
-                  onClick={() => setSelectedStreetlightingDistrict(null)}
-                  className="text-xs text-amber-700 hover:underline"
-                >
-                  Clear
-                </button>
-              )}
-            </CardHeader>
-            <CardContent>
-              {streetlightingDistrictLoading ? (
-                <Skeleton className="h-32 w-full" />
-              ) : streetlightingByDistrict.size === 0 ? (
-                <p className="text-sm text-muted-foreground py-8 text-center">
-                  No streetlighting data for this region in the selected period.
-                </p>
-              ) : (
-                <div className="overflow-x-auto">
-                  <table className="w-full text-sm">
-                    <thead>
-                      <tr className="border-b">
-                        <th className="text-left py-2 pr-4 font-medium text-muted-foreground">
-                          District
-                        </th>
-                        <th className="text-right py-2 px-4 font-medium text-amber-700">
-                          Consumption (kWh)
-                        </th>
-                        <th className="text-right py-2 pl-4 font-medium text-muted-foreground">
-                          Accounts
-                        </th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {Array.from(streetlightingByDistrict.entries())
-                        .sort((a, b) => b[1].kwh - a[1].kwh)
-                        .map(([district, data]) => {
-                          const isSelected = selectedStreetlightingDistrict === district;
-                          return (
-                            <tr
-                              key={district}
-                              onClick={() =>
-                                setSelectedStreetlightingDistrict((prev) =>
-                                  prev === district ? null : district,
-                                )
-                              }
-                              className={`border-b last:border-0 hover:bg-muted/40 cursor-pointer ${isSelected ? "bg-amber-50" : ""}`}
-                            >
-                              <td className="py-2.5 pr-4 font-medium">{district}</td>
-                              <td className="py-2.5 px-4 text-right font-semibold text-amber-700 tabular-nums">
-                                {formatNumber(data.kwh)}
-                              </td>
-                              <td className="py-2.5 pl-4 text-right tabular-nums">
-                                {formatNumber(data.customers, 0)}
-                              </td>
-                            </tr>
-                          );
-                        })}
-                    </tbody>
-                    <tfoot>
-                      <tr className="border-t bg-muted/30">
-                        <td className="py-2.5 pr-4 font-semibold">Total</td>
-                        <td className="py-2.5 px-4 text-right font-bold text-amber-700 tabular-nums">
-                          {formatNumber(energyFlow.streetlightingKwh)}
-                        </td>
-                        <td className="py-2.5 pl-4 text-right font-semibold tabular-nums">
-                          {formatNumber(
-                            Array.from(streetlightingByDistrict.values()).reduce(
-                              (s, d) => s + d.customers,
-                              0,
-                            ),
-                            0,
-                          )}
-                        </td>
-                      </tr>
-                    </tfoot>
-                  </table>
-                </div>
-              )}
-            </CardContent>
-          </Card>
-          <RegionalCustomerSalesTable
-            region={zeusRegion}
-            district={selectedStreetlightingDistrict ?? undefined}
-            dateRange={dateRange}
-            tariffClassCode="E03"
           />
         </TabsContent>
       </Tabs>

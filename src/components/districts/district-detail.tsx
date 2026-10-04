@@ -1035,6 +1035,27 @@ export function DistrictDetail({ district }: DistrictDetailProps) {
                     <Card>
                         <CardHeader className="pb-3">
                             <CardTitle className="text-sm font-medium text-muted-foreground flex items-center gap-2">
+                                <Zap className="h-4 w-4 text-yellow-600" />
+                                Streetlighting
+                            </CardTitle>
+                        </CardHeader>
+                        <CardContent>
+                            {customerSalesLoading ? (
+                                <Skeleton className="h-10 w-32" />
+                            ) : (
+                                <>
+                                    <div className="text-2xl font-bold text-yellow-700">{formatNumber(customerSalesStats.streetlightingKwh)} kWh</div>
+                                    <p className="text-xs text-muted-foreground mt-1">
+                                        Zeus tariff class E03 · {formatNumber(customerSalesStats.streetlightingCustomers)} accounts
+                                    </p>
+                                </>
+                            )}
+                        </CardContent>
+                    </Card>
+
+                    <Card>
+                        <CardHeader className="pb-3">
+                            <CardTitle className="text-sm font-medium text-muted-foreground flex items-center gap-2">
                                 <Scale className="h-4 w-4 text-sky-600" />
                                 Debt
                             </CardTitle>
@@ -1109,41 +1130,37 @@ export function DistrictDetail({ district }: DistrictDetailProps) {
                             )}
                         </CardContent>
                     </Card>
-
-                    <Card>
-                        <CardHeader className="pb-3">
-                            <CardTitle className="text-sm font-medium text-muted-foreground flex items-center gap-2">
-                                <Zap className="h-4 w-4 text-yellow-600" />
-                                Streetlighting
-                            </CardTitle>
-                        </CardHeader>
-                        <CardContent>
-                            {customerSalesLoading ? (
-                                <Skeleton className="h-10 w-32" />
-                            ) : (
-                                <>
-                                    <div className="text-2xl font-bold text-yellow-700">{formatNumber(customerSalesStats.streetlightingKwh)} kWh</div>
-                                    <p className="text-xs text-muted-foreground mt-1">
-                                        Zeus tariff class E03 · {formatNumber(customerSalesStats.streetlightingCustomers)} accounts
-                                    </p>
-                                </>
-                            )}
-                        </CardContent>
-                    </Card>
                 </div>
 
+                {/* Postpaid (Zeus billing, with Streetlighting nested under it as a
+                    subset — Zeus tariff class E03 is billed the same non-prepaid
+                    way, not a sibling category) / Prepaid (Zeus + MMS). */}
                 <Tabs defaultValue="postpaid">
-                    <TabsList className="grid w-full grid-cols-3 max-w-lg">
+                    <TabsList className="grid w-full grid-cols-2 max-w-xs">
                         <TabsTrigger value="postpaid">Postpaid</TabsTrigger>
                         <TabsTrigger value="prepaid">Prepaid</TabsTrigger>
-                        <TabsTrigger value="streetlighting">Streetlighting</TabsTrigger>
                     </TabsList>
                     <TabsContent value="postpaid" className="space-y-4 mt-4">
-                        <RegionalCustomerSalesTable
-                            district={zeusDistrict}
-                            dateRange={dateRange}
-                            meterModelType="Postpaid"
-                        />
+                        <Tabs defaultValue="all">
+                            <TabsList className="grid w-full grid-cols-2 max-w-xs">
+                                <TabsTrigger value="all">All Postpaid</TabsTrigger>
+                                <TabsTrigger value="streetlighting">Streetlighting</TabsTrigger>
+                            </TabsList>
+                            <TabsContent value="all" className="space-y-4 mt-4">
+                                <RegionalCustomerSalesTable
+                                    district={zeusDistrict}
+                                    dateRange={dateRange}
+                                    meterModelType="Postpaid"
+                                />
+                            </TabsContent>
+                            <TabsContent value="streetlighting" className="space-y-4 mt-4">
+                                <RegionalCustomerSalesTable
+                                    district={zeusDistrict}
+                                    dateRange={dateRange}
+                                    tariffClassCode="E03"
+                                />
+                            </TabsContent>
+                        </Tabs>
                     </TabsContent>
                     <TabsContent value="prepaid" className="space-y-4 mt-4">
                         <RegionalCustomerSalesTable
@@ -1154,13 +1171,6 @@ export function DistrictDetail({ district }: DistrictDetailProps) {
                         <MmsCustomerSalesDetail
                             dateRange={dateRange}
                             district={mmsDistrict}
-                        />
-                    </TabsContent>
-                    <TabsContent value="streetlighting" className="space-y-4 mt-4">
-                        <RegionalCustomerSalesTable
-                            district={zeusDistrict}
-                            dateRange={dateRange}
-                            tariffClassCode="E03"
                         />
                     </TabsContent>
                 </Tabs>
