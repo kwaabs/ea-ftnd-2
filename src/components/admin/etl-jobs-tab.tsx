@@ -86,6 +86,14 @@ const EMPTY_FORM: EtlJobInput = {
 
 const FILTER_TOKEN = "{{FILTER}}"
 
+// Sentinel SelectItem value for "don't load this field" — a source field
+// legitimately may have no matching destination column (e.g. a JSON API
+// returning fields this app's table doesn't track), so unlike a SQL
+// SELECT list (where every column you write IS one you want), mapping
+// must allow leaving a source field out entirely rather than forcing
+// every one of them onto some destination column.
+const SKIP_MAPPING = "__skip__"
+
 function jobToForm(j: EtlJobRecord): EtlJobInput {
   return {
     name: j.name,
@@ -225,7 +233,19 @@ export function EtlJobsTab() {
   // When editing an existing job, its current dest_columns are a
   // best-effort prefill for the mapping once a fresh test tells us how
   // many source columns there are and confirms the count still matches.
+  // Position-based — only meaningful for the SQL kinds, where a source
+  // column has no name of its own to match on (see prefillFieldMap for
+  // http_api's better alternative).
   const [prefillDestColumns, setPrefillDestColumns] = useState<string[] | null>(null)
+  // http_api's name-based prefill: source_fields[i] -> dest_columns[i]
+  // from the job being edited. Unlike prefillDestColumns, this survives a
+  // re-test returning a different NUMBER of fields than last time — which
+  // happens routinely for a JSON API whose optional fields appear on some
+  // sampled records and not others — because it matches each freshly
+  // tested field by its own name rather than by position/count. Without
+  // this, editing a job whose test happens to sample a slightly different
+  // field set wiped the entire mapping back to blank every time.
+  const [prefillFieldMap, setPrefillFieldMap] = useState<Record<string, string> | null>(null)
   const [useCustomTableName, setUseCustomTableName] = useState(false)
 
   const { data: destTablesData } = useEtlDestTables(form.dest_schema)
@@ -239,8 +259,15 @@ export function EtlJobsTab() {
 
   // The job's actual dest_columns — always derived from the mapping, never
   // typed twice. Used for the mapping step itself, the watermark/conflict
-  // pickers in Review, and the final submit payload.
+  // pickers in Review, and the final submit payload. A source field can be
+  // left unmapped (null) to skip loading it — this filters those out.
   const destColumns = mapping.filter((c): c is string => Boolean(c && c.trim()))
+  // sourceColumns filtered by the exact same predicate/index order as
+  // destColumns, so the two stay positionally paired — this is what
+  // becomes source_fields on submit for an http_api job, since skipping a
+  // field must drop it from BOTH arrays at the same index or the mapping
+  // silently shifts.
+  const mappedSourceFields = sourceColumns.filter((_, i) => Boolean(mapping[i] && mapping[i]!.trim()))
 
   // An http_api job's "source query" is a path+query-string template, not
   // SQL — sourceColumns (detected JSON field names, see
@@ -276,11 +303,14 @@ export function EtlJobsTab() {
     setSourceColumns(columns)
     setTestedQuery(forQuery)
     setMapping(
-      prefillDestColumns && prefillDestColumns.length === columns.length
-        ? prefillDestColumns
-        : columns.map(() => null),
+      prefillFieldMap
+        ? columns.map((c) => prefillFieldMap[c] ?? null)
+        : prefillDestColumns && prefillDestColumns.length === columns.length
+          ? prefillDestColumns
+          : columns.map(() => null),
     )
     setPrefillDestColumns(null)
+    setPrefillFieldMap(null)
     // Only set for an http_api source (see EtlTestQueryResult.detected_records_path)
     // — the top-level JSON field the response's record array was found
     // under, auto-detected since a JSON object has no reliable field
@@ -290,7 +320,8 @@ export function EtlJobsTab() {
     }
   }
 
-  const setMappingAt = (i: number, value: string) => setMapping((m) => m.map((v, idx) => (idx === i ? value : v)))
+  const setMappingAt = (i: number, value: string | null) =>
+    setMapping((m) => m.map((v, idx) => (idx === i ? value : v)))
 
   // filter_query is null whenever the job isn't seeded from this app
   // database — the toggle just flips between that and a starting "" so
@@ -330,6 +361,7 @@ export function EtlJobsTab() {
     setTriggerTimesText("")
     setScheduleEnabled(true)
     setPrefillDestColumns(null)
+    setPrefillFieldMap(null)
     resetWizard()
     setFormError(null)
     setDialogOpen(true)
@@ -342,6 +374,17 @@ export function EtlJobsTab() {
     setTriggerTimesText(f.trigger_times.join(", "))
     setScheduleEnabled(f.trigger_times.length > 0)
     setPrefillDestColumns(f.dest_columns.length > 0 ? f.dest_columns : null)
+    // http_api jobs have named source fields (unlike the SQL kinds, where
+    // a source column has no identity beyond its position in the SELECT
+    // list) — prefill by matching field NAME, which survives a re-test
+    // sampling a different field set than last time. See prefillFieldMap's
+    // declaration for why that matters here.
+    const kind = sources.find((s) => s.id === j.source_id)?.kind
+    setPrefillFieldMap(
+      kind === "http_api" && f.source_fields.length > 0 && f.source_fields.length === f.dest_columns.length
+        ? Object.fromEntries(f.source_fields.map((sf, i) => [sf, f.dest_columns[i]]))
+        : null,
+    )
     resetWizard()
     setFormError(null)
     setDialogOpen(true)
@@ -372,11 +415,10 @@ export function EtlJobsTab() {
       case 3:
         return Boolean(form.dest_schema.trim() && form.dest_table.trim())
       case 4:
-        return (
-          mapping.length === sourceColumns.length &&
-          mapping.every((v) => v && v.trim()) &&
-          new Set(mapping).size === mapping.length
-        )
+        // At least one field mapped, and no destination column used
+        // twice — unmapped (skipped) fields are allowed and don't count
+        // toward either check.
+        return destColumns.length > 0 && new Set(destColumns).size === destColumns.length
       default:
         return true
     }
@@ -407,8 +449,8 @@ export function EtlJobsTab() {
       setFormError("Name, source, source query, and destination table are all required")
       return
     }
-    if (destColumns.length === 0 || destColumns.length !== sourceColumns.length) {
-      setFormError("Map every source column to a destination column first")
+    if (destColumns.length === 0) {
+      setFormError("Map at least one source field to a destination column first")
       return
     }
     if (scheduleEnabled && triggerTimes.length === 0) {
@@ -438,10 +480,13 @@ export function EtlJobsTab() {
       filter_query: filterEnabled ? (form.filter_query?.trim() ?? null) : null,
       filter_batch_size: filterEnabled ? (form.filter_batch_size ?? 1000) : null,
       // source_fields is the http_api analog of "the SELECT list's column
-      // order" — sourceColumns (detected JSON field names) is already
-      // positionally aligned with destColumns via the same mapping array,
-      // exactly like the SQL kinds' implicit SELECT-list-order contract.
-      source_fields: isHttpApi ? sourceColumns : [],
+      // order" — mappedSourceFields (detected JSON field names, filtered
+      // to just the ones actually mapped) is positionally aligned with
+      // destColumns via the same filter, exactly like the SQL kinds'
+      // implicit SELECT-list-order contract. Using raw sourceColumns here
+      // instead would misalign the two arrays the moment any field is
+      // skipped.
+      source_fields: isHttpApi ? mappedSourceFields : [],
     }
 
     setSubmitting(true)
@@ -884,8 +929,8 @@ export function EtlJobsTab() {
                   <span className="font-mono">
                     {form.dest_schema}.{form.dest_table}
                   </span>
-                  . Every source column needs a destination — that&apos;s what gets loaded, in this
-                  order.
+                  . Only mapped fields get loaded — skip a field (or leave it blank) if the source
+                  returns something this table doesn&apos;t track.
                 </p>
                 <div className="rounded-md border divide-y">
                   {sourceColumns.map((sc, i) => {
@@ -900,11 +945,17 @@ export function EtlJobsTab() {
                         </span>
                         <span className="text-muted-foreground text-xs">→</span>
                         {usingSelect ? (
-                          <Select value={mapping[i] ?? undefined} onValueChange={(v) => setMappingAt(i, v)}>
+                          <Select
+                            value={mapping[i] ?? undefined}
+                            onValueChange={(v) => setMappingAt(i, v === SKIP_MAPPING ? null : v)}
+                          >
                             <SelectTrigger className="h-8">
                               <SelectValue placeholder="Choose a column" />
                             </SelectTrigger>
                             <SelectContent>
+                              <SelectItem value={SKIP_MAPPING} className="text-muted-foreground italic">
+                                Skip — don&apos;t load this field
+                              </SelectItem>
                               {available.map((name) => {
                                 const info = destTableColumns.find((c) => c.name === name)
                                 return (
@@ -920,8 +971,8 @@ export function EtlJobsTab() {
                           <Input
                             className="h-8"
                             value={mapping[i] ?? ""}
-                            onChange={(e) => setMappingAt(i, e.target.value)}
-                            placeholder="destination_column_name"
+                            onChange={(e) => setMappingAt(i, e.target.value || null)}
+                            placeholder="destination_column_name (blank to skip)"
                           />
                         )}
                       </div>
@@ -975,8 +1026,8 @@ export function EtlJobsTab() {
                     <span className="text-muted-foreground">Column mapping:</span>
                     <ul className="mt-1 space-y-0.5 font-mono">
                       {sourceColumns.map((sc, i) => (
-                        <li key={`${sc}-${i}`}>
-                          {sc} → {mapping[i] ?? "—"}
+                        <li key={`${sc}-${i}`} className={mapping[i] ? undefined : "text-muted-foreground italic"}>
+                          {sc} → {mapping[i] ?? "(skipped)"}
                         </li>
                       ))}
                     </ul>
