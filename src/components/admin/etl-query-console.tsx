@@ -78,8 +78,19 @@ export function EtlQueryConsole({
       const res = await testEtlQuery(sourceId, query)
       setResult(res)
       onResult?.(res, query)
+      // http_api only (see EtlTestQueryResult.debug_request) — logged so
+      // the exact outgoing request (method, signed URL, headers) can be
+      // inspected/copied from devtools without needing server log access.
+      if (res.debug_request) {
+        console.log("[ETL test] request sent:", res.debug_request)
+      }
     } catch (err) {
       setResult(null)
+      // The backend embeds "(request sent: METHOD URL)" into the error
+      // message itself for http_api failures (see testHTTPQuery), so this
+      // is visible even when the request errored rather than just coming
+      // back with zero rows.
+      console.log("[ETL test] failed:", err)
       setError(err instanceof Error ? err.message : "Query failed")
       onResult?.(null, query)
     } finally {
@@ -133,6 +144,22 @@ export function EtlQueryConsole({
       />
 
       {error && <p className="text-xs text-red-600">{error}</p>}
+
+      {result?.debug_request && (
+        <details className="text-xs border rounded px-2 py-1.5">
+          <summary className="cursor-pointer text-muted-foreground font-medium">Request sent</summary>
+          <div className="mt-1.5 space-y-1 font-mono break-all">
+            <p>
+              {result.debug_request.method} {result.debug_request.url}
+            </p>
+            {Object.entries(result.debug_request.headers).map(([k, v]) => (
+              <p key={k} className="text-muted-foreground">
+                {k}: {v}
+              </p>
+            ))}
+          </div>
+        </details>
+      )}
 
       {result && (
         <div className="space-y-2">

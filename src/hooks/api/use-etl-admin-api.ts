@@ -119,6 +119,18 @@ export interface EtlTestQueryResult {
    * response has no equivalent of a SQL SELECT list to name columns from.
    * Prefill the job's records_path with this. */
   detected_records_path?: string
+  /** Set only for a kind "http_api" source: the literal outgoing request
+   * the backend sent (method, full URL with its signed query string, and
+   * headers) — never includes the api key, since it's never put on the
+   * wire in the first place. Lets a user debugging "why no rows" see
+   * exactly what was sent without needing server log access. */
+  debug_request?: EtlHttpRequestDebug
+}
+
+export interface EtlHttpRequestDebug {
+  method: string
+  url: string
+  headers: Record<string, string>
 }
 
 export interface EtlDestColumnInfo {
