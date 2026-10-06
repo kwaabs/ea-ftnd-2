@@ -818,6 +818,49 @@ export interface HolleyConsumptionDetailResponse {
   total_pages: number
 }
 
+// Alpha T&D-ingested legacy consumption source (ea-bknd-3/internal/
+// alphaconsumption), loaded by the ETL job "alpha-tnd-consumption-fetch"
+// from a legacy Oracle metering system. Unlike every other legacy source
+// here, there's no region/district dimension at all — only a substation
+// name and consumer/meter/location identifiers. Has real from_date/to_date
+// timestamps (fromdatetime/todatetime), so date filtering is a plain range
+// like Holley/PNS, no billmonth-label resolution. energy_code is a raw
+// numeric register code with no human-readable mapping yet.
+export interface AlphaConsumptionAggregateItem {
+  substation?: string | null
+  energy_code?: number | null
+  consumer_count: number
+  sum_value: number
+}
+
+export interface AlphaConsumptionAggregateResponse {
+  data: AlphaConsumptionAggregateItem[]
+  total: number
+}
+
+export interface AlphaConsumptionDetail {
+  reading_master_id: number
+  connection_id: number
+  energy_code: number
+  value: number
+  from_date: string
+  to_date: string
+  substation: string
+  consumer_id: number
+  consumer_name: string
+  meter_serial_no: string
+  location_name?: string | null
+  location_code?: string | null
+}
+
+export interface AlphaConsumptionDetailResponse {
+  data: AlphaConsumptionDetail[]
+  total: number
+  page: number
+  limit: number
+  total_pages: number
+}
+
 // ECASH 4-ingested legacy consumption source (ea-bknd-3/internal/
 // ecash4consumption), loaded by the ETL job "ecash4-consumption-pull".
 // Like Holley, region/district are already human-readable text (district

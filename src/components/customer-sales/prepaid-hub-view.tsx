@@ -42,6 +42,7 @@ import { BxcConsumptionView } from "@/components/customer-sales/bxc-consumption-
 import { PnsConsumptionView } from "@/components/customer-sales/pns-consumption-view"
 import { HolleyConsumptionView } from "@/components/customer-sales/holley-consumption-view"
 import { Ecash4ConsumptionView } from "@/components/customer-sales/ecash4-consumption-view"
+import { AlphaConsumptionView } from "@/components/customer-sales/alpha-consumption-view"
 import { LegacyMeterComingSoon } from "@/components/customer-sales/legacy-meter-coming-soon"
 import { PrepaidAllSourcesOverview } from "@/components/customer-sales/prepaid-all-sources-overview"
 import {
@@ -1026,6 +1027,7 @@ export function PrepaidHubView() {
               <TabsTrigger value="mbh" className="flex-none">MBH</TabsTrigger>
               <TabsTrigger value="ecash4" className="flex-none">ECASH 4</TabsTrigger>
               <TabsTrigger value="smartg" className="flex-none">SMART G</TabsTrigger>
+              <TabsTrigger value="alpha" className="flex-none">ALPHA</TabsTrigger>
               <TabsTrigger value="alphaliberty" className="flex-none">ALPHA LIBERTY</TabsTrigger>
               <TabsTrigger value="inest" className="flex-none">INEST</TabsTrigger>
               <TabsTrigger value="nuri" className="flex-none">NURI</TabsTrigger>
@@ -1059,6 +1061,9 @@ export function PrepaidHubView() {
             </TabsContent>
             <TabsContent value="smartg" className="mt-4">
               <LegacyMeterComingSoon name="SMART G" />
+            </TabsContent>
+            <TabsContent value="alpha" className="mt-4">
+              <AlphaConsumptionView dateRange={dateRange} />
             </TabsContent>
             <TabsContent value="alphaliberty" className="mt-4">
               <LegacyMeterComingSoon name="ALPHA LIBERTY" />
