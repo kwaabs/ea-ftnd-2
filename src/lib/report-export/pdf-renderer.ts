@@ -19,11 +19,11 @@ import autoTable from "jspdf-autotable"
 import type { DistrictSection, ReportExportData, RegionSection, ReportTableRow } from "./build-report-data"
 import { formatKwhPlain, formatPctPlain } from "./format"
 
-const PAGE_MARGIN = 40
+export const PAGE_MARGIN = 40
 const BRAND_BLUE = "#1d4ed8"
-const INK = "#0f172a"
-const MUTED = "#64748b"
-const BLOCK_GAP = 22 // vertical gap left after each flowed block
+export const INK = "#0f172a"
+export const MUTED = "#64748b"
+export const BLOCK_GAP = 22 // vertical gap left after each flowed block
 
 function regionRow(r: ReportTableRow): (string | number)[] {
   return [r.label, formatKwhPlain(r.purchasesKwh), formatKwhPlain(r.salesKwh), formatKwhPlain(r.postpaidKwh), formatKwhPlain(r.prepaidKwh), formatKwhPlain(r.streetlightingKwh), formatKwhPlain(r.lossKwh), formatPctPlain(r.lossPct)]
@@ -33,7 +33,7 @@ function districtRow(r: ReportTableRow): (string | number)[] {
   return [r.label, formatKwhPlain(r.salesKwh), formatKwhPlain(r.postpaidKwh), formatKwhPlain(r.prepaidKwh), formatKwhPlain(r.streetlightingKwh)]
 }
 
-function addFooter(doc: jsPDF) {
+export function addFooter(doc: jsPDF) {
   const pageCount = doc.getNumberOfPages()
   const w = doc.internal.pageSize.getWidth()
   const h = doc.internal.pageSize.getHeight()
@@ -49,7 +49,7 @@ function addFooter(doc: jsPDF) {
 /** Starts a fresh page (resetting y to the top margin) only if `neededHeight`
  * of content wouldn't fit below the current `y` on the current page --
  * the one primitive the whole flowing layout is built from. */
-function ensureSpace(doc: jsPDF, y: number, neededHeight: number): number {
+export function ensureSpace(doc: jsPDF, y: number, neededHeight: number): number {
   const pageHeight = doc.internal.pageSize.getHeight()
   if (y + neededHeight > pageHeight - PAGE_MARGIN) {
     doc.addPage()
@@ -66,12 +66,12 @@ function ensureSpace(doc: jsPDF, y: number, neededHeight: number): number {
  * page still paginates correctly mid-table via autoTable's own built-in
  * page-break handling; this estimate only ever needs to be "right enough"
  * to avoid an orphaned heading. */
-function estimateTableHeight(rowCount: number, rowHeight = 17): number {
+export function estimateTableHeight(rowCount: number, rowHeight = 17): number {
   const headerHeight = 22
   return headerHeight + Math.min(rowCount, 5) * rowHeight + 10
 }
 
-function addSectionHeading(doc: jsPDF, text: string, y: number): number {
+export function addSectionHeading(doc: jsPDF, text: string, y: number): number {
   doc.setFontSize(14)
   doc.setTextColor(INK)
   doc.setFont("helvetica", "bold")
@@ -104,7 +104,7 @@ function districtTable(doc: jsPDF, startY: number, rows: ReportTableRow[]) {
   })
 }
 
-function finalY(doc: jsPDF): number {
+export function finalY(doc: jsPDF): number {
   // jspdf-autotable augments the doc instance with lastAutoTable at
   // runtime -- not in its published types, hence the cast.
   return (doc as unknown as { lastAutoTable: { finalY: number } }).lastAutoTable.finalY
@@ -115,7 +115,7 @@ function finalY(doc: jsPDF): number {
  * is still too short for it) -- otherwise the image keeps its natural,
  * width-constrained height rather than being stretched to fill unrelated
  * vertical space. */
-function fitImageSize(pxWidth: number, pxHeight: number, maxW: number, maxH: number): { w: number; h: number } {
+export function fitImageSize(pxWidth: number, pxHeight: number, maxW: number, maxH: number): { w: number; h: number } {
   const aspect = pxHeight / pxWidth
   let w = maxW
   let h = w * aspect

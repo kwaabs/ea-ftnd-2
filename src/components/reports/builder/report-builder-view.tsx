@@ -11,15 +11,25 @@ import { useRef, useState } from "react"
 import { Responsive, WidthProvider } from "react-grid-layout/legacy"
 import "react-grid-layout/css/styles.css"
 import "react-resizable/css/styles.css"
-import { Plus } from "lucide-react"
+import { Plus, Download, Loader2, FileText, Presentation } from "lucide-react"
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu"
 import { DATA_SOURCE_LIST, DATA_SOURCES, type DataSourceKey } from "@/lib/report-builder/data-sources"
 import type { ReportBlock } from "@/lib/report-builder/types"
-import { ReportBlockCard } from "@/components/reports/builder/report-block"
+import { ReportBlockCard, type ReportBlockResolvedData } from "@/components/reports/builder/report-block"
 import { useFilterOptionsWithAvailability } from "@/hooks/api/use-filter-options"
+import { captureElementAsPngDataUrl } from "@/lib/export-utils"
+import type { BuilderExportBlock, BuilderExportData } from "@/lib/report-builder/export-data"
+import { downloadBuilderReportPdf } from "@/lib/report-builder/export-pdf"
+import { downloadBuilderReportPptx } from "@/lib/report-builder/export-pptx"
 
 const ALL_SENTINEL = "__all__"
 
@@ -67,6 +77,18 @@ export function ReportBuilderView() {
   const [region, setRegion] = useState("")
   const [district, setDistrict] = useState("")
   const [paletteSource, setPaletteSource] = useState<DataSourceKey>(DATA_SOURCE_LIST[0].key)
+  const [reportTitle, setReportTitle] = useState("Custom Report")
+  const [exporting, setExporting] = useState<"pdf" | "pptx" | null>(null)
+  const [exportError, setExportError] = useState<string | null>(null)
+
+  // Phase 2 export: each block reports its resolved data up via
+  // onDataChange (blockDataRef) and exposes its chart DOM node via
+  // onChartRef (chartElRef) -- see report-block.tsx's own comments on
+  // both props for why. Refs, not state: export only ever reads these at
+  // the moment the user clicks Export, so there's no reason for every
+  // block's data arriving to re-render this whole canvas.
+  const blockDataRef = useRef<Map<string, ReportBlockResolvedData>>(new Map())
+  const chartElRef = useRef<Map<string, HTMLDivElement | null>>(new Map())
 
   // Region/district options come from app.meters (the same source every
   // other meter-filter dropdown in this app already draws from, via this
@@ -109,6 +131,81 @@ export function ReportBuilderView() {
     setBlocks((prev) => prev.filter((b) => b.id !== id))
   }
 
+  // Builds one BuilderExportBlock per canvas block, in reading order
+  // (top-to-bottom, left-to-right by grid position) -- a bar/line block
+  // captures its live chart DOM node as a PNG (same approach
+  // GenerateReportDialog already uses for the Executive/Detailed report);
+  // a table block carries its raw rows instead, rendered as a real table
+  // in the output; a kpiOnly source (BSP Meter Status) carries its real
+  // numerator/denominator; any other source viewed in KPI mode carries
+  // just its summed total, matching exactly what the on-screen card
+  // itself shows in that mode.
+  const handleExport = async (format: "pdf" | "pptx") => {
+    setExporting(format)
+    setExportError(null)
+    try {
+      const ordered = [...blocks].sort((a, b) => a.y - b.y || a.x - b.x)
+      const exportBlocks: BuilderExportBlock[] = []
+
+      for (const b of ordered) {
+        const def = DATA_SOURCES[b.dataSource]
+        const resolved = blockDataRef.current.get(b.id)
+        const groupByLabel = def.groupByOptions.find((g) => g.value === (b.groupBy || def.defaultGroupBy))?.label
+        const title = `${def.label}${groupByLabel ? ` by ${groupByLabel}` : ""}`
+
+        if (b.visualization === "bar" || b.visualization === "line") {
+          const el = chartElRef.current.get(b.id)
+          try {
+            const image = await captureElementAsPngDataUrl(el, { pixelRatio: 2 })
+            exportBlocks.push({ title, visualization: b.visualization, valueLabel: def.valueLabel, secondaryLabel: def.secondaryLabel, image })
+            continue
+          } catch {
+            // A chart that hasn't laid out yet (or failed to capture)
+            // shouldn't block the rest of the export -- fall through to
+            // exporting its rows as a table instead of dropping it entirely.
+          }
+        }
+
+        if (def.kpiOnly && resolved?.kpi) {
+          exportBlocks.push({ title, visualization: "kpi", valueLabel: def.valueLabel, kpi: resolved.kpi })
+        } else if (b.visualization === "kpi") {
+          exportBlocks.push({
+            title,
+            visualization: "kpi",
+            valueLabel: def.valueLabel,
+            total: { value: resolved?.kpiTotal ?? 0, groupCount: resolved?.rows.length ?? 0 },
+          })
+        } else {
+          exportBlocks.push({
+            title,
+            visualization: "table",
+            valueLabel: def.valueLabel,
+            secondaryLabel: def.secondaryLabel,
+            rows: resolved?.rows ?? [],
+          })
+        }
+      }
+
+      const data: BuilderExportData = {
+        title: reportTitle.trim() || "Custom Report",
+        periodLabel: `${dateFrom} to ${dateTo}${region ? ` · ${region}` : ""}${district ? ` / ${district}` : ""}`,
+        generatedAtLabel: new Date().toLocaleString("en-US", { dateStyle: "medium", timeStyle: "short" }),
+        blocks: exportBlocks,
+      }
+      const filename = `ECG-Report-Builder-${dateFrom}-to-${dateTo}`
+
+      if (format === "pdf") {
+        downloadBuilderReportPdf(data, filename)
+      } else {
+        await downloadBuilderReportPptx(data, filename)
+      }
+    } catch (err) {
+      setExportError(err instanceof Error ? err.message : "Export failed")
+    } finally {
+      setExporting(null)
+    }
+  }
+
   const layout = blocks.map((b) => ({ i: b.id, x: b.x, y: b.y, w: b.w, h: b.h, minW: 2, minH: 2 }))
 
   const filters = {
@@ -120,13 +217,47 @@ export function ReportBuilderView() {
 
   return (
     <div className="space-y-6">
-      <div>
-        <h1 className="text-3xl font-bold tracking-tight">Report Builder</h1>
-        <p className="text-muted-foreground mt-1">
-          Drag a source onto the canvas, arrange and resize blocks however you want. Nothing is saved yet — this is a
-          session-only workspace (Phase 1).
-        </p>
+      <div className="flex items-start justify-between gap-3 flex-wrap">
+        <div>
+          <h1 className="text-3xl font-bold tracking-tight">Report Builder</h1>
+          <p className="text-muted-foreground mt-1">
+            Drag a source onto the canvas, arrange and resize blocks however you want. Nothing is saved yet — this is
+            a session-only workspace. Export below whenever it&apos;s ready.
+          </p>
+        </div>
+        <div className="flex items-end gap-2 flex-wrap">
+          <div className="space-y-1">
+            <label className="text-xs text-muted-foreground">Report title</label>
+            <Input
+              value={reportTitle}
+              onChange={(e) => setReportTitle(e.target.value)}
+              className="w-[220px]"
+              placeholder="Custom Report"
+            />
+          </div>
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button variant="outline" disabled={blocks.length === 0 || exporting !== null}>
+                {exporting ? (
+                  <Loader2 className="h-4 w-4 mr-1.5 animate-spin" />
+                ) : (
+                  <Download className="h-4 w-4 mr-1.5" />
+                )}
+                Export
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end">
+              <DropdownMenuItem onClick={() => handleExport("pdf")} disabled={exporting !== null}>
+                <FileText className="h-4 w-4 mr-1.5" /> Export as PDF
+              </DropdownMenuItem>
+              <DropdownMenuItem onClick={() => handleExport("pptx")} disabled={exporting !== null}>
+                <Presentation className="h-4 w-4 mr-1.5" /> Export as PPTX
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
+        </div>
       </div>
+      {exportError && <p className="text-sm text-red-600">{exportError}</p>}
 
       <Card>
         <CardContent className="pt-5 flex flex-wrap items-end gap-3">
@@ -275,6 +406,12 @@ export function ReportBuilderView() {
                   onChange={(patch) => updateBlock(b.id, patch)}
                   onRemove={() => removeBlock(b.id)}
                   dragHandleClassName="report-block-drag-handle"
+                  onChartRef={(el) => {
+                    chartElRef.current.set(b.id, el)
+                  }}
+                  onDataChange={(d) => {
+                    blockDataRef.current.set(b.id, d)
+                  }}
                 />
               </div>
             ))}

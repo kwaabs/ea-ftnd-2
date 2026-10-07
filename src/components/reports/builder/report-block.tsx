@@ -1,6 +1,6 @@
 "use client"
 
-import { useMemo } from "react"
+import { useEffect, useMemo } from "react"
 import {
   Bar,
   BarChart,
@@ -19,7 +19,14 @@ import { Skeleton } from "@/components/ui/skeleton"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { DATA_SOURCES } from "@/lib/report-builder/data-sources"
 import type { ReportBlock, Visualization } from "@/lib/report-builder/types"
-import { useReportBuilderData, type ReportBuilderFilters } from "@/hooks/api/use-report-builder-data"
+import { useReportBuilderData, type ReportBuilderFilters, type BlockData } from "@/hooks/api/use-report-builder-data"
+
+/** What a block reports up to the canvas for Phase 2 export -- its
+ * currently-resolved data plus the already-computed KPI total (sum of
+ * rows' values), so export doesn't need to redo that computation. */
+export interface ReportBlockResolvedData extends BlockData {
+  kpiTotal: number
+}
 
 // Tailwind only resolves classes it can see as complete literal strings in
 // source -- a template like `text-${color}-700` is invisible to its
@@ -65,15 +72,35 @@ interface ReportBlockCardProps {
   onRemove: () => void
   /** Drag handle class react-grid-layout targets via draggableHandle -- see builder-page.tsx. */
   dragHandleClassName: string
+  /** Phase 2 export: a callback ref onto exactly the bar/line chart's DOM
+   * node (not the whole card -- the header's selects/drag handle/remove
+   * button shouldn't end up in a captured chart image), so the canvas can
+   * screenshot it via captureElementAsPngDataUrl at export time. Omitted
+   * for table/kpi blocks, which export as real text/tables instead of a
+   * screenshot. */
+  onChartRef?: (el: HTMLDivElement | null) => void
+  /** Phase 2 export: reports this block's current resolved data up to the
+   * canvas on every change, so export doesn't need its own separate data
+   * fetch (useReportBuilderData is only ever called once, here). */
+  onDataChange?: (data: ReportBlockResolvedData) => void
 }
 
-export function ReportBlockCard({ block, filters, onChange, onRemove, dragHandleClassName }: ReportBlockCardProps) {
+export function ReportBlockCard({ block, filters, onChange, onRemove, dragHandleClassName, onChartRef, onDataChange }: ReportBlockCardProps) {
   const def = DATA_SOURCES[block.dataSource]
   const colors = COLOR_CLASSES[def.color] ?? COLOR_CLASSES.slate
   const data = useReportBuilderData(block.dataSource, filters, block.groupBy)
 
   const chartRows = useMemo(() => data.rows.slice(0, 20), [data.rows])
   const kpiTotal = useMemo(() => data.rows.reduce((s, r) => s + r.value, 0), [data.rows])
+
+  useEffect(() => {
+    onDataChange?.({ ...data, kpiTotal })
+    // onDataChange is a fresh closure from the parent every render (it
+    // closes over block.id) -- including it would re-fire this effect on
+    // every parent render for every other reason, not just when this
+    // block's own data actually changed.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [data, kpiTotal])
 
   const VizIcon = VIZ_ICON[block.visualization]
 
@@ -155,25 +182,29 @@ export function ReportBlockCard({ block, filters, onChange, onRemove, dragHandle
             <div className="text-xs text-muted-foreground mt-1">{def.valueLabel} total · {data.rows.length} group(s)</div>
           </div>
         ) : block.visualization === "bar" ? (
-          <ResponsiveContainer width="100%" height="100%">
-            <BarChart data={chartRows} margin={{ top: 8, right: 8, left: 8, bottom: 40 }}>
-              <CartesianGrid strokeDasharray="3 3" vertical={false} />
-              <XAxis dataKey="label" angle={-30} textAnchor="end" tick={{ fontSize: 10 }} interval={0} />
-              <YAxis tickFormatter={formatValue} tick={{ fontSize: 10 }} />
-              <Tooltip formatter={(v: number) => [formatValue(v), def.valueLabel]} />
-              <Bar dataKey="value" fill={colors.fill} radius={[4, 4, 0, 0]} isAnimationActive={false} />
-            </BarChart>
-          </ResponsiveContainer>
+          <div ref={onChartRef} className="h-full w-full">
+            <ResponsiveContainer width="100%" height="100%">
+              <BarChart data={chartRows} margin={{ top: 8, right: 8, left: 8, bottom: 40 }}>
+                <CartesianGrid strokeDasharray="3 3" vertical={false} />
+                <XAxis dataKey="label" angle={-30} textAnchor="end" tick={{ fontSize: 10 }} interval={0} />
+                <YAxis tickFormatter={formatValue} tick={{ fontSize: 10 }} />
+                <Tooltip formatter={(v: number) => [formatValue(v), def.valueLabel]} />
+                <Bar dataKey="value" fill={colors.fill} radius={[4, 4, 0, 0]} isAnimationActive={false} />
+              </BarChart>
+            </ResponsiveContainer>
+          </div>
         ) : block.visualization === "line" ? (
-          <ResponsiveContainer width="100%" height="100%">
-            <LineChart data={chartRows} margin={{ top: 8, right: 8, left: 8, bottom: 40 }}>
-              <CartesianGrid strokeDasharray="3 3" vertical={false} />
-              <XAxis dataKey="label" angle={-30} textAnchor="end" tick={{ fontSize: 10 }} interval={0} />
-              <YAxis tickFormatter={formatValue} tick={{ fontSize: 10 }} />
-              <Tooltip formatter={(v: number) => [formatValue(v), def.valueLabel]} />
-              <Line type="monotone" dataKey="value" stroke={colors.fill} strokeWidth={2} dot={{ r: 3 }} isAnimationActive={false} />
-            </LineChart>
-          </ResponsiveContainer>
+          <div ref={onChartRef} className="h-full w-full">
+            <ResponsiveContainer width="100%" height="100%">
+              <LineChart data={chartRows} margin={{ top: 8, right: 8, left: 8, bottom: 40 }}>
+                <CartesianGrid strokeDasharray="3 3" vertical={false} />
+                <XAxis dataKey="label" angle={-30} textAnchor="end" tick={{ fontSize: 10 }} interval={0} />
+                <YAxis tickFormatter={formatValue} tick={{ fontSize: 10 }} />
+                <Tooltip formatter={(v: number) => [formatValue(v), def.valueLabel]} />
+                <Line type="monotone" dataKey="value" stroke={colors.fill} strokeWidth={2} dot={{ r: 3 }} isAnimationActive={false} />
+              </LineChart>
+            </ResponsiveContainer>
+          </div>
         ) : (
           <div className="h-full overflow-auto">
             <Table>
