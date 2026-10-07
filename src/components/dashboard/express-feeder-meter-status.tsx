@@ -99,7 +99,7 @@ export function ExpressFeederMeterStatus({ params }: ExpressFeederMeterStatusPro
     }, [detailsData])
 
     const totalStatusPages = detailsData?.pagination?.total_pages || 1
-    const totalStatusItems = detailsData?.pagination?.total || 0
+    const totalStatusItems = detailsData?.pagination?.total_records || 0
 
     const handleStatusSort = (column: string) => {
         if (statusSortColumn === column) {

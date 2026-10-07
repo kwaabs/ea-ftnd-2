@@ -2146,7 +2146,7 @@ export function OverviewMainTab({
                 <TablePagination
                   currentPage={meterStatusDetails?.pagination.page || 1}
                   totalPages={meterStatusDetails?.pagination.total_pages || 1}
-                  totalItems={meterStatusDetails?.pagination.total || 0}
+                  totalItems={meterStatusDetails?.pagination.total_records || 0}
                   pageSize={statusPageSize}
                   onPageChange={setStatusPage}
                 />

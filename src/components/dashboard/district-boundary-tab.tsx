@@ -666,7 +666,7 @@ export function DistrictBoundaryTab({
     }, [processedStatusData, statusSortField, statusSortDirection])
 
     // Total count from backend pagination
-    const totalStatusCount = detailsData?.pagination?.total || 0
+    const totalStatusCount = detailsData?.pagination?.total_records || 0
 
     return (
         <div className="space-y-6">
