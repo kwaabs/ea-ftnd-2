@@ -449,6 +449,9 @@ export function PurchasesSalesReportView() {
               postpaidHeatMap: postpaidHeatMapRef,
             }}
           />
+          <Button variant="outline" onClick={() => router.push("/reports/builder")}>
+            Report Builder
+          </Button>
           <Select value={periodMode} onValueChange={(v) => setPeriodMode(v as PeriodMode)}>
             <SelectTrigger className="w-[180px]">
               <SelectValue />
