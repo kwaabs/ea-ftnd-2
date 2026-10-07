@@ -18,6 +18,8 @@ import {
   ArrowUp,
   ChevronDown,
   ChevronRight,
+  ArrowRight,
+  ChevronLeft,
   Minus,
   Scale,
   TrendingDown,
@@ -28,6 +30,8 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Skeleton } from "@/components/ui/skeleton"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Badge } from "@/components/ui/badge"
+import { Button } from "@/components/ui/button"
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { Input } from "@/components/ui/input"
 import { Checkbox } from "@/components/ui/checkbox"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
@@ -65,7 +69,7 @@ import { PurchasesSalesLossMap } from "@/components/reports/purchases-sales-loss
 import { CompareInsightsView } from "@/components/reports/compare-insights-view"
 import { MetricHeatMap } from "@/components/reports/metric-heat-map"
 import { GenerateReportDialog } from "@/components/reports/generate-report-dialog"
-import { useMeterStatusSummary } from "@/hooks/api/use-meter-status-api"
+import { useMeterStatusSummary, useMeterStatusDetails } from "@/hooks/api/use-meter-status-api"
 import { formatApiDate } from "@/lib/utils"
 
 const MAX_WINDOW_MONTHS = 12
@@ -212,6 +216,32 @@ export function PurchasesSalesReportView() {
     dateFrom: bspStatusRange?.dateFrom ?? "",
     dateTo: bspStatusRange?.dateTo ?? "",
     meterTypes: ["BSP"],
+  })
+
+  // Inline detail panel for the BSP Meter Status card below — clicking the
+  // card expands this in place rather than navigating away, so the detail
+  // is on the same page; /meter-category/bsp (FeedersTrafoTab's full,
+  // richer table) stays one click further for anyone who wants more than
+  // this compact view.
+  const [bspExpanded, setBspExpanded] = useState(false)
+  const [bspFilter, setBspFilterRaw] = useState<"all" | "online" | "offline">("all")
+  const [bspPage, setBspPage] = useState(1)
+  const BSP_PAGE_SIZE = 10
+
+  // Changing the filter resets to page 1 directly in the setter, rather
+  // than via a separate effect reacting to bspFilter.
+  const setBspFilter = (f: "all" | "online" | "offline") => {
+    setBspFilterRaw(f)
+    setBspPage(1)
+  }
+
+  const { data: bspDetails, isLoading: bspDetailsLoading } = useMeterStatusDetails({
+    dateFrom: bspStatusRange?.dateFrom ?? "",
+    dateTo: bspStatusRange?.dateTo ?? "",
+    meterTypes: ["BSP"],
+    status: bspFilter === "all" ? undefined : bspFilter,
+    page: bspPage,
+    limit: BSP_PAGE_SIZE,
   })
 
   const selectedRegion = regionFilter === "all" ? null : report.regions.find((r) => r.regionKey === regionFilter) ?? null
@@ -592,14 +622,16 @@ export function PurchasesSalesReportView() {
         </Card>
         <Card
           className="border-2 border-indigo-200 bg-indigo-50/40 cursor-pointer hover:bg-indigo-50/70 transition-colors"
-          onClick={() => router.push("/meter-category/bsp")}
+          onClick={() => setBspExpanded((v) => !v)}
         >
           <CardHeader className="pb-2">
             <div className="flex items-center gap-2">
               <Wifi className="h-4 w-4 text-indigo-600" />
               <CardTitle className="text-sm font-medium text-muted-foreground">BSP Meter Status</CardTitle>
             </div>
-            <CardDescription className="text-[11px]">Online vs offline incomer meters — click for detail</CardDescription>
+            <CardDescription className="text-[11px]">
+              Online vs offline incomer meters — click to {bspExpanded ? "collapse" : "expand"}
+            </CardDescription>
           </CardHeader>
           <CardContent>
             {bspStatusLoading ? (
@@ -621,6 +653,135 @@ export function PurchasesSalesReportView() {
           </CardContent>
         </Card>
       </div>
+
+      {bspExpanded && (
+        <Card className="border-indigo-200">
+          <CardHeader className="flex flex-row items-center justify-between gap-2 flex-wrap">
+            <div>
+              <CardTitle>BSP Meter Status Detail</CardTitle>
+              <CardDescription>
+                {bspStatusRange ? `${bspStatusRange.dateFrom} to ${bspStatusRange.dateTo}` : ""} — same window as the
+                report above
+              </CardDescription>
+            </div>
+            <Button variant="outline" size="sm" onClick={() => router.push("/meter-category/bsp")}>
+              Open full BSP page
+              <ArrowRight className="h-3.5 w-3.5 ml-1.5" />
+            </Button>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <div className="flex gap-2">
+              <Button
+                variant={bspFilter === "all" ? "default" : "outline"}
+                size="sm"
+                onClick={() => setBspFilter("all")}
+              >
+                All ({bspStatus?.total ?? 0})
+              </Button>
+              <Button
+                variant={bspFilter === "online" ? "default" : "outline"}
+                size="sm"
+                onClick={() => setBspFilter("online")}
+              >
+                Online ({bspStatus?.online ?? 0})
+              </Button>
+              <Button
+                variant={bspFilter === "offline" ? "default" : "outline"}
+                size="sm"
+                onClick={() => setBspFilter("offline")}
+              >
+                Offline ({bspStatus?.total_offline ?? 0})
+              </Button>
+            </div>
+
+            <div className="border rounded-lg overflow-hidden">
+              <div className="overflow-x-auto max-h-[400px] overflow-y-auto">
+                <Table>
+                  <TableHeader className="sticky top-0 z-10 bg-background">
+                    <TableRow>
+                      <TableHead>Meter Number</TableHead>
+                      <TableHead>Region / Station</TableHead>
+                      <TableHead>Status</TableHead>
+                      <TableHead>Last Reading</TableHead>
+                      <TableHead className="text-right">Uptime %</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {bspDetailsLoading ? (
+                      [...Array(5)].map((_, i) => (
+                        <TableRow key={i}>
+                          {[...Array(5)].map((_, j) => (
+                            <TableCell key={j}>
+                              <Skeleton className="h-4 w-full" />
+                            </TableCell>
+                          ))}
+                        </TableRow>
+                      ))
+                    ) : !bspDetails || bspDetails.data.length === 0 ? (
+                      <TableRow>
+                        <TableCell colSpan={5} className="text-center py-8 text-muted-foreground">
+                          No BSP meters found for this filter/window.
+                        </TableCell>
+                      </TableRow>
+                    ) : (
+                      bspDetails.data.map((m) => {
+                        const lastReading = m.last_reading_time ? new Date(m.last_reading_time) : null
+                        const hasLastReading = lastReading && lastReading.getFullYear() > 1900
+                        return (
+                          <TableRow key={m.meter_number}>
+                            <TableCell className="font-medium font-mono text-xs">{m.meter_number}</TableCell>
+                            <TableCell className="text-xs text-muted-foreground">
+                              {m.region || "—"} · {m.station || "—"}
+                            </TableCell>
+                            <TableCell>
+                              <Badge variant={m.status === "ONLINE" ? "default" : "destructive"}>{m.status}</Badge>
+                            </TableCell>
+                            <TableCell className="text-xs text-muted-foreground whitespace-nowrap">
+                              {hasLastReading ? lastReading!.toLocaleString() : "Not available"}
+                            </TableCell>
+                            <TableCell className="text-right tabular-nums">
+                              {m.uptime_percentage.toFixed(1)}%
+                            </TableCell>
+                          </TableRow>
+                        )
+                      })
+                    )}
+                  </TableBody>
+                </Table>
+              </div>
+            </div>
+
+            {bspDetails && bspDetails.pagination.total_pages > 1 && (
+              <div className="flex items-center justify-between text-sm">
+                <span className="text-muted-foreground">
+                  {bspDetails.pagination.total.toLocaleString()} meter(s) total
+                </span>
+                <div className="flex items-center gap-2">
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => setBspPage((p) => Math.max(1, p - 1))}
+                    disabled={bspPage === 1 || bspDetailsLoading}
+                  >
+                    <ChevronLeft className="h-4 w-4" />
+                  </Button>
+                  <span className="font-medium px-1">
+                    Page {bspPage} of {bspDetails.pagination.total_pages}
+                  </span>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => setBspPage((p) => Math.min(bspDetails.pagination.total_pages, p + 1))}
+                    disabled={bspPage >= bspDetails.pagination.total_pages || bspDetailsLoading}
+                  >
+                    <ChevronRight className="h-4 w-4" />
+                  </Button>
+                </div>
+              </div>
+            )}
+          </CardContent>
+        </Card>
+      )}
 
       {/* Narrative */}
       {!report.isLoading && narrative && (
