@@ -20,7 +20,7 @@ import { useEcash4ConsumptionAggregate } from "@/hooks/api/use-ecash4-consumptio
 import { usePnsConsumptionAggregate } from "@/hooks/api/use-pns-consumption-api"
 import { useAlphaConsumptionAggregate } from "@/hooks/api/use-alpha-consumption-api"
 import { useBspAggregate } from "@/hooks/api/use-bsp-api"
-import { useMeterStatusSummary } from "@/hooks/api/use-meter-status-api"
+import { useMeterStatusSummary, useMeterHealthSummary } from "@/hooks/api/use-meter-status-api"
 
 export interface ReportBuilderFilters {
   dateFrom: string
@@ -59,6 +59,11 @@ export function useReportBuilderData(
   const hasRange = Boolean(filters.dateFrom && filters.dateTo)
   const common = { dateFrom: filters.dateFrom, dateTo: filters.dateTo, region: filters.region, district: filters.district }
 
+  const zeusAll = useZeusBillingAggregate({
+    ...common,
+    groupBy: (groupBy as never) || "metermodeltype",
+    enabled: hasRange && dataSource === "zeus-all",
+  } as never)
   const zeusPostpaid = useZeusBillingAggregate({
     ...common,
     meterModelType: "Postpaid",
@@ -129,9 +134,15 @@ export function useReportBuilderData(
     dateTo: filters.dateTo,
     meterTypes: ["BSP"],
   })
+  const meterHealth = useMeterHealthSummary({
+    dateFrom: filters.dateFrom,
+    dateTo: filters.dateTo,
+  })
 
   return useMemo<BlockData>(() => {
     switch (dataSource) {
+      case "zeus-all":
+        return zeusAggregateToBlockData(zeusAll.data, zeusAll.isLoading, zeusAll.isError, groupBy || "metermodeltype")
       case "zeus-postpaid":
         return zeusAggregateToBlockData(zeusPostpaid.data, zeusPostpaid.isLoading, zeusPostpaid.isError, groupBy || "regionname")
       case "zeus-amr":
@@ -212,12 +223,23 @@ export function useReportBuilderData(
           isError: bspStatus.isError,
         }
       }
+      case "meter-health": {
+        const byType = meterHealth.data?.data?.by_meter_type || []
+        return {
+          rows: byType.map((t) => ({ label: t.meter_type, value: t.avg_uptime || 0, secondary: t.total })),
+          isLoading: meterHealth.isLoading,
+          isError: meterHealth.isError,
+        }
+      }
       default:
         return EMPTY
     }
   }, [
     dataSource,
     groupBy,
+    zeusAll.data,
+    zeusAll.isLoading,
+    zeusAll.isError,
     zeusPostpaid.data,
     zeusPostpaid.isLoading,
     zeusPostpaid.isError,
@@ -257,6 +279,9 @@ export function useReportBuilderData(
     bspStatus.data,
     bspStatus.isLoading,
     bspStatus.isError,
+    meterHealth.data,
+    meterHealth.isLoading,
+    meterHealth.isError,
   ])
 }
 

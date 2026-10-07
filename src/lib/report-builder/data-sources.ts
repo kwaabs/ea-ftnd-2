@@ -9,6 +9,7 @@
 // different, much larger project).
 
 export type DataSourceKey =
+  | "zeus-all"
   | "zeus-postpaid"
   | "zeus-amr"
   | "zeus-prepaid"
@@ -22,6 +23,7 @@ export type DataSourceKey =
   | "streetlighting"
   | "bsp-purchases"
   | "bsp-status"
+  | "meter-health"
 
 export interface GroupByOption {
   value: string
@@ -50,18 +52,31 @@ const REGION_DISTRICT: GroupByOption[] = [
   { value: "district", label: "District" },
 ]
 
+const ZEUS_GROUPBY: GroupByOption[] = [
+  { value: "regionname", label: "Region" },
+  { value: "districtname", label: "District" },
+  { value: "tariffclassname", label: "Tariff class" },
+  { value: "metermodeltype", label: "Meter type (Postpaid/AMR/Prepaid)" },
+  { value: "billingmonth", label: "Billing month" },
+]
+
 export const DATA_SOURCES: Record<DataSourceKey, DataSourceDef> = {
+  "zeus-all": {
+    key: "zeus-all",
+    label: "Zeus — All meter types",
+    description: "Zeus billing, unfiltered by meter type — group by \"Meter type\" to see Postpaid/AMR/Prepaid in one block",
+    color: "emerald",
+    groupByOptions: ZEUS_GROUPBY,
+    defaultGroupBy: "metermodeltype",
+    valueLabel: "kWh",
+    secondaryLabel: "Customers",
+  },
   "zeus-postpaid": {
     key: "zeus-postpaid",
     label: "Zeus — Non-AMR Postpaid",
     description: "Zeus billing, metermodeltype=Postpaid",
     color: "blue",
-    groupByOptions: [
-      { value: "regionname", label: "Region" },
-      { value: "districtname", label: "District" },
-      { value: "tariffclassname", label: "Tariff class" },
-      { value: "billingmonth", label: "Billing month" },
-    ],
+    groupByOptions: ZEUS_GROUPBY,
     defaultGroupBy: "regionname",
     valueLabel: "kWh",
     secondaryLabel: "Customers",
@@ -71,12 +86,7 @@ export const DATA_SOURCES: Record<DataSourceKey, DataSourceDef> = {
     label: "Zeus — AMR Postpaid",
     description: "Zeus billing, metermodeltype=AMR",
     color: "indigo",
-    groupByOptions: [
-      { value: "regionname", label: "Region" },
-      { value: "districtname", label: "District" },
-      { value: "tariffclassname", label: "Tariff class" },
-      { value: "billingmonth", label: "Billing month" },
-    ],
+    groupByOptions: ZEUS_GROUPBY,
     defaultGroupBy: "regionname",
     valueLabel: "kWh",
     secondaryLabel: "Customers",
@@ -86,12 +96,7 @@ export const DATA_SOURCES: Record<DataSourceKey, DataSourceDef> = {
     label: "Zeus — Prepaid",
     description: "Zeus billing, metermodeltype=Prepaid (deduped against MMS)",
     color: "violet",
-    groupByOptions: [
-      { value: "regionname", label: "Region" },
-      { value: "districtname", label: "District" },
-      { value: "tariffclassname", label: "Tariff class" },
-      { value: "billingmonth", label: "Billing month" },
-    ],
+    groupByOptions: ZEUS_GROUPBY,
     defaultGroupBy: "regionname",
     valueLabel: "kWh",
     secondaryLabel: "Customers",
@@ -228,6 +233,20 @@ export const DATA_SOURCES: Record<DataSourceKey, DataSourceDef> = {
     groupByOptions: [],
     kpiOnly: true,
     valueLabel: "meters",
+  },
+  "meter-health": {
+    key: "meter-health",
+    label: "Meter Health",
+    description: "Avg uptime % by meter type, across every meter type (not just BSP)",
+    color: "lime",
+    // The health summary endpoint's only built-in breakdown is by
+    // meter_type (its `by_meter_type` array) -- there's no equivalent
+    // per-region/district split available without a separate per-region
+    // call per region, so this is the one fixed dimension offered here.
+    groupByOptions: [{ value: "meter_type", label: "Meter type" }],
+    defaultGroupBy: "meter_type",
+    valueLabel: "% uptime",
+    secondaryLabel: "Meters",
   },
 }
 
