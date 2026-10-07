@@ -19,6 +19,9 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { DATA_SOURCE_LIST, DATA_SOURCES, type DataSourceKey } from "@/lib/report-builder/data-sources"
 import type { ReportBlock } from "@/lib/report-builder/types"
 import { ReportBlockCard } from "@/components/reports/builder/report-block"
+import { useFilterOptionsWithAvailability } from "@/hooks/api/use-filter-options"
+
+const ALL_SENTINEL = "__all__"
 
 const ResponsiveGridLayout = WidthProvider(Responsive)
 
@@ -64,6 +67,21 @@ export function ReportBuilderView() {
   const [region, setRegion] = useState("")
   const [district, setDistrict] = useState("")
   const [paletteSource, setPaletteSource] = useState<DataSourceKey>(DATA_SOURCE_LIST[0].key)
+
+  // Region/district options come from app.meters (the same source every
+  // other meter-filter dropdown in this app already draws from, via this
+  // same hook) -- not from any one report-builder source's own naming.
+  // Good enough as a canonical list and immune to typos, but worth
+  // knowing: a source with its own naming quirks (Zeus's "X Region"
+  // suffix, PNS's opaque region/district codes, Alpha's lack of a
+  // region/district concept at all) may not match these names exactly,
+  // the same caveat that already applies anywhere else in the app this
+  // hook is used for a source with non-standard naming.
+  const { data: filterOptions } = useFilterOptionsWithAvailability(region ? { regions: [region] } : undefined)
+  const regionOptions = filterOptions?.all.regions ?? []
+  const districtOptions = region
+    ? Array.from(filterOptions?.available.districts ?? [])
+    : (filterOptions?.all.districts ?? [])
 
   // Dragging a palette card onto the grid: react-grid-layout computes the
   // drop x/y internally from the native dragover position and hands it
@@ -122,21 +140,41 @@ export function ReportBuilderView() {
           </div>
           <div className="space-y-1">
             <label className="text-xs text-muted-foreground">Region</label>
-            <Input
-              value={region}
-              onChange={(e) => setRegion(e.target.value)}
-              placeholder="e.g. Ashanti"
-              className="w-[160px]"
-            />
+            <Select
+              value={region || ALL_SENTINEL}
+              onValueChange={(v) => {
+                setRegion(v === ALL_SENTINEL ? "" : v)
+                setDistrict("") // the previous district selection may not exist in the new region
+              }}
+            >
+              <SelectTrigger className="w-[160px]">
+                <SelectValue placeholder="All regions" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value={ALL_SENTINEL}>All regions</SelectItem>
+                {regionOptions.map((r) => (
+                  <SelectItem key={r} value={r}>
+                    {r}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
           </div>
           <div className="space-y-1">
             <label className="text-xs text-muted-foreground">District</label>
-            <Input
-              value={district}
-              onChange={(e) => setDistrict(e.target.value)}
-              placeholder="e.g. Kumasi"
-              className="w-[160px]"
-            />
+            <Select value={district || ALL_SENTINEL} onValueChange={(v) => setDistrict(v === ALL_SENTINEL ? "" : v)}>
+              <SelectTrigger className="w-[160px]">
+                <SelectValue placeholder="All districts" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value={ALL_SENTINEL}>All districts</SelectItem>
+                {districtOptions.map((d) => (
+                  <SelectItem key={d} value={d}>
+                    {d}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
           </div>
           <p className="text-xs text-muted-foreground">
             Applies to every block on the canvas (Region/District narrow results; each block&apos;s own groupBy still
