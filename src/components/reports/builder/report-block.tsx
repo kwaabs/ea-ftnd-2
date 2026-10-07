@@ -88,10 +88,31 @@ interface ReportBlockCardProps {
 export function ReportBlockCard({ block, filters, onChange, onRemove, dragHandleClassName, onChartRef, onDataChange }: ReportBlockCardProps) {
   const def = DATA_SOURCES[block.dataSource]
   const colors = COLOR_CLASSES[def.color] ?? COLOR_CLASSES.slate
-  const data = useReportBuilderData(block.dataSource, filters, block.groupBy)
+
+  // A drilled block (block.drillRegion set, via clicking a bar/row below)
+  // overrides the canvas's global Region filter for THIS block only --
+  // independent of whatever the global filter bar is set to, so clicking
+  // into one region's districts doesn't require first narrowing the
+  // whole canvas to that region.
+  const effectiveFilters = useMemo(
+    () => (block.drillRegion ? { ...filters, region: block.drillRegion } : filters),
+    [filters, block.drillRegion],
+  )
+  const data = useReportBuilderData(block.dataSource, effectiveFilters, block.groupBy)
 
   const chartRows = useMemo(() => data.rows.slice(0, 20), [data.rows])
   const kpiTotal = useMemo(() => data.rows.reduce((s, r) => s + r.value, 0), [data.rows])
+
+  // Only the dimension currently selected as groupBy can be drilled from
+  // -- e.g. "Region" has a drillTo ("District"), but once already viewing
+  // by District there's nowhere further down to go (single-level drill
+  // by design; see GroupByOption.drillTo's own comment).
+  const currentGroupByValue = block.groupBy || def.defaultGroupBy
+  const drillTo = def.groupByOptions.find((g) => g.value === currentGroupByValue)?.drillTo
+  const handleDrill = (label: string) => {
+    if (!drillTo || !label) return
+    onChange({ groupBy: drillTo, drillRegion: label })
+  }
 
   useEffect(() => {
     onDataChange?.({ ...data, kpiTotal })
@@ -153,9 +174,25 @@ export function ReportBlockCard({ block, filters, onChange, onRemove, dragHandle
               </SelectContent>
             </Select>
           )}
+          {block.drillRegion && (
+            <button
+              type="button"
+              onClick={() => onChange({ drillRegion: undefined })}
+              className={`text-[10px] rounded-full border px-2 py-0.5 ${colors.border} ${colors.text} hover:bg-muted/50`}
+              title="Clear drill-down"
+            >
+              Scoped to: {block.drillRegion} ✕
+            </button>
+          )}
         </div>
       </CardHeader>
-      <CardContent className="flex-1 min-h-0 overflow-hidden pb-3">
+      <CardContent className="flex-1 min-h-0 overflow-hidden pb-3 flex flex-col">
+        {drillTo && !block.drillRegion && (block.visualization === "bar" || block.visualization === "table") && (
+          <p className="text-[10px] text-muted-foreground mb-1.5 shrink-0">
+            Click a {block.visualization === "bar" ? "bar" : "row"} to drill into {def.groupByOptions.find((g) => g.value === drillTo)?.label.toLowerCase()}.
+          </p>
+        )}
+        <div className="flex-1 min-h-0">
         {data.isLoading ? (
           <Skeleton className="h-full w-full" />
         ) : data.isError ? (
@@ -189,7 +226,14 @@ export function ReportBlockCard({ block, filters, onChange, onRemove, dragHandle
                 <XAxis dataKey="label" angle={-30} textAnchor="end" tick={{ fontSize: 10 }} interval={0} />
                 <YAxis tickFormatter={formatValue} tick={{ fontSize: 10 }} />
                 <Tooltip formatter={(v: number) => [formatValue(v), def.valueLabel]} />
-                <Bar dataKey="value" fill={colors.fill} radius={[4, 4, 0, 0]} isAnimationActive={false} />
+                <Bar
+                  dataKey="value"
+                  fill={colors.fill}
+                  radius={[4, 4, 0, 0]}
+                  isAnimationActive={false}
+                  cursor={drillTo ? "pointer" : undefined}
+                  onClick={drillTo ? (d: { label?: string }) => handleDrill(d?.label ?? "") : undefined}
+                />
               </BarChart>
             </ResponsiveContainer>
           </div>
@@ -217,7 +261,11 @@ export function ReportBlockCard({ block, filters, onChange, onRemove, dragHandle
               </TableHeader>
               <TableBody>
                 {data.rows.map((r) => (
-                  <TableRow key={r.label}>
+                  <TableRow
+                    key={r.label}
+                    onClick={drillTo ? () => handleDrill(r.label) : undefined}
+                    className={drillTo ? "cursor-pointer hover:bg-muted/40" : undefined}
+                  >
                     <TableCell className="text-xs">{r.label}</TableCell>
                     <TableCell className="text-xs text-right tabular-nums">{formatValue(r.value)}</TableCell>
                     {def.secondaryLabel && (
@@ -231,6 +279,7 @@ export function ReportBlockCard({ block, filters, onChange, onRemove, dragHandle
             </Table>
           </div>
         )}
+        </div>
       </CardContent>
     </Card>
   )

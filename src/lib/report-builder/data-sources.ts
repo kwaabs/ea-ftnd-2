@@ -28,6 +28,12 @@ export type DataSourceKey =
 export interface GroupByOption {
   value: string
   label: string
+  /** The groupBy value a block should switch to when a bar/row for this
+   * dimension is clicked — e.g. "region"'s drillTo is "district". Only
+   * set on dimensions with a real one-level-down dimension in the same
+   * source; most dimensions (tariff, billing month, meter type, ...)
+   * have none and stay plain, non-drillable bars. */
+  drillTo?: string
 }
 
 export interface DataSourceDef {
@@ -48,12 +54,12 @@ export interface DataSourceDef {
 }
 
 const REGION_DISTRICT: GroupByOption[] = [
-  { value: "region", label: "Region" },
+  { value: "region", label: "Region", drillTo: "district" },
   { value: "district", label: "District" },
 ]
 
 const ZEUS_GROUPBY: GroupByOption[] = [
-  { value: "regionname", label: "Region" },
+  { value: "regionname", label: "Region", drillTo: "districtname" },
   { value: "districtname", label: "District" },
   { value: "tariffclassname", label: "Tariff class" },
   { value: "metermodeltype", label: "Meter type (Postpaid/AMR/Prepaid)" },
@@ -191,7 +197,7 @@ export const DATA_SOURCES: Record<DataSourceKey, DataSourceDef> = {
     description: "Legacy consumption source (opaque region/district codes)",
     color: "rose",
     groupByOptions: [
-      { value: "region", label: "Region code" },
+      { value: "region", label: "Region code", drillTo: "district" },
       { value: "district", label: "District code" },
       { value: "tariff", label: "Tariff" },
       { value: "billmonth", label: "Bill month" },
@@ -219,7 +225,7 @@ export const DATA_SOURCES: Record<DataSourceKey, DataSourceDef> = {
     description: "BSP incomer meter imports",
     color: "sky",
     groupByOptions: [
-      { value: "region", label: "Region" },
+      { value: "region", label: "Region", drillTo: "station" },
       { value: "station", label: "Station" },
     ],
     defaultGroupBy: "region",
