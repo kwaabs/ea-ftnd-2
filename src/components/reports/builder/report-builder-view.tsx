@@ -151,7 +151,7 @@ export function ReportBuilderView() {
         const def = DATA_SOURCES[b.dataSource]
         const resolved = blockDataRef.current.get(b.id)
         const groupByLabel = def.groupByOptions.find((g) => g.value === (b.groupBy || def.defaultGroupBy))?.label
-        const title = `${def.label}${groupByLabel ? ` by ${groupByLabel}` : ""}`
+        const title = `${def.label}${groupByLabel ? ` by ${groupByLabel}` : ""}${b.drillRegion ? ` — ${b.drillRegion}` : ""}`
 
         if (b.visualization === "bar" || b.visualization === "line") {
           const el = chartElRef.current.get(b.id)
