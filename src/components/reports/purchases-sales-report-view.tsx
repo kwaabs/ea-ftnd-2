@@ -544,7 +544,7 @@ export function PurchasesSalesReportView() {
       )}
 
       {/* National headline */}
-      <div className="grid gap-4 md:grid-cols-4">
+      <div className="grid gap-4 md:grid-cols-3">
         <Card className="border-2 border-blue-200 bg-blue-50/40">
           <CardHeader className="pb-2">
             <div className="flex items-center gap-2">
@@ -562,6 +562,19 @@ export function PurchasesSalesReportView() {
               <div className="text-3xl font-bold text-blue-700">{formatKwh(scopeTotals.purchasesKwh)}</div>
             ) : (
               <div className="text-3xl font-bold text-muted-foreground">—</div>
+            )}
+            {!bspStatusLoading && bspStatus && (
+              <div className="mt-2">
+                <Badge
+                  variant="outline"
+                  className="text-[10px] gap-1 border-indigo-300 text-indigo-700 cursor-pointer hover:bg-indigo-50"
+                  onClick={() => setBspExpanded((v) => !v)}
+                >
+                  <Wifi className="h-3 w-3" />
+                  BSP meters {bspStatus.online}/{bspStatus.total} online ({formatPct(bspStatus.online_percentage)})
+                  {bspExpanded ? " — hide detail" : " — view detail"}
+                </Badge>
+              </div>
             )}
           </CardContent>
         </Card>
@@ -611,38 +624,6 @@ export function PurchasesSalesReportView() {
               <>
                 <div className="text-3xl font-bold text-rose-700">{formatKwh(scopeTotals.lossKwh)}</div>
                 <div className="text-sm text-rose-600 mt-1">{formatPct(scopeTotals.lossPct)} of purchases</div>
-              </>
-            ) : (
-              <div className="text-3xl font-bold text-muted-foreground">—</div>
-            )}
-          </CardContent>
-        </Card>
-        <Card
-          className="border-2 border-indigo-200 bg-indigo-50/40 cursor-pointer hover:bg-indigo-50/70 transition-colors"
-          onClick={() => setBspExpanded((v) => !v)}
-        >
-          <CardHeader className="pb-2">
-            <div className="flex items-center gap-2">
-              <Wifi className="h-4 w-4 text-indigo-600" />
-              <CardTitle className="text-sm font-medium text-muted-foreground">BSP Meter Status</CardTitle>
-            </div>
-            <CardDescription className="text-[11px]">
-              Online vs offline incomer meters — click to {bspExpanded ? "collapse" : "expand"}
-            </CardDescription>
-          </CardHeader>
-          <CardContent>
-            {bspStatusLoading ? (
-              <Skeleton className="h-9 w-40" />
-            ) : bspStatus ? (
-              <>
-                <div className="text-3xl font-bold text-indigo-700">
-                  {bspStatus.online}
-                  <span className="text-lg font-semibold text-muted-foreground">/{bspStatus.total}</span>
-                </div>
-                <div className="text-sm text-indigo-600 mt-1">
-                  {formatPct(bspStatus.online_percentage)} online
-                  {bspStatus.total_offline > 0 ? ` · ${bspStatus.total_offline} offline` : ""}
-                </div>
               </>
             ) : (
               <div className="text-3xl font-bold text-muted-foreground">—</div>
