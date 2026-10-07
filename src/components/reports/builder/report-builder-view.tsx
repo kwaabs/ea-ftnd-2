@@ -61,6 +61,8 @@ export function ReportBuilderView() {
   const [blocks, setBlocks] = useState<PlacedBlock[]>([])
   const [dateFrom, setDateFrom] = useState(() => defaultDateRange().from)
   const [dateTo, setDateTo] = useState(() => defaultDateRange().to)
+  const [region, setRegion] = useState("")
+  const [district, setDistrict] = useState("")
   const [paletteSource, setPaletteSource] = useState<DataSourceKey>(DATA_SOURCE_LIST[0].key)
 
   // Dragging a palette card onto the grid: react-grid-layout computes the
@@ -91,7 +93,12 @@ export function ReportBuilderView() {
 
   const layout = blocks.map((b) => ({ i: b.id, x: b.x, y: b.y, w: b.w, h: b.h, minW: 2, minH: 2 }))
 
-  const filters = { dateFrom, dateTo }
+  const filters = {
+    dateFrom,
+    dateTo,
+    region: region.trim() || undefined,
+    district: district.trim() || undefined,
+  }
 
   return (
     <div className="space-y-6">
@@ -113,7 +120,28 @@ export function ReportBuilderView() {
             <label className="text-xs text-muted-foreground">To</label>
             <Input type="date" value={dateTo} onChange={(e) => setDateTo(e.target.value)} className="w-[160px]" />
           </div>
-          <p className="text-xs text-muted-foreground">Applies to every block on the canvas.</p>
+          <div className="space-y-1">
+            <label className="text-xs text-muted-foreground">Region</label>
+            <Input
+              value={region}
+              onChange={(e) => setRegion(e.target.value)}
+              placeholder="e.g. Ashanti"
+              className="w-[160px]"
+            />
+          </div>
+          <div className="space-y-1">
+            <label className="text-xs text-muted-foreground">District</label>
+            <Input
+              value={district}
+              onChange={(e) => setDistrict(e.target.value)}
+              placeholder="e.g. Kumasi"
+              className="w-[160px]"
+            />
+          </div>
+          <p className="text-xs text-muted-foreground">
+            Applies to every block on the canvas (Region/District narrow results; each block&apos;s own groupBy still
+            controls what it breaks down BY).
+          </p>
         </CardContent>
       </Card>
 
@@ -163,51 +191,56 @@ export function ReportBuilderView() {
           </CardContent>
         </Card>
 
-        <div
-          className="min-h-[400px] rounded-lg border-2 border-dashed border-muted-foreground/20 bg-muted/10 p-2"
-          onDragOver={(e) => e.preventDefault()}
-        >
-          {blocks.length === 0 ? (
-            <div className="h-[400px] flex items-center justify-center text-sm text-muted-foreground">
+        <div className="relative min-h-[400px] rounded-lg border-2 border-dashed border-muted-foreground/20 bg-muted/10 p-2">
+          {/* The grid itself owns all drag/drop handling (isDroppable),
+              so it must stay mounted even with zero blocks -- it used to
+              be swapped out for a plain static placeholder div here,
+              which meant the very first drag onto an empty canvas landed
+              on an element with no drop handling at all and silently did
+              nothing (only "Add" worked until a block already existed).
+              The empty-state message is now a non-blocking overlay
+              (pointer-events-none) drawn on top of the still-live grid,
+              not a replacement for it. */}
+          {blocks.length === 0 && (
+            <div className="absolute inset-0 flex items-center justify-center text-sm text-muted-foreground pointer-events-none z-0">
               Drag a data source here, or click Add in the panel on the left.
             </div>
-          ) : (
-            <ResponsiveGridLayout
-              className="layout"
-              layouts={{ lg: layout, md: layout, sm: layout, xs: layout, xxs: layout }}
-              breakpoints={{ lg: 1024, md: 768, sm: 540, xs: 360, xxs: 0 }}
-              cols={COLS}
-              rowHeight={70}
-              margin={[12, 12]}
-              draggableHandle=".report-block-drag-handle"
-              isDroppable
-              droppingItem={{ i: "__dropping__", x: 0, y: 0, w: DEFAULT_W, h: DEFAULT_H }}
-              onDrop={(_layout, item) => {
-                if (!item) return
-                setBlocks((prev) => [...prev, defaultBlockFor(draggingSourceRef.current, item.x, item.y)])
-              }}
-              onLayoutChange={(newLayout) => {
-                setBlocks((prev) =>
-                  prev.map((b) => {
-                    const l = newLayout.find((li) => li.i === b.id)
-                    return l ? { ...b, x: l.x, y: l.y, w: l.w, h: l.h } : b
-                  }),
-                )
-              }}
-            >
-              {blocks.map((b) => (
-                <div key={b.id}>
-                  <ReportBlockCard
-                    block={b}
-                    filters={filters}
-                    onChange={(patch) => updateBlock(b.id, patch)}
-                    onRemove={() => removeBlock(b.id)}
-                    dragHandleClassName="report-block-drag-handle"
-                  />
-                </div>
-              ))}
-            </ResponsiveGridLayout>
           )}
+          <ResponsiveGridLayout
+            className="layout relative z-10"
+            layouts={{ lg: layout, md: layout, sm: layout, xs: layout, xxs: layout }}
+            breakpoints={{ lg: 1024, md: 768, sm: 540, xs: 360, xxs: 0 }}
+            cols={COLS}
+            rowHeight={70}
+            margin={[12, 12]}
+            draggableHandle=".report-block-drag-handle"
+            isDroppable
+            droppingItem={{ i: "__dropping__", x: 0, y: 0, w: DEFAULT_W, h: DEFAULT_H }}
+            onDrop={(_layout, item) => {
+              if (!item) return
+              setBlocks((prev) => [...prev, defaultBlockFor(draggingSourceRef.current, item.x, item.y)])
+            }}
+            onLayoutChange={(newLayout) => {
+              setBlocks((prev) =>
+                prev.map((b) => {
+                  const l = newLayout.find((li) => li.i === b.id)
+                  return l ? { ...b, x: l.x, y: l.y, w: l.w, h: l.h } : b
+                }),
+              )
+            }}
+          >
+            {blocks.map((b) => (
+              <div key={b.id}>
+                <ReportBlockCard
+                  block={b}
+                  filters={filters}
+                  onChange={(patch) => updateBlock(b.id, patch)}
+                  onRemove={() => removeBlock(b.id)}
+                  dragHandleClassName="report-block-drag-handle"
+                />
+              </div>
+            ))}
+          </ResponsiveGridLayout>
         </div>
       </div>
     </div>

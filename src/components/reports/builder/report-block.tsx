@@ -40,6 +40,8 @@ const COLOR_CLASSES: Record<string, { border: string; text: string; bg: string; 
   fuchsia: { border: "border-fuchsia-300", text: "text-fuchsia-700", bg: "bg-fuchsia-50", fill: "#c026d3" },
   sky: { border: "border-sky-300", text: "text-sky-700", bg: "bg-sky-50", fill: "#0284c7" },
   slate: { border: "border-slate-300", text: "text-slate-700", bg: "bg-slate-50", fill: "#475569" },
+  emerald: { border: "border-emerald-300", text: "text-emerald-700", bg: "bg-emerald-50", fill: "#059669" },
+  lime: { border: "border-lime-300", text: "text-lime-700", bg: "bg-lime-50", fill: "#65a30d" },
 }
 
 function formatValue(value: number): string {
