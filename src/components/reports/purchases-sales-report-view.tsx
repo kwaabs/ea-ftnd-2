@@ -1,6 +1,7 @@
 "use client"
 
 import { Fragment, useEffect, useMemo, useRef, useState } from "react"
+import { useRouter } from "next/navigation"
 import {
   Area,
   CartesianGrid,
@@ -20,6 +21,7 @@ import {
   Minus,
   Scale,
   TrendingDown,
+  Wifi,
   Zap,
 } from "lucide-react"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
@@ -63,6 +65,8 @@ import { PurchasesSalesLossMap } from "@/components/reports/purchases-sales-loss
 import { CompareInsightsView } from "@/components/reports/compare-insights-view"
 import { MetricHeatMap } from "@/components/reports/metric-heat-map"
 import { GenerateReportDialog } from "@/components/reports/generate-report-dialog"
+import { useMeterStatusSummary } from "@/hooks/api/use-meter-status-api"
+import { formatApiDate } from "@/lib/utils"
 
 const MAX_WINDOW_MONTHS = 12
 
@@ -90,6 +94,7 @@ const PERIOD_MODE_OPTIONS: { value: PeriodMode; label: string }[] = [
  * this page the way it does elsewhere.
  */
 export function PurchasesSalesReportView() {
+  const router = useRouter()
   const now = currentMonthPoint()
   const [periodMode, setPeriodMode] = useState<PeriodMode>("3")
   // Defaults for the custom-range inputs: last 12 months, so switching into
@@ -187,6 +192,27 @@ export function PurchasesSalesReportView() {
 
   const report = usePurchasesSalesReport(months)
   const monthKeys = report.months.map((m) => monthKey(m))
+
+  // BSP incomer meter online/offline status for the same reporting window
+  // (first day of the first month through the last day of the last month)
+  // — reuses the generic meter-status engine already powering
+  // /meter-category/bsp (app.meters + app.meter_consumption_daily), just
+  // scoped to meterTypes: ["BSP"], rather than inventing a second
+  // online/offline computation for this page.
+  const bspStatusRange = useMemo(() => {
+    const first = report.months[0]
+    const last = report.months[report.months.length - 1]
+    if (!first || !last) return null
+    const start = new Date(first.year, first.month - 1, 1)
+    const end = new Date(last.year, last.month, 0) // day 0 of next month = last day of this one
+    return { dateFrom: formatApiDate(start), dateTo: formatApiDate(end) }
+  }, [report.months])
+
+  const { data: bspStatus, isLoading: bspStatusLoading } = useMeterStatusSummary({
+    dateFrom: bspStatusRange?.dateFrom ?? "",
+    dateTo: bspStatusRange?.dateTo ?? "",
+    meterTypes: ["BSP"],
+  })
 
   const selectedRegion = regionFilter === "all" ? null : report.regions.find((r) => r.regionKey === regionFilter) ?? null
   const selectedDistrict =
@@ -488,7 +514,7 @@ export function PurchasesSalesReportView() {
       )}
 
       {/* National headline */}
-      <div className="grid gap-4 md:grid-cols-4">
+      <div className="grid gap-4 md:grid-cols-5">
         <Card className="border-2 border-blue-200 bg-blue-50/40">
           <CardHeader className="pb-2">
             <div className="flex items-center gap-2">
@@ -561,6 +587,36 @@ export function PurchasesSalesReportView() {
               <Skeleton className="h-9 w-40" />
             ) : (
               <div className="text-3xl font-bold text-yellow-700">{formatKwh(scopeTotals.streetlightingKwh)}</div>
+            )}
+          </CardContent>
+        </Card>
+        <Card
+          className="border-2 border-indigo-200 bg-indigo-50/40 cursor-pointer hover:bg-indigo-50/70 transition-colors"
+          onClick={() => router.push("/meter-category/bsp")}
+        >
+          <CardHeader className="pb-2">
+            <div className="flex items-center gap-2">
+              <Wifi className="h-4 w-4 text-indigo-600" />
+              <CardTitle className="text-sm font-medium text-muted-foreground">BSP Meter Status</CardTitle>
+            </div>
+            <CardDescription className="text-[11px]">Online vs offline incomer meters — click for detail</CardDescription>
+          </CardHeader>
+          <CardContent>
+            {bspStatusLoading ? (
+              <Skeleton className="h-9 w-40" />
+            ) : bspStatus ? (
+              <>
+                <div className="text-3xl font-bold text-indigo-700">
+                  {bspStatus.online}
+                  <span className="text-lg font-semibold text-muted-foreground">/{bspStatus.total}</span>
+                </div>
+                <div className="text-sm text-indigo-600 mt-1">
+                  {formatPct(bspStatus.online_percentage)} online
+                  {bspStatus.total_offline > 0 ? ` · ${bspStatus.total_offline} offline` : ""}
+                </div>
+              </>
+            ) : (
+              <div className="text-3xl font-bold text-muted-foreground">—</div>
             )}
           </CardContent>
         </Card>
