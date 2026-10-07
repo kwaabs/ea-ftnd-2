@@ -754,7 +754,7 @@ export function PurchasesSalesReportView() {
             {bspDetails && bspDetails.pagination.total_pages > 1 && (
               <div className="flex items-center justify-between text-sm">
                 <span className="text-muted-foreground">
-                  {bspDetails.pagination.total.toLocaleString()} meter(s) total
+                  {bspDetails.pagination.total_records.toLocaleString()} meter(s) total
                 </span>
                 <div className="flex items-center gap-2">
                   <Button

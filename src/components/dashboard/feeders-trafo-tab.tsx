@@ -121,7 +121,7 @@ export function FeedersTrafoTab({ meterTypes = ["BSP"] }: FeedersTrafoTabProps) 
     }, [detailsData])
 
     const totalStatusPages = detailsData?.pagination?.total_pages || 1
-    const totalStatusItems = detailsData?.pagination?.total || 0
+    const totalStatusItems = detailsData?.pagination?.total_records || 0
 
     const toggleRegion = (region: string) => {
         setExpandedRegions((prev) => {

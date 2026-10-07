@@ -47,13 +47,20 @@ export interface MeterStatusDetail {
     days_offline: number
 }
 
+// pagination.total_records matches the backend's actual field name
+// (ea-bknd-3/internal/meters/model.go's MeterStatusDetailResponse) --
+// every call site used to read `.pagination.total`, which was never a
+// real field (always undefined at runtime); every one of them happened to
+// guard it with `|| 0` except purchases-sales-report-view.tsx, whose bare
+// `.toLocaleString()` on that undefined is what surfaced this.
 export interface PaginatedResponse<T> {
     data: T[]
     pagination: {
         page: number
         limit: number
-        total: number
+        total_records: number
         total_pages: number
+        has_more: boolean
     }
 }
 

@@ -154,7 +154,7 @@ export function DtxTab({ meterTypes }: DtxTabProps) {
     }, [detailsData])
 
     const totalStatusPages = detailsData?.pagination?.total_pages || 1
-    const totalStatusItems = detailsData?.pagination?.total || 0
+    const totalStatusItems = detailsData?.pagination?.total_records || 0
 
 
 
