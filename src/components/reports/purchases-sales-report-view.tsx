@@ -544,7 +544,7 @@ export function PurchasesSalesReportView() {
       )}
 
       {/* National headline */}
-      <div className="grid gap-4 md:grid-cols-5">
+      <div className="grid gap-4 md:grid-cols-4">
         <Card className="border-2 border-blue-200 bg-blue-50/40">
           <CardHeader className="pb-2">
             <div className="flex items-center gap-2">
@@ -577,7 +577,20 @@ export function PurchasesSalesReportView() {
             {report.isLoading ? (
               <Skeleton className="h-9 w-40" />
             ) : (
-              <div className="text-3xl font-bold text-emerald-700">{formatKwh(scopeTotals.salesKwh)}</div>
+              <>
+                <div className="text-3xl font-bold text-emerald-700">{formatKwh(scopeTotals.salesKwh)}</div>
+                <div className="flex flex-wrap gap-1.5 mt-2">
+                  <Badge variant="outline" className="text-[10px] gap-1 border-blue-300 text-blue-700">
+                    Postpaid {formatKwh(scopeTotals.postpaidKwh)}
+                  </Badge>
+                  <Badge variant="outline" className="text-[10px] gap-1 border-pink-300 text-pink-700">
+                    Prepaid {formatKwh(scopeTotals.prepaidKwh)}
+                  </Badge>
+                  <Badge variant="outline" className="text-[10px] gap-1 border-cyan-300 text-cyan-700">
+                    Streetlighting {formatKwh(scopeTotals.streetlightingKwh)}
+                  </Badge>
+                </div>
+              </>
             )}
           </CardContent>
         </Card>
@@ -601,22 +614,6 @@ export function PurchasesSalesReportView() {
               </>
             ) : (
               <div className="text-3xl font-bold text-muted-foreground">—</div>
-            )}
-          </CardContent>
-        </Card>
-        <Card className="border-2 border-yellow-200 bg-yellow-50/40">
-          <CardHeader className="pb-2">
-            <div className="flex items-center gap-2">
-              <Zap className="h-4 w-4 text-yellow-600" />
-              <CardTitle className="text-sm font-medium text-muted-foreground">Streetlighting</CardTitle>
-            </div>
-            <CardDescription className="text-[11px]">Zeus tariff class E03 — tracked separately from Sales</CardDescription>
-          </CardHeader>
-          <CardContent>
-            {report.isLoading ? (
-              <Skeleton className="h-9 w-40" />
-            ) : (
-              <div className="text-3xl font-bold text-yellow-700">{formatKwh(scopeTotals.streetlightingKwh)}</div>
             )}
           </CardContent>
         </Card>
