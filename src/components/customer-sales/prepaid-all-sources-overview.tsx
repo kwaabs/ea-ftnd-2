@@ -22,6 +22,7 @@ import { useBxcConsumptionAggregate } from "@/hooks/api/use-bxc-consumption-api"
 import { usePnsConsumptionAggregate } from "@/hooks/api/use-pns-consumption-api"
 import { useHolleyConsumptionAggregate } from "@/hooks/api/use-holley-consumption-api"
 import { useEcash4ConsumptionAggregate } from "@/hooks/api/use-ecash4-consumption-api"
+import { useAlphaConsumptionAggregate } from "@/hooks/api/use-alpha-consumption-api"
 import { normalizeRegionName, shortRegionLabel, useResolvedRegionName } from "@/hooks/use-resolved-region-name"
 import { cn } from "@/lib/utils"
 
@@ -40,8 +41,17 @@ import { cn } from "@/lib/utils"
 // PNS rows here will therefore show as raw codes rather than merging into
 // the same region buckets as everything else, until a PNS code->name
 // mapping shows up.
+//
+// Alpha (alphaconsumption) is deliberately NOT one of these SOURCES —
+// unlike every source above, it has no region/district dimension at all
+// (it groups by substation instead), so it can't participate in the
+// region-pivoted breakdown table/chart below at all, not even as raw
+// codes the way PNS does. It's added separately, below, as a flat
+// additive total in the top-level "Consumption by source" table/Leading
+// source stat only.
 const SOURCES = ["Zeus + MMS", "BOT", "BXC", "PNS", "HOLLEY", "ECASH 4"] as const
 type Source = (typeof SOURCES)[number]
+type AllSource = Source | "Alpha"
 
 const SOURCE_COLORS: Record<Source, string> = {
   "Zeus + MMS": "#2563eb", // blue, matches the Zeus + MMS tab elsewhere
@@ -50,6 +60,11 @@ const SOURCE_COLORS: Record<Source, string> = {
   PNS: "#e11d48", // rose, matches the PNS tab
   HOLLEY: "#0d9488", // teal, matches the HOLLEY tab
   "ECASH 4": "#4f46e5", // indigo, matches the ECASH 4 tab
+}
+
+const ALL_SOURCE_COLORS: Record<AllSource, string> = {
+  ...SOURCE_COLORS,
+  Alpha: "#c026d3", // fuchsia, matches the Alpha tab elsewhere
 }
 
 function formatKwhRaw(value: number | null | undefined) {
@@ -153,9 +168,18 @@ export function PrepaidAllSourcesOverview({ dateRange }: PrepaidAllSourcesOvervi
     dateTo: dateRange.end,
     groupBy: "region",
   })
+  // No region/district dimension on this source (see the SOURCES comment
+  // above), so it's grouped by substation purely to keep the result set
+  // small — every row is summed into one flat total below regardless.
+  const { data: alphaAgg = [], isLoading: alphaLoading } = useAlphaConsumptionAggregate({
+    dateFrom: dateRange.start,
+    dateTo: dateRange.end,
+    groupBy: "substation",
+  })
 
   const regionLoading =
     zeusLoading || mmsLoading || botLoading || bxcLoading || pnsLoading || holleyLoading || ecash4Loading
+  const statsLoading = regionLoading || alphaLoading
 
   const byRegion = useMemo<RegionRow[]>(() => {
     const rows = new Map<string, RegionRow>()
@@ -197,8 +221,18 @@ export function PrepaidAllSourcesOverview({ dateRange }: PrepaidAllSourcesOvervi
         totals[source].customers += bucket.customers
       }
     })
-    return SOURCES.map((source) => ({ source, ...totals[source] })).sort((a, b) => b.kwh - a.kwh)
-  }, [byRegion])
+    const alphaTotal = alphaAgg.reduce(
+      (acc, r) => ({ kwh: acc.kwh + (r.sum_value || 0), customers: acc.customers + (r.consumer_count || 0) }),
+      { kwh: 0, customers: 0 },
+    )
+
+    const bySourceRows: { source: AllSource; kwh: number; customers: number }[] = SOURCES.map((source) => ({
+      source,
+      ...totals[source],
+    }))
+    bySourceRows.push({ source: "Alpha", ...alphaTotal })
+    return bySourceRows.sort((a, b) => b.kwh - a.kwh)
+  }, [byRegion, alphaAgg])
 
   const stats = useMemo(() => {
     const totalKwh = bySource.reduce((s, x) => s + x.kwh, 0)
@@ -322,7 +356,7 @@ export function PrepaidAllSourcesOverview({ dateRange }: PrepaidAllSourcesOvervi
     <div className="space-y-6">
       <div>
         <p className="text-muted-foreground">
-          Every prepaid source combined — Zeus + MMS (deduped), BOT, BXC, PNS, HOLLEY, and ECASH 4.
+          Every prepaid source combined — Zeus + MMS (deduped), BOT, BXC, PNS, HOLLEY, ECASH 4, and Alpha.
           {selectedRegion ? (
             <span className="text-foreground font-medium"> · filtered by {shortRegionLabel(selectedRegion)}</span>
           ) : null}
@@ -335,7 +369,7 @@ export function PrepaidAllSourcesOverview({ dateRange }: PrepaidAllSourcesOvervi
             <p className="text-xs text-muted-foreground mb-1 flex items-center gap-1">
               <Zap className="h-3.5 w-3.5" /> Consumption
             </p>
-            {regionLoading ? (
+            {statsLoading ? (
               <Skeleton className="h-8 w-32" />
             ) : (
               <p className="text-2xl font-bold text-foreground tabular-nums">{formatKwhRaw(stats.totalKwh)}</p>
@@ -348,7 +382,7 @@ export function PrepaidAllSourcesOverview({ dateRange }: PrepaidAllSourcesOvervi
             <p className="text-xs text-muted-foreground mb-1 flex items-center gap-1">
               <Users className="h-3.5 w-3.5" /> Customers
             </p>
-            {regionLoading ? (
+            {statsLoading ? (
               <Skeleton className="h-8 w-24" />
             ) : (
               <p className="text-2xl font-bold text-foreground tabular-nums">{formatNumber(stats.totalCustomers)}</p>
@@ -361,12 +395,14 @@ export function PrepaidAllSourcesOverview({ dateRange }: PrepaidAllSourcesOvervi
             <p className="text-xs text-muted-foreground mb-1 flex items-center gap-1">
               <Trophy className="h-3.5 w-3.5" /> Leading source
             </p>
-            {regionLoading ? (
+            {statsLoading ? (
               <Skeleton className="h-8 w-28" />
             ) : (
               <p
                 className="text-2xl font-bold tabular-nums"
-                style={{ color: stats.leadingSource !== "—" ? SOURCE_COLORS[stats.leadingSource as Source] : undefined }}
+                style={{
+                  color: stats.leadingSource !== "—" ? ALL_SOURCE_COLORS[stats.leadingSource as AllSource] : undefined,
+                }}
               >
                 {stats.leadingSource}
               </p>
@@ -382,7 +418,7 @@ export function PrepaidAllSourcesOverview({ dateRange }: PrepaidAllSourcesOvervi
           <CardDescription>Total kWh per source across the selected date range</CardDescription>
         </CardHeader>
         <CardContent>
-          {regionLoading ? (
+          {statsLoading ? (
             <Skeleton className="h-48 w-full" />
           ) : (
             <div className="overflow-x-auto">
@@ -401,14 +437,14 @@ export function PrepaidAllSourcesOverview({ dateRange }: PrepaidAllSourcesOvervi
                         <span className="inline-flex items-center gap-2">
                           <span
                             className="h-2.5 w-2.5 rounded-full"
-                            style={{ backgroundColor: SOURCE_COLORS[item.source] }}
+                            style={{ backgroundColor: ALL_SOURCE_COLORS[item.source] }}
                           />
                           {item.source}
                         </span>
                       </td>
                       <td
                         className="py-2.5 px-4 text-right font-semibold tabular-nums"
-                        style={{ color: SOURCE_COLORS[item.source] }}
+                        style={{ color: ALL_SOURCE_COLORS[item.source] }}
                       >
                         {formatKwhRaw(item.kwh)}
                       </td>
