@@ -44,7 +44,6 @@ import {
   Users,
   TrendingUp,
   DollarSign,
-  BatteryCharging,
   ArrowRight,
 } from "lucide-react";
 
@@ -448,20 +447,10 @@ export function CustomerSalesOverview({
       return {
         totalKwh: 0,
         totalCustomers: 0,
-        totalCredit: 0,
-        totalBalance: 0,
         avgKwh: 0,
       };
     const totalKwh = mmsItems.reduce(
       (s, i) => s + (i.sum_last_month_kwh_read || 0),
-      0,
-    );
-    const totalCredit = mmsItems.reduce(
-      (s, i) => s + (i.sum_last_month_credit_read || 0),
-      0,
-    );
-    const totalBalance = mmsItems.reduce(
-      (s, i) => s + (i.sum_credit_balance_remaining || 0),
       0,
     );
     const totalCustomers = mmsNationalItems.reduce(
@@ -471,8 +460,6 @@ export function CustomerSalesOverview({
     return {
       totalKwh,
       totalCustomers,
-      totalCredit,
-      totalBalance,
       avgKwh: totalCustomers > 0 ? totalKwh / totalCustomers : 0,
     };
   }, [mmsItems, mmsNationalItems]);
@@ -555,7 +542,10 @@ export function CustomerSalesOverview({
         mms: mmsStats.totalCustomers,
         legacy: legacyCustomers,
       },
-      billing: { zeus: zeusBilling, mms: mmsStats.totalCredit, legacy: 0 },
+      // MMS no longer reports a credit/billing figure (see
+      // ea-bknd-3's mms_sales_accounting_migration.sql) — it joins legacy
+      // sources at 0, which were already billing-less.
+      billing: { zeus: zeusBilling, mms: 0, legacy: 0 },
     };
   }, [zeusByServiceType, mmsStats, legacyKwh, legacyCustomers]);
 
@@ -618,8 +608,8 @@ export function CustomerSalesOverview({
     mmsStats.totalKwh;
   const regionTablePrepaidCustomers =
     (zeusPrepaidDedupedNational.customer_count || 0) + mmsStats.totalCustomers;
-  const regionTablePrepaidValue =
-    (zeusPrepaidDedupedNational.sum_billamount || 0) + mmsStats.totalCredit;
+  // MMS no longer reports a credit/billing figure, so this is Zeus-only.
+  const regionTablePrepaidValue = zeusPrepaidDedupedNational.sum_billamount || 0;
   const regionTableCombinedKwh =
     zeusStats.totalKwh +
     zeusByServiceType.AMR.totalKwh +
@@ -1267,7 +1257,6 @@ export function CustomerSalesOverview({
                               ) || {
                                 sum_last_month_kwh_read: 0,
                                 customer_count: 0,
-                                sum_last_month_credit_read: 0,
                               };
                               const botData = (botRegionData || []).find(
                                 (b) => normalizeRegionName(b.region || "Unknown") === key,
@@ -1282,9 +1271,9 @@ export function CustomerSalesOverview({
                               const prepaidCustomers =
                                 (zeusPrepaidData.customer_count || 0) +
                                 (mmsData.customer_count || 0);
+                              // MMS no longer reports a credit/billing figure.
                               const prepaidValue =
-                                (zeusPrepaidData.sum_billamount || 0) +
-                                (mmsData.sum_last_month_credit_read || 0);
+                                zeusPrepaidData.sum_billamount || 0;
 
                               const legacyKwhRow =
                                 (botData.sum_kwh || 0) + (bxcData.sum_kwh || 0);
@@ -1969,7 +1958,7 @@ export function CustomerSalesOverview({
                 </CardContent>
               </Card>
             </div>
-            <div className="grid gap-4 md:grid-cols-3">
+            <div className="grid gap-4 md:grid-cols-2">
               <Card className="border-dashed">
                 <CardContent className="pt-4 pb-4">
                   <div className="flex items-center justify-between">
@@ -1993,16 +1982,16 @@ export function CustomerSalesOverview({
                 <CardContent className="pt-4 pb-4">
                   <div className="flex items-center justify-between">
                     <div className="flex items-center gap-2">
-                      <BatteryCharging className="h-4 w-4 text-muted-foreground" />
+                      <TrendingUp className="h-4 w-4 text-muted-foreground" />
                       <span className="text-sm text-muted-foreground font-medium">
-                        Credit Purchased
+                        Avg kWh / Customer
                       </span>
                     </div>
                     {mmsLoading ? (
                       <Skeleton className="h-5 w-28" />
                     ) : (
                       <span className="text-base font-semibold text-green-700">
-                        {formatMoney(mmsStats.totalCredit)}
+                        {formatKwhRaw(mmsStats.avgKwh)}
                       </span>
                     )}
                   </div>
@@ -2119,7 +2108,7 @@ export function CustomerSalesOverview({
               <CardHeader>
                 <CardTitle>Region Breakdown — MMS</CardTitle>
                 <CardDescription>
-                  Prepaid meter consumption and credit summary by region
+                  Prepaid meter consumption summary by region
                 </CardDescription>
               </CardHeader>
               <CardContent>
@@ -2139,11 +2128,8 @@ export function CustomerSalesOverview({
                           <th className="text-right py-2 px-4 font-medium text-cyan-700">
                             Avg kWh / Customer
                           </th>
-                          <th className="text-right py-2 px-4 font-medium text-muted-foreground">
-                            Customers
-                          </th>
                           <th className="text-right py-2 pl-4 font-medium text-muted-foreground">
-                            Credit Purchased
+                            Customers
                           </th>
                         </tr>
                       </thead>
@@ -2174,11 +2160,8 @@ export function CustomerSalesOverview({
                                 <td className="py-2.5 px-4 text-right text-cyan-700 tabular-nums">
                                   {formatKwhRaw(avgKwh)}
                                 </td>
-                                <td className="py-2.5 px-4 text-right tabular-nums">
+                                <td className="py-2.5 pl-4 text-right tabular-nums">
                                   {formatNumber(item.customer_count)}
-                                </td>
-                                <td className="py-2.5 pl-4 text-right text-green-700 tabular-nums">
-                                  {formatMoney(item.sum_last_month_credit_read)}
                                 </td>
                               </tr>
                             );
@@ -2193,11 +2176,8 @@ export function CustomerSalesOverview({
                           <td className="py-2.5 px-4 text-right font-semibold text-cyan-700 tabular-nums">
                             {formatKwh(mmsStats.avgKwh)}
                           </td>
-                          <td className="py-2.5 px-4 text-right font-semibold tabular-nums">
+                          <td className="py-2.5 pl-4 text-right font-semibold tabular-nums">
                             {formatNumber(mmsStats.totalCustomers)}
-                          </td>
-                          <td className="py-2.5 pl-4 text-right font-semibold text-green-700 tabular-nums">
-                            {formatMoney(mmsStats.totalCredit)}
                           </td>
                         </tr>
                       </tfoot>

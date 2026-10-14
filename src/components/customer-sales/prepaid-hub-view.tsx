@@ -4,7 +4,6 @@ import { useMemo, useState } from "react"
 import {
   AreaChartIcon,
   BarChart3,
-  BatteryCharging,
   Scale,
   Users,
   Zap,
@@ -276,14 +275,6 @@ export function PrepaidHubView() {
       (s, r) => s + (r.customer_count || 0),
       0,
     )
-    const mmsCredit = mmsRegionAgg.reduce(
-      (s, r) => s + (r.sum_last_month_credit_read || 0),
-      0,
-    )
-    const mmsBalance = mmsRegionAgg.reduce(
-      (s, r) => s + (r.sum_credit_balance_remaining || 0),
-      0,
-    )
     const totalKwh = zeusKwh + mmsKwh
     const totalCustomers = zeusCustomers + mmsCustomers
     return {
@@ -292,8 +283,6 @@ export function PrepaidHubView() {
       avgKwh: totalCustomers > 0 ? totalKwh / totalCustomers : 0,
       zeusBilling,
       zeusDebt,
-      mmsCredit,
-      mmsBalance,
     }
   }, [zeusRegionAgg, mmsRegionAgg])
 
@@ -456,20 +445,6 @@ export function PrepaidHubView() {
             <p className="text-xs text-muted-foreground mt-1">
               Debt {formatMoney(stats.zeusDebt)}
             </p>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardContent className="pt-5">
-            <p className="text-xs text-muted-foreground mb-1 flex items-center gap-1">
-              <BatteryCharging className="h-3.5 w-3.5" /> MMS credit purchased
-            </p>
-            {regionLoading ? (
-              <Skeleton className="h-8 w-28" />
-            ) : (
-              <p className="text-2xl font-bold text-green-700 tabular-nums">
-                {formatMoney(stats.mmsCredit)}
-              </p>
-            )}
           </CardContent>
         </Card>
       </div>
@@ -700,14 +675,8 @@ export function PrepaidHubView() {
                         <th className="text-right py-2 px-4 font-medium text-emerald-700">
                           Zeus billing
                         </th>
-                        <th className="text-right py-2 px-4 font-medium text-sky-700">
+                        <th className="text-right py-2 pl-4 font-medium text-sky-700">
                           Zeus debt
-                        </th>
-                        <th className="text-right py-2 px-4 font-medium text-green-700">
-                          MMS credit
-                        </th>
-                        <th className="text-right py-2 pl-4 font-medium text-green-700">
-                          MMS balance
                         </th>
                       </tr>
                     </thead>
@@ -720,8 +689,6 @@ export function PrepaidHubView() {
                           customers: number
                           zeusBilling: number
                           zeusDebt: number
-                          mmsCredit: number
-                          mmsBalance: number
                         }
                         const rows = new Map<string, RegionRow>()
                         const ensure = (raw: string) => {
@@ -735,8 +702,6 @@ export function PrepaidHubView() {
                               customers: 0,
                               zeusBilling: 0,
                               zeusDebt: 0,
-                              mmsCredit: 0,
-                              mmsBalance: 0,
                             }
                             rows.set(key, row)
                           }
@@ -753,8 +718,6 @@ export function PrepaidHubView() {
                           const row = ensure(r.region || "Unknown")
                           row.mmsKwh += r.sum_last_month_kwh_read || 0
                           row.customers += r.customer_count || 0
-                          row.mmsCredit += r.sum_last_month_credit_read || 0
-                          row.mmsBalance += r.sum_credit_balance_remaining || 0
                         })
 
                         return Array.from(rows.values())
@@ -782,14 +745,8 @@ export function PrepaidHubView() {
                                 <td className="py-2.5 px-4 text-right text-emerald-700 tabular-nums">
                                   {item.zeusBilling ? formatMoney(item.zeusBilling) : "—"}
                                 </td>
-                                <td className="py-2.5 px-4 text-right text-sky-700 tabular-nums">
+                                <td className="py-2.5 pl-4 text-right text-sky-700 tabular-nums">
                                   {item.zeusDebt ? formatMoney(item.zeusDebt) : "—"}
-                                </td>
-                                <td className="py-2.5 px-4 text-right text-green-700 tabular-nums">
-                                  {item.mmsCredit ? formatMoney(item.mmsCredit) : "—"}
-                                </td>
-                                <td className="py-2.5 pl-4 text-right text-green-700 tabular-nums">
-                                  {item.mmsBalance ? formatMoney(item.mmsBalance) : "—"}
                                 </td>
                               </tr>
                             )
@@ -808,14 +765,8 @@ export function PrepaidHubView() {
                         <td className="py-2.5 px-4 text-right font-semibold text-emerald-700 tabular-nums">
                           {formatMoney(stats.zeusBilling)}
                         </td>
-                        <td className="py-2.5 px-4 text-right font-semibold text-sky-700 tabular-nums">
+                        <td className="py-2.5 pl-4 text-right font-semibold text-sky-700 tabular-nums">
                           {formatMoney(stats.zeusDebt)}
-                        </td>
-                        <td className="py-2.5 px-4 text-right font-semibold text-green-700 tabular-nums">
-                          {formatMoney(stats.mmsCredit)}
-                        </td>
-                        <td className="py-2.5 pl-4 text-right font-semibold text-green-700 tabular-nums">
-                          {formatMoney(stats.mmsBalance)}
                         </td>
                       </tr>
                     </tfoot>

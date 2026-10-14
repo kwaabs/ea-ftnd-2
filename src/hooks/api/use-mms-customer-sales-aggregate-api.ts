@@ -15,7 +15,8 @@ export type MmsAggregateGroupBy =
   | "contract_type"
   | "tariff"
   | "manufacturer"
-  | "model";
+  | "model"
+  | "consumption_band";
 
 interface MmsCustomerSalesAggregateParams {
   dateFrom: string;

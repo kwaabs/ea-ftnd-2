@@ -426,9 +426,11 @@ export interface MmsCustomerSalesAggregateItem {
   tariff?: string | null
   manufacturer?: string | null
   model?: string | null
+  /** Only populated when groupBy includes "consumption_band" — see
+   * ea-bknd-3's sql/mms_sales_accounting_migration.sql. Rows sourced from
+   * the old MMS_SALES feed have no band and never group on it. */
+  consumption_band?: string | null
   customer_count: number
-  sum_credit_balance_remaining: number
-  sum_last_month_credit_read: number
   sum_last_month_kwh_read: number | null
 }
 
@@ -458,9 +460,13 @@ export interface MmsCustomerSalesDetail {
   latitude: number | null
   longitude: number | null
   meter_serial_number: string
-  sts_credit_balance_remaining: number
-  sts_last_month_credit_read: number
   sts_last_month_kwh_read: number
+  /** Only populated for rows sourced from the mms_sales_accounting feed
+   * (see ea-bknd-3's sql/mms_sales_accounting_migration.sql) — empty for
+   * older rows still carrying their original MMS_SALES shape. STS
+   * credit-balance fields were dropped along with that switch: the new
+   * feed never had credit data. */
+  consumption_band?: string
   date_time: string
   data_src: string
 }

@@ -25,7 +25,7 @@ interface MmsCustomerSalesDetailProps {
   district?: string
 }
 
-type SortField = "customer_name" | "sts_last_month_kwh_read" | "sts_last_month_credit_read" | "sts_credit_balance_remaining" | "date_time"
+type SortField = "customer_name" | "sts_last_month_kwh_read" | "date_time"
 type SortOrder = "asc" | "desc"
 type ExportFormat = "csv" | "xlsx"
 
@@ -37,11 +37,6 @@ const PAGE_SIZE = 50
 function formatKwh(value: number | null | undefined) {
   if (value === null || value === undefined || value === 0) return "—"
   return value.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })
-}
-
-function formatMoney(value: number | null | undefined) {
-  if (value === null || value === undefined) return "—"
-  return "₵" + value.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })
 }
 
 function formatDate(value: string | null | undefined) {
@@ -176,8 +171,7 @@ export function MmsCustomerSalesDetail({ dateRange, region, district }: MmsCusto
         manufacturer: r.manufacturer,
         model: r.model,
         last_month_kwh: r.sts_last_month_kwh_read,
-        last_month_credit: r.sts_last_month_credit_read,
-        credit_balance: r.sts_credit_balance_remaining,
+        consumption_band: r.consumption_band,
         date_time: r.date_time,
       }))
       const filename = `${(region || "all").replace(/\s+/g, "-").toLowerCase()}-mms-customer-sales`
@@ -284,22 +278,13 @@ export function MmsCustomerSalesDetail({ dateRange, region, district }: MmsCusto
                       </SortButton>
                     </div>
                   </TableHead>
-                  <TableHead className="text-right">
-                    <SortButton field="sts_last_month_credit_read" activeField={sortField} onToggle={toggleSort}>
-                      Credit Purchased
-                    </SortButton>
-                  </TableHead>
-                  <TableHead className="text-right">
-                    <SortButton field="sts_credit_balance_remaining" activeField={sortField} onToggle={toggleSort}>
-                      Balance Remaining
-                    </SortButton>
-                  </TableHead>
                   <TableHead>
                     <SortButton field="date_time" activeField={sortField} onToggle={toggleSort}>
                       Date
                     </SortButton>
                   </TableHead>
                   <TableHead>Contract Type</TableHead>
+                  <TableHead>Consumption Band</TableHead>
                   <TableHead>Install Date</TableHead>
                 </TableRow>
               </TableHeader>
@@ -307,14 +292,14 @@ export function MmsCustomerSalesDetail({ dateRange, region, district }: MmsCusto
                 {isLoading ? (
                   [...Array(12)].map((_, i) => (
                     <TableRow key={i}>
-                      {[...Array(14)].map((_, j) => (
+                      {[...Array(13)].map((_, j) => (
                         <TableCell key={j}><Skeleton className="h-4 w-full" /></TableCell>
                       ))}
                     </TableRow>
                   ))
                 ) : rows.length === 0 ? (
                   <TableRow>
-                    <TableCell colSpan={14} className="text-center py-12 text-muted-foreground">
+                    <TableCell colSpan={13} className="text-center py-12 text-muted-foreground">
                       No records found for the selected date range
                     </TableCell>
                   </TableRow>
@@ -338,19 +323,14 @@ export function MmsCustomerSalesDetail({ dateRange, region, district }: MmsCusto
                           {formatKwh(r.sts_last_month_kwh_read)}
                         </span>
                       </TableCell>
-                      <TableCell className="text-right tabular-nums text-xs text-green-700">
-                        {formatMoney(r.sts_last_month_credit_read)}
-                      </TableCell>
-                      <TableCell className="text-right tabular-nums text-xs">
-                        <span className={r.sts_credit_balance_remaining != null && r.sts_credit_balance_remaining > 0 ? "text-emerald-600 font-medium" : "text-red-600 font-medium"}>
-                          {formatMoney(r.sts_credit_balance_remaining)}
-                        </span>
-                      </TableCell>
                       <TableCell className="text-xs text-muted-foreground whitespace-nowrap">
                         {formatDate(r.date_time)}
                       </TableCell>
                       <TableCell>
                         <Badge variant="secondary" className="text-xs font-normal">{r.contract_type || "Prepaid"}</Badge>
+                      </TableCell>
+                      <TableCell className="text-xs text-muted-foreground">
+                        {r.consumption_band || "—"}
                       </TableCell>
                       <TableCell className="text-xs text-muted-foreground whitespace-nowrap">
                         {formatDate(r.installation_date)}

@@ -12,13 +12,15 @@ interface MmsCustomerSalesDetailParams {
   district?: string
   manufacturer?: string
   model?: string
+  consumptionBand?: string
   search?: string
   page?: number
   limit?: number
-  /** "customer_name" | "sts_last_month_kwh_read" | "sts_last_month_credit_read"
-   * | "sts_credit_balance_remaining" | "date_time" — matches the backend's
-   * detailSortColumn whitelist exactly. Anything else falls back to the
-   * server's stable default order. */
+  /** "customer_name" | "sts_last_month_kwh_read" | "date_time" — matches
+   * the backend's detailSortColumn whitelist exactly. Anything else falls
+   * back to the server's stable default order. (sts_last_month_credit_read
+   * / sts_credit_balance_remaining were removed along with the MMS credit
+   * fields — see ea-bknd-3's mms_sales_accounting_migration.sql.) */
   sortBy?: string
   sortOrder?: "asc" | "desc"
 }
@@ -38,6 +40,7 @@ export function useMmsCustomerSalesDetail(params: MmsCustomerSalesDetailParams) 
   if (params.district) queryString.append("district", params.district)
   if (params.manufacturer) queryString.append("manufacturer", params.manufacturer)
   if (params.model) queryString.append("model", params.model)
+  if (params.consumptionBand) queryString.append("consumptionBand", params.consumptionBand)
   if (params.search) queryString.append("search", params.search)
   if (params.page) queryString.append("page", params.page.toString())
   if (params.limit) queryString.append("limit", params.limit.toString())
@@ -53,6 +56,7 @@ export function useMmsCustomerSalesDetail(params: MmsCustomerSalesDetailParams) 
       params.district,
       params.manufacturer,
       params.model,
+      params.consumptionBand,
       params.search,
       params.page,
       params.limit,
@@ -82,6 +86,7 @@ function detailUrl(params: Omit<MmsCustomerSalesDetailParams, "page" | "limit">,
   if (params.district) qs.append("district", params.district)
   if (params.manufacturer) qs.append("manufacturer", params.manufacturer)
   if (params.model) qs.append("model", params.model)
+  if (params.consumptionBand) qs.append("consumptionBand", params.consumptionBand)
   if (params.search) qs.append("search", params.search)
   if (params.sortBy) qs.append("sortBy", params.sortBy)
   if (params.sortOrder) qs.append("sortOrder", params.sortOrder)
