@@ -4,9 +4,7 @@ import { useMemo, useState } from "react";
 import {
   AreaChartIcon,
   BarChart3,
-  BatteryCharging,
   Users,
-  Wallet,
   Zap,
 } from "lucide-react";
 import {
@@ -77,14 +75,6 @@ function formatKwh(value: number | null | undefined) {
 function formatNumber(value: number | null | undefined) {
   if (value === null || value === undefined) return "0";
   return (value || 0).toLocaleString("en-US", { maximumFractionDigits: 0 });
-}
-
-function formatMoney(value: number | null | undefined) {
-  if (value === null || value === undefined) return "₵0.00";
-  return `₵${(value || 0).toLocaleString("en-US", {
-    minimumFractionDigits: 2,
-    maximumFractionDigits: 2,
-  })}`;
 }
 
 type ChartKind = "bar" | "area";
@@ -166,19 +156,9 @@ export function MmsPageView({
       (s, r) => s + (r.customer_count || 0),
       0,
     );
-    const totalCredit = regionAgg.reduce(
-      (s, r) => s + (r.sum_last_month_credit_read || 0),
-      0,
-    );
-    const totalBalance = regionAgg.reduce(
-      (s, r) => s + (r.sum_credit_balance_remaining || 0),
-      0,
-    );
     return {
       totalKwh,
       totalCustomers,
-      totalCredit,
-      totalBalance,
       avgKwh: totalCustomers > 0 ? totalKwh / totalCustomers : 0,
     };
   }, [regionAgg]);
@@ -227,7 +207,7 @@ export function MmsPageView({
             MMS — Prepaid
           </h2>
           <p className="text-muted-foreground mt-1">
-            Prepaid customer consumption, credit purchases and balances
+            Prepaid customer consumption by region, manufacturer, and model
             {selectedRegion ? (
               <span className="text-green-700">
                 {" "}
@@ -243,7 +223,7 @@ export function MmsPageView({
       ) : null}
 
       {/* KPIs */}
-      <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
+      <div className="grid gap-4 md:grid-cols-2">
         <Card>
           <CardContent className="pt-5">
             <p className="text-xs text-muted-foreground mb-1 flex items-center gap-1">
@@ -276,34 +256,6 @@ export function MmsPageView({
             <p className="text-xs text-muted-foreground mt-1">
               Prepaid meters
             </p>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardContent className="pt-5">
-            <p className="text-xs text-muted-foreground mb-1 flex items-center gap-1">
-              <BatteryCharging className="h-3.5 w-3.5" /> Credit purchased
-            </p>
-            {regionLoading ? (
-              <Skeleton className="h-8 w-28" />
-            ) : (
-              <p className="text-2xl font-bold text-green-700 tabular-nums">
-                {formatMoney(stats.totalCredit)}
-              </p>
-            )}
-          </CardContent>
-        </Card>
-        <Card>
-          <CardContent className="pt-5">
-            <p className="text-xs text-muted-foreground mb-1 flex items-center gap-1">
-              <Wallet className="h-3.5 w-3.5" /> Credit balance
-            </p>
-            {regionLoading ? (
-              <Skeleton className="h-8 w-28" />
-            ) : (
-              <p className="text-2xl font-bold text-emerald-700 tabular-nums">
-                {formatMoney(stats.totalBalance)}
-              </p>
-            )}
           </CardContent>
         </Card>
       </div>
@@ -505,14 +457,8 @@ export function MmsPageView({
                         <th className="text-right py-2 px-4 font-medium text-cyan-700">
                           Avg kWh / Customer
                         </th>
-                        <th className="text-right py-2 px-4 font-medium text-muted-foreground">
-                          Customers
-                        </th>
-                        <th className="text-right py-2 px-4 font-medium text-muted-foreground">
-                          Credit purchased
-                        </th>
                         <th className="text-right py-2 pl-4 font-medium text-muted-foreground">
-                          Credit balance
+                          Customers
                         </th>
                       </tr>
                     </thead>
@@ -550,28 +496,18 @@ export function MmsPageView({
                                 {name}
                               </td>
                               <td className="py-2.5 px-4 text-right font-semibold text-green-700 tabular-nums">
-                                {formatKwhRaw(item.sum_last_month_kwh_read)}
+                                <div className="flex items-center justify-end gap-2">
+                                  <span>{formatKwhRaw(item.sum_last_month_kwh_read)}</span>
+                                  <span className="text-xs text-muted-foreground font-normal">
+                                    ({pct.toFixed(1)}%)
+                                  </span>
+                                </div>
                               </td>
                               <td className="py-2.5 px-4 text-right text-cyan-700 tabular-nums">
                                 {formatKwhRaw(avgKwh)}
                               </td>
-                              <td className="py-2.5 px-4 text-right tabular-nums">
+                              <td className="py-2.5 pl-4 text-right tabular-nums">
                                 {formatNumber(item.customer_count)}
-                              </td>
-                              <td className="py-2.5 px-4 text-right text-green-700 tabular-nums">
-                                {formatMoney(item.sum_last_month_credit_read)}
-                              </td>
-                              <td className="py-2.5 pl-4 text-right">
-                                <div className="flex items-center justify-end gap-2">
-                                  <span className="text-emerald-700 font-medium tabular-nums">
-                                    {formatMoney(
-                                      item.sum_credit_balance_remaining,
-                                    )}
-                                  </span>
-                                  <span className="text-xs text-muted-foreground">
-                                    ({pct.toFixed(1)}%)
-                                  </span>
-                                </div>
                               </td>
                             </tr>
                           );
@@ -586,14 +522,8 @@ export function MmsPageView({
                         <td className="py-2.5 px-4 text-right font-semibold text-cyan-700 tabular-nums">
                           {formatKwhRaw(stats.avgKwh)}
                         </td>
-                        <td className="py-2.5 px-4 text-right font-semibold tabular-nums">
+                        <td className="py-2.5 pl-4 text-right font-semibold tabular-nums">
                           {formatNumber(stats.totalCustomers)}
-                        </td>
-                        <td className="py-2.5 px-4 text-right font-semibold text-green-700 tabular-nums">
-                          {formatMoney(stats.totalCredit)}
-                        </td>
-                        <td className="py-2.5 pl-4 text-right font-semibold text-emerald-700 tabular-nums">
-                          {formatMoney(stats.totalBalance)}
                         </td>
                       </tr>
                     </tfoot>
@@ -637,14 +567,8 @@ export function MmsPageView({
                         <th className="text-right py-2 px-4 font-medium text-green-700">
                           kWh Read
                         </th>
-                        <th className="text-right py-2 px-4 font-medium text-muted-foreground">
-                          Customers
-                        </th>
-                        <th className="text-right py-2 px-4 font-medium text-muted-foreground">
-                          Credit purchased
-                        </th>
                         <th className="text-right py-2 pl-4 font-medium text-muted-foreground">
-                          Credit balance
+                          Customers
                         </th>
                       </tr>
                     </thead>
@@ -666,14 +590,8 @@ export function MmsPageView({
                             <td className="py-2.5 px-4 text-right font-semibold text-green-700 tabular-nums">
                               {formatKwhRaw(item.sum_last_month_kwh_read)}
                             </td>
-                            <td className="py-2.5 px-4 text-right tabular-nums">
+                            <td className="py-2.5 pl-4 text-right tabular-nums">
                               {formatNumber(item.customer_count)}
-                            </td>
-                            <td className="py-2.5 px-4 text-right text-green-700 tabular-nums">
-                              {formatMoney(item.sum_last_month_credit_read)}
-                            </td>
-                            <td className="py-2.5 pl-4 text-right text-emerald-700 tabular-nums">
-                              {formatMoney(item.sum_credit_balance_remaining)}
                             </td>
                           </tr>
                         ))}
@@ -746,7 +664,7 @@ export function MmsPageView({
               <CardHeader>
                 <CardTitle>Manufacturer breakdown</CardTitle>
                 <CardDescription>
-                  Customers and credit by manufacturer
+                  Customers and average consumption by manufacturer
                 </CardDescription>
               </CardHeader>
               <CardContent>
@@ -766,8 +684,8 @@ export function MmsPageView({
                           <th className="text-right py-2 px-3 font-medium text-muted-foreground">
                             Customers
                           </th>
-                          <th className="text-right py-2 pl-3 font-medium text-muted-foreground">
-                            Credit
+                          <th className="text-right py-2 pl-3 font-medium text-cyan-700">
+                            Avg kWh / Customer
                           </th>
                         </tr>
                       </thead>
@@ -792,8 +710,12 @@ export function MmsPageView({
                               <td className="py-2 px-3 text-right tabular-nums">
                                 {formatNumber(item.customer_count)}
                               </td>
-                              <td className="py-2 pl-3 text-right tabular-nums">
-                                {formatMoney(item.sum_last_month_credit_read)}
+                              <td className="py-2 pl-3 text-right text-cyan-700 tabular-nums">
+                                {formatKwhRaw(
+                                  item.customer_count > 0
+                                    ? (item.sum_last_month_kwh_read || 0) / item.customer_count
+                                    : 0,
+                                )}
                               </td>
                             </tr>
                           ))}
