@@ -198,6 +198,15 @@ export function CustomerSalesOverview({
       ...params,
       groupBy: ["metermodeltype"],
     });
+  // Reading quality (Actual / Estimated / No reading) — Zeus-only, not
+  // blended with MMS/Legacy (neither has this concept). National scope,
+  // same as the page's other top-level header stats (no region/district
+  // filter), since this card lives in that same header section.
+  const { data: zeusReadingQualityData, isLoading: zeusReadingQualityLoading } =
+    useZeusBillingAggregate({
+      ...params,
+      groupBy: "billconsumptiontype",
+    });
   // Deduped Zeus Prepaid totals — MMS takes precedence on any meter it
   // already has (confirmed against production data: 249,091 Zeus Prepaid
   // meters matched an MMS meter_number by meter_number, 75% of those also
@@ -548,6 +557,46 @@ export function CustomerSalesOverview({
       billing: { zeus: zeusBilling, mms: 0, legacy: 0 },
     };
   }, [zeusByServiceType, mmsStats, legacyKwh, legacyCustomers]);
+
+  // ── Reading quality (Zeus only) — billconsumptiontype tells us whether
+  // the billed kWh came from an actual meter read ("A"), an estimate
+  // ("E"), or no reading at all ("N/A"). This is a data-quality signal on
+  // top of the consumption numbers, not a new source of kWh — the three
+  // buckets' kWh should sum to Zeus's own total (zeusByServiceType's
+  // combined Postpaid+Prepaid+AMR kWh), which the UI uses as the
+  // denominator for percentages rather than re-summing the buckets
+  // themselves, so a row with an unrecognized/blank type (swept into
+  // "other") doesn't silently understate the total.
+  const readingQuality = useMemo(() => {
+    let actualKwh = 0;
+    let estimatedKwh = 0;
+    let noReadingKwh = 0;
+    let otherKwh = 0;
+    (zeusReadingQualityData || []).forEach((row) => {
+      const kwh = row.sum_billconsumptionvalue || 0;
+      const type = (row.billconsumptiontype || "").trim().toUpperCase();
+      if (type === "A") actualKwh += kwh;
+      else if (type === "E") estimatedKwh += kwh;
+      else if (type === "N/A" || type === "") noReadingKwh += kwh;
+      else otherKwh += kwh;
+    });
+    const totalKwh =
+      zeusByServiceType.Postpaid.totalKwh +
+      zeusByServiceType.Prepaid.totalKwh +
+      zeusByServiceType.AMR.totalKwh;
+    const pct = (v: number) => (totalKwh > 0 ? (v / totalKwh) * 100 : 0);
+    return {
+      actualKwh,
+      estimatedKwh,
+      noReadingKwh,
+      otherKwh,
+      totalKwh,
+      actualPct: pct(actualKwh),
+      estimatedPct: pct(estimatedKwh),
+      noReadingPct: pct(noReadingKwh),
+      otherPct: pct(otherKwh),
+    };
+  }, [zeusReadingQualityData, zeusByServiceType]);
 
   // ── Category buckets (Customer Consumption IA) ──
   // Postpaid = Zeus Postpaid + Zeus AMR; Prepaid = Zeus Prepaid + MMS +
@@ -966,6 +1015,99 @@ export function CustomerSalesOverview({
                 </>
               );
             })()
+          )}
+        </CardContent>
+      </Card>
+
+      {/* ── READING QUALITY (ZEUS) ── */}
+      <Card>
+        <CardHeader>
+          <CardTitle>Reading Quality — Zeus</CardTitle>
+          <CardDescription>
+            Share of billed Zeus kWh from an actual meter read vs. an
+            estimate vs. no reading at all
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          {zeusReadingQualityLoading ? (
+            <Skeleton className="h-16 w-full" />
+          ) : (
+            <>
+              <div className="flex h-3 w-full overflow-hidden rounded-full bg-muted">
+                <div
+                  className="bg-green-600"
+                  style={{ width: `${readingQuality.actualPct}%` }}
+                />
+                <div
+                  className="bg-amber-600"
+                  style={{ width: `${readingQuality.estimatedPct}%` }}
+                />
+                <div
+                  className="bg-red-600"
+                  style={{ width: `${readingQuality.noReadingPct}%` }}
+                />
+                {readingQuality.otherPct > 0 && (
+                  <div
+                    className="bg-gray-400"
+                    style={{ width: `${readingQuality.otherPct}%` }}
+                  />
+                )}
+              </div>
+              <div
+                className={`grid gap-4 mt-3 ${readingQuality.otherPct > 0 ? "grid-cols-4" : "grid-cols-3"}`}
+              >
+                <div>
+                  <div className="flex items-center gap-1.5">
+                    <span className="h-2.5 w-2.5 rounded-full bg-green-600 shrink-0" />
+                    <span className="text-sm font-medium">Actual</span>
+                    <span className="text-xs text-muted-foreground">
+                      {readingQuality.actualPct.toFixed(1)}%
+                    </span>
+                  </div>
+                  <div className="text-xl font-bold text-green-700 mt-0.5">
+                    {formatKwh(readingQuality.actualKwh)}
+                  </div>
+                </div>
+                <div>
+                  <div className="flex items-center gap-1.5">
+                    <span className="h-2.5 w-2.5 rounded-full bg-amber-600 shrink-0" />
+                    <span className="text-sm font-medium">Estimated</span>
+                    <span className="text-xs text-muted-foreground">
+                      {readingQuality.estimatedPct.toFixed(1)}%
+                    </span>
+                  </div>
+                  <div className="text-xl font-bold text-amber-700 mt-0.5">
+                    {formatKwh(readingQuality.estimatedKwh)}
+                  </div>
+                </div>
+                <div>
+                  <div className="flex items-center gap-1.5">
+                    <span className="h-2.5 w-2.5 rounded-full bg-red-600 shrink-0" />
+                    <span className="text-sm font-medium">No Reading</span>
+                    <span className="text-xs text-muted-foreground">
+                      {readingQuality.noReadingPct.toFixed(1)}%
+                    </span>
+                  </div>
+                  <div className="text-xl font-bold text-red-700 mt-0.5">
+                    {formatKwh(readingQuality.noReadingKwh)}
+                  </div>
+                </div>
+                {readingQuality.otherPct > 0 && (
+                  <div>
+                    <div className="flex items-center gap-1.5">
+                      <span className="h-2.5 w-2.5 rounded-full bg-gray-400 shrink-0" />
+                      <span className="text-sm font-medium">Other</span>
+                      <span className="text-xs text-muted-foreground">
+                        {readingQuality.otherPct.toFixed(1)}%
+                      </span>
+                    </div>
+                    <div className="text-xl font-bold text-gray-600 mt-0.5">
+                      {formatKwh(readingQuality.otherKwh)}
+                    </div>
+                  </div>
+                )}
+              </div>
+            </>
           )}
         </CardContent>
       </Card>

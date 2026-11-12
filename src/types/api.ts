@@ -705,6 +705,10 @@ export interface ZeusBillingAggregateItem {
   servicepointstatus?: string
   billingyear?: number
   billingmonth?: number
+  /** "A" (Actual reading) | "E" (Estimated reading) | "N/A" (no reading
+   * available) — only populated when groupBy includes
+   * "billconsumptiontype". */
+  billconsumptiontype?: string
   customer_count: number
   sum_billamount: number
   sum_amountdue: number

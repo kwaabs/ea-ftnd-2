@@ -19,6 +19,7 @@ export type ZeusBillingGroupBy =
   | "servicepointstatus"
   | "billingyear"
   | "billingmonth"
+  | "billconsumptiontype"
 
 interface ZeusBillingAggregateParams {
   /** Maps to billDateFrom/billDateTo — see use-zeus-billing-detail-api.ts. */
