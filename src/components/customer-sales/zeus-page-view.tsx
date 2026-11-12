@@ -302,6 +302,36 @@ export function ZeusPageView({
       meterModelType: serviceType,
     });
 
+  // Reading quality — billconsumptiontype tells us whether the billed kWh
+  // came from an actual meter read ("A"), an estimate ("E"), or no reading
+  // at all ("N/A"/blank/null). Same scope (region, not effectiveRegion) as
+  // regionAgg above, since this feeds the page-level Consumption KPI card,
+  // not a drill-down.
+  const { data: readingQualityAgg = [] } = useZeusBillingAggregate({
+    dateFrom: dateRange.start,
+    dateTo: dateRange.end,
+    groupBy: "billconsumptiontype",
+    region,
+    district,
+    meterModelType: serviceType,
+  });
+
+  const readingQuality = useMemo(() => {
+    let actualKwh = 0;
+    let estimatedKwh = 0;
+    let noReadingKwh = 0;
+    let otherKwh = 0;
+    readingQualityAgg.forEach((row) => {
+      const kwh = row.sum_billconsumptionvalue || 0;
+      const type = (row.billconsumptiontype || "").trim().toUpperCase();
+      if (type === "A") actualKwh += kwh;
+      else if (type === "E") estimatedKwh += kwh;
+      else if (type === "N/A" || type === "") noReadingKwh += kwh;
+      else otherKwh += kwh;
+    });
+    return { actualKwh, estimatedKwh, noReadingKwh, otherKwh };
+  }, [readingQualityAgg]);
+
   const stats = useMemo(() => {
     const totalKwh = regionAgg.reduce(
       (s, r) => s + (r.sum_billconsumptionvalue || 0),
@@ -438,6 +468,28 @@ export function ZeusPageView({
             <p className="text-xs text-muted-foreground mt-1">
               Avg {formatKwh(stats.avgKwh)} / customer
             </p>
+            {!regionLoading && (
+              <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-[11px] text-muted-foreground mt-2 pt-2 border-t">
+                <span className="inline-flex items-center gap-1">
+                  <span className="h-1.5 w-1.5 rounded-full bg-green-600 shrink-0" />
+                  A {formatKwh(readingQuality.actualKwh)}
+                </span>
+                <span className="inline-flex items-center gap-1">
+                  <span className="h-1.5 w-1.5 rounded-full bg-amber-600 shrink-0" />
+                  E {formatKwh(readingQuality.estimatedKwh)}
+                </span>
+                <span className="inline-flex items-center gap-1">
+                  <span className="h-1.5 w-1.5 rounded-full bg-red-600 shrink-0" />
+                  N/A {formatKwh(readingQuality.noReadingKwh)}
+                </span>
+                {readingQuality.otherKwh > 0 && (
+                  <span className="inline-flex items-center gap-1">
+                    <span className="h-1.5 w-1.5 rounded-full bg-gray-400 shrink-0" />
+                    Other {formatKwh(readingQuality.otherKwh)}
+                  </span>
+                )}
+              </div>
+            )}
           </CardContent>
         </Card>
         <Card>
