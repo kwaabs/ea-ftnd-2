@@ -8,8 +8,11 @@ import {
   ArrowLeftRight,
   ChevronLeft,
   ChevronRight,
+  DollarSign,
   Radio,
   Search,
+  Users,
+  Zap,
 } from "lucide-react";
 import {
   Bar,
@@ -362,6 +365,51 @@ export function AmrPageView({
     [zeusAmrRegionData, amrMetric],
   );
 
+  // KPI row (Consumption/Customers/Billing + Reading Quality) for the
+  // embedded Postpaid-hub view — mirrors zeus-page-view.tsx's KPI cards,
+  // scoped to meterModelType=AMR. zeusAmrRegionData (unsliced, every
+  // region) is the right total here, not zeusAmrByRegion (top 12 only).
+  const amrStats = useMemo(() => {
+    const rows = zeusAmrRegionData || [];
+    const totalKwh = rows.reduce((s, r) => s + (r.sum_billconsumptionvalue || 0), 0);
+    const totalCustomers = rows.reduce((s, r) => s + (r.customer_count || 0), 0);
+    const totalBilling = rows.reduce((s, r) => s + (r.sum_billamount || 0), 0);
+    return {
+      totalKwh,
+      totalCustomers,
+      totalBilling,
+      avgKwh: totalCustomers > 0 ? totalKwh / totalCustomers : 0,
+    };
+  }, [zeusAmrRegionData]);
+
+  const { data: zeusAmrReadingQualityData = [] } = useZeusBillingAggregate({
+    dateFrom: dateRange.start,
+    dateTo: dateRange.end,
+    region,
+    district: amrEffectiveDistrict,
+    accountType: amrEffectiveAccountType,
+    billStatus: amrEffectiveBillStatus,
+    groupBy: "billconsumptiontype",
+    meterModelType: "AMR",
+    enabled: hideConsumptionDetail,
+  });
+
+  const amrReadingQuality = useMemo(() => {
+    let actualKwh = 0;
+    let estimatedKwh = 0;
+    let noReadingKwh = 0;
+    let otherKwh = 0;
+    zeusAmrReadingQualityData.forEach((row) => {
+      const kwh = row.sum_billconsumptionvalue || 0;
+      const type = (row.billconsumptiontype || "").trim().toUpperCase();
+      if (type === "A") actualKwh += kwh;
+      else if (type === "E") estimatedKwh += kwh;
+      else if (type === "N/A" || type === "") noReadingKwh += kwh;
+      else otherKwh += kwh;
+    });
+    return { actualKwh, estimatedKwh, noReadingKwh, otherKwh };
+  }, [zeusAmrReadingQualityData]);
+
   const timelineData = useMemo(() => {
     return (statusTimeline || []).map((d) => ({
       date: d.date,
@@ -629,6 +677,79 @@ export function AmrPageView({
                 hideSltCards={Boolean(lockedSltType)}
                 linkSltTypes={!lockedSltType}
               />
+            )}
+
+            {hideConsumptionDetail && (
+              <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
+                <Card>
+                  <CardContent className="pt-5">
+                    <p className="text-xs text-muted-foreground mb-1 flex items-center gap-1">
+                      <Zap className="h-3.5 w-3.5" /> Consumption
+                    </p>
+                    {zeusAmrChartsLoading ? (
+                      <Skeleton className="h-8 w-32" />
+                    ) : (
+                      <p className="text-2xl font-bold text-orange-700 tabular-nums">
+                        {formatKwh(amrStats.totalKwh)}
+                      </p>
+                    )}
+                    <p className="text-xs text-muted-foreground mt-1">
+                      Avg {formatKwh(amrStats.avgKwh)} / customer
+                    </p>
+                    {!zeusAmrChartsLoading && (
+                      <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-[11px] text-muted-foreground mt-2 pt-2 border-t">
+                        <span className="inline-flex items-center gap-1">
+                          <span className="h-1.5 w-1.5 rounded-full bg-green-600 shrink-0" />
+                          A {formatKwh(amrReadingQuality.actualKwh)}
+                        </span>
+                        <span className="inline-flex items-center gap-1">
+                          <span className="h-1.5 w-1.5 rounded-full bg-amber-600 shrink-0" />
+                          E {formatKwh(amrReadingQuality.estimatedKwh)}
+                        </span>
+                        <span className="inline-flex items-center gap-1">
+                          <span className="h-1.5 w-1.5 rounded-full bg-red-600 shrink-0" />
+                          N/A {formatKwh(amrReadingQuality.noReadingKwh)}
+                        </span>
+                        {amrReadingQuality.otherKwh > 0 && (
+                          <span className="inline-flex items-center gap-1">
+                            <span className="h-1.5 w-1.5 rounded-full bg-gray-400 shrink-0" />
+                            Other {formatKwh(amrReadingQuality.otherKwh)}
+                          </span>
+                        )}
+                      </div>
+                    )}
+                  </CardContent>
+                </Card>
+                <Card>
+                  <CardContent className="pt-5">
+                    <p className="text-xs text-muted-foreground mb-1 flex items-center gap-1">
+                      <Users className="h-3.5 w-3.5" /> Customers
+                    </p>
+                    {zeusAmrChartsLoading ? (
+                      <Skeleton className="h-8 w-24" />
+                    ) : (
+                      <p className="text-2xl font-bold text-indigo-700 tabular-nums">
+                        {formatNumber(amrStats.totalCustomers)}
+                      </p>
+                    )}
+                    <p className="text-xs text-muted-foreground mt-1">AMR accounts</p>
+                  </CardContent>
+                </Card>
+                <Card>
+                  <CardContent className="pt-5">
+                    <p className="text-xs text-muted-foreground mb-1 flex items-center gap-1">
+                      <DollarSign className="h-3.5 w-3.5" /> Billing
+                    </p>
+                    {zeusAmrChartsLoading ? (
+                      <Skeleton className="h-8 w-28" />
+                    ) : (
+                      <p className="text-2xl font-bold text-blue-700 tabular-nums">
+                        {formatMoney(amrStats.totalBilling)}
+                      </p>
+                    )}
+                  </CardContent>
+                </Card>
+              </div>
             )}
 
             {hideConsumptionDetail && (
