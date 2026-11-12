@@ -101,6 +101,62 @@ function mergeBySource(
   row.totalCustomers += customers
 }
 
+interface ReadingQualityBucket {
+  actualKwh: number
+  estimatedKwh: number
+  noReadingKwh: number
+  otherKwh: number
+  totalKwh: number
+  actualPct: number
+  estimatedPct: number
+  noReadingPct: number
+  otherPct: number
+}
+
+// Builds a per-region/per-district reading quality lookup from rows
+// grouped by [keyField, billconsumptiontype] — same classification as the
+// page-level readingQuality above, just keyed per row instead of summed
+// across the whole page. Percentages are per-row (that region/district's
+// own Actual+Estimated+No Reading+Other total), not the page total, since
+// each row needs its own share.
+function buildReadingQualityByKey(
+  rows: { regionname?: string; districtname?: string; billconsumptiontype?: string; sum_billconsumptionvalue?: number }[],
+  keyField: "regionname" | "districtname",
+): Map<string, ReadingQualityBucket> {
+  const sums = new Map<string, { actualKwh: number; estimatedKwh: number; noReadingKwh: number; otherKwh: number }>()
+  rows.forEach((row) => {
+    const label = row[keyField] || "Unknown"
+    const key = normalizeRegionName(label)
+    const bucket = sums.get(key) || { actualKwh: 0, estimatedKwh: 0, noReadingKwh: 0, otherKwh: 0 }
+    const kwh = row.sum_billconsumptionvalue || 0
+    const type = (row.billconsumptiontype || "").trim().toUpperCase()
+    if (type === "A") bucket.actualKwh += kwh
+    else if (type === "E") bucket.estimatedKwh += kwh
+    else if (type === "N/A" || type === "") bucket.noReadingKwh += kwh
+    else bucket.otherKwh += kwh
+    sums.set(key, bucket)
+  })
+  const result = new Map<string, ReadingQualityBucket>()
+  sums.forEach((b, key) => {
+    const totalKwh = b.actualKwh + b.estimatedKwh + b.noReadingKwh + b.otherKwh
+    const pct = (v: number) => (totalKwh > 0 ? (v / totalKwh) * 100 : 0)
+    result.set(key, {
+      ...b,
+      totalKwh,
+      actualPct: pct(b.actualKwh),
+      estimatedPct: pct(b.estimatedKwh),
+      noReadingPct: pct(b.noReadingKwh),
+      otherPct: pct(b.otherKwh),
+    })
+  })
+  return result
+}
+
+function readingQualityTitle(bucket: ReadingQualityBucket | undefined): string {
+  if (!bucket) return "No reading quality data"
+  return `Actual ${bucket.actualPct.toFixed(1)}% • Estimated ${bucket.estimatedPct.toFixed(1)}% • No Reading ${bucket.noReadingPct.toFixed(1)}%${bucket.otherPct > 0 ? ` • Other ${bucket.otherPct.toFixed(1)}%` : ""}`
+}
+
 function withLeadingSource(rows: RegionRow[]): RegionRow[] {
   return rows.map((row) => {
     let leader: Source | null = null
@@ -157,6 +213,21 @@ export function PostpaidAllSourcesOverview({ dateRange, region, district }: Post
     district,
     meterModelType: "Postpaid,AMR",
   })
+
+  // Reading quality per region, for the Region breakdown table's column —
+  // same combined-metermodeltype call as above, grouped by regionname too.
+  const { data: readingQualityByRegionAgg = [] } = useZeusBillingAggregate({
+    dateFrom: dateRange.start,
+    dateTo: dateRange.end,
+    groupBy: ["regionname", "billconsumptiontype"],
+    region,
+    district,
+    meterModelType: "Postpaid,AMR",
+  })
+  const readingQualityByRegion = useMemo(
+    () => buildReadingQualityByKey(readingQualityByRegionAgg, "regionname"),
+    [readingQualityByRegionAgg],
+  )
 
   const regionLoading = nonAmrLoading || amrLoading
 
@@ -275,6 +346,23 @@ export function PostpaidAllSourcesOverview({ dateRange, region, district }: Post
     meterModelType: "AMR",
     enabled: Boolean(selectedRegion),
   })
+
+  // Reading quality per district, for the District breakdown table's
+  // column — mirrors the region version above, scoped to the selected
+  // region like the other district-level calls.
+  const { data: readingQualityByDistrictAgg = [] } = useZeusBillingAggregate({
+    dateFrom: dateRange.start,
+    dateTo: dateRange.end,
+    groupBy: ["districtname", "billconsumptiontype"],
+    region: effectiveNonAmrRegion,
+    district,
+    meterModelType: "Postpaid,AMR",
+    enabled: Boolean(selectedRegion),
+  })
+  const readingQualityByDistrict = useMemo(
+    () => buildReadingQualityByKey(readingQualityByDistrictAgg, "districtname"),
+    [readingQualityByDistrictAgg],
+  )
 
   const districtLoading = nonAmrDistrictLoading || amrDistrictLoading
 
@@ -607,10 +695,12 @@ export function PostpaidAllSourcesOverview({ dateRange, region, district }: Post
                     ))}
                     <th className="text-right py-2 px-4 font-medium text-muted-foreground">Total</th>
                     <th className="text-left py-2 pl-4 font-medium text-muted-foreground">Leading</th>
+                    <th className="text-left py-2 pl-4 font-medium text-muted-foreground">Reading Quality</th>
                   </tr>
                 </thead>
                 <tbody>
                   {byRegion.map((item) => {
+                    const rq = readingQualityByRegion.get(normalizeRegionName(item.regionname))
                     const selected = selectedRegion
                       ? normalizeRegionName(selectedRegion) === normalizeRegionName(item.regionname)
                       : false
@@ -640,6 +730,16 @@ export function PostpaidAllSourcesOverview({ dateRange, region, district }: Post
                             >
                               <BarChart3 className="h-3 w-3" />
                               {item.leadingSource}
+                            </span>
+                          ) : (
+                            "—"
+                          )}
+                        </td>
+                        <td className="py-2.5 pl-4" title={readingQualityTitle(rq)}>
+                          {rq ? (
+                            <span className="inline-flex items-center gap-1.5 text-xs font-medium">
+                              <span className="h-2 w-2 rounded-full bg-green-600 shrink-0" />
+                              {rq.actualPct.toFixed(1)}% Actual
                             </span>
                           ) : (
                             "—"
@@ -688,35 +788,49 @@ export function PostpaidAllSourcesOverview({ dateRange, region, district }: Post
                     ))}
                     <th className="text-right py-2 px-4 font-medium text-muted-foreground">Total</th>
                     <th className="text-left py-2 pl-4 font-medium text-muted-foreground">Leading</th>
+                    <th className="text-left py-2 pl-4 font-medium text-muted-foreground">Reading Quality</th>
                   </tr>
                 </thead>
                 <tbody>
-                  {byDistrict.map((item) => (
-                    <tr key={item.regionname} className="border-b last:border-0 hover:bg-muted/40">
-                      <td className="py-2.5 pr-4 font-medium">{item.regionname}</td>
-                      {SOURCES.map((source) => (
-                        <td key={source} className="py-2.5 px-4 text-right tabular-nums">
-                          {item.bySource[source]?.kwh ? formatKwhRaw(item.bySource[source]!.kwh) : "—"}
+                  {byDistrict.map((item) => {
+                    const rq = readingQualityByDistrict.get(normalizeRegionName(item.regionname))
+                    return (
+                      <tr key={item.regionname} className="border-b last:border-0 hover:bg-muted/40">
+                        <td className="py-2.5 pr-4 font-medium">{item.regionname}</td>
+                        {SOURCES.map((source) => (
+                          <td key={source} className="py-2.5 px-4 text-right tabular-nums">
+                            {item.bySource[source]?.kwh ? formatKwhRaw(item.bySource[source]!.kwh) : "—"}
+                          </td>
+                        ))}
+                        <td className="py-2.5 px-4 text-right font-semibold tabular-nums">
+                          {formatKwhRaw(item.totalKwh)}
                         </td>
-                      ))}
-                      <td className="py-2.5 px-4 text-right font-semibold tabular-nums">
-                        {formatKwhRaw(item.totalKwh)}
-                      </td>
-                      <td className="py-2.5 pl-4">
-                        {item.leadingSource ? (
-                          <span
-                            className="inline-flex items-center gap-1.5 text-xs font-medium"
-                            style={{ color: SOURCE_COLORS[item.leadingSource] }}
-                          >
-                            <BarChart3 className="h-3 w-3" />
-                            {item.leadingSource}
-                          </span>
-                        ) : (
-                          "—"
-                        )}
-                      </td>
-                    </tr>
-                  ))}
+                        <td className="py-2.5 pl-4">
+                          {item.leadingSource ? (
+                            <span
+                              className="inline-flex items-center gap-1.5 text-xs font-medium"
+                              style={{ color: SOURCE_COLORS[item.leadingSource] }}
+                            >
+                              <BarChart3 className="h-3 w-3" />
+                              {item.leadingSource}
+                            </span>
+                          ) : (
+                            "—"
+                          )}
+                        </td>
+                        <td className="py-2.5 pl-4" title={readingQualityTitle(rq)}>
+                          {rq ? (
+                            <span className="inline-flex items-center gap-1.5 text-xs font-medium">
+                              <span className="h-2 w-2 rounded-full bg-green-600 shrink-0" />
+                              {rq.actualPct.toFixed(1)}% Actual
+                            </span>
+                          ) : (
+                            "—"
+                          )}
+                        </td>
+                      </tr>
+                    )
+                  })}
                 </tbody>
               </table>
             </div>
