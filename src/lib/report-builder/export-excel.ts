@@ -6,6 +6,7 @@
 // shown on screen as a bar/line chart still exports its underlying
 // numbers here, since that's what a spreadsheet is for.
 import type { BuilderExportBlock, BuilderExportData } from "@/lib/report-builder/export-data"
+import type { CombinedSalesResult } from "@/lib/report-builder/combined-sales"
 
 // Excel sheet names: max 31 chars, none of \ / ? * [ ] : , and unique
 // within the workbook (sheet "names" are compared case-insensitively).
@@ -45,7 +46,39 @@ function blockToRows(block: BuilderExportBlock): Record<string, string | number>
   }))
 }
 
-export async function downloadBuilderReportExcel(data: BuilderExportData, filename: string) {
+// "Combined" sheet rows -- a region subtotal row (District left blank)
+// immediately followed by its district rows (Region left blank), same
+// grouped-outline convention region-detail.tsx uses on screen. SheetJS's
+// community build (the version this project uses) can't apply cell
+// styling (no bold) on write, so the blank-Region/blank-District
+// alternation is what visually separates the two row kinds here instead.
+function combinedSalesToRows(combined: CombinedSalesResult): Record<string, string | number>[] {
+  const rows: Record<string, string | number>[] = []
+  combined.regions.forEach((region) => {
+    const regionRow: Record<string, string | number> = { Region: region.label, District: "" }
+    combined.sources.forEach((s) => {
+      regionRow[`${s.label} (kWh)`] = region.bySource[s.key] || 0
+    })
+    regionRow["Total (kWh)"] = region.total
+    rows.push(regionRow)
+
+    region.districts.forEach((district) => {
+      const districtRow: Record<string, string | number> = { Region: "", District: district.label }
+      combined.sources.forEach((s) => {
+        districtRow[`${s.label} (kWh)`] = district.bySource[s.key] || 0
+      })
+      districtRow["Total (kWh)"] = district.total
+      rows.push(districtRow)
+    })
+  })
+  return rows
+}
+
+export async function downloadBuilderReportExcel(
+  data: BuilderExportData,
+  filename: string,
+  combined?: CombinedSalesResult,
+) {
   const XLSX = await import("xlsx")
   const workbook = XLSX.utils.book_new()
 
@@ -56,6 +89,7 @@ export async function downloadBuilderReportExcel(data: BuilderExportData, filena
     { Field: "", Value: "" },
     { Field: "Blocks", Value: "" },
     ...data.blocks.map((b) => ({ Field: b.title, Value: "" })),
+    ...(combined ? [{ Field: "", Value: "" }, { Field: "See \"Combined\" sheet for every source matched up by region/district.", Value: "" }] : []),
   ]
   XLSX.utils.book_append_sheet(
     workbook,
@@ -64,6 +98,12 @@ export async function downloadBuilderReportExcel(data: BuilderExportData, filena
   )
 
   const used = new Set<string>(["summary"])
+
+  if (combined) {
+    const sheet = XLSX.utils.json_to_sheet(combinedSalesToRows(combined))
+    XLSX.utils.book_append_sheet(workbook, sheet, sheetNameFor("Combined", -1, used))
+  }
+
   data.blocks.forEach((block, i) => {
     const sheet = XLSX.utils.json_to_sheet(blockToRows(block))
     XLSX.utils.book_append_sheet(workbook, sheet, sheetNameFor(block.title, i, used))

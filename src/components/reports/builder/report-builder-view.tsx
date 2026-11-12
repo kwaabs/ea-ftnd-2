@@ -31,6 +31,7 @@ import type { BuilderExportBlock, BuilderExportData } from "@/lib/report-builder
 import { downloadBuilderReportPdf } from "@/lib/report-builder/export-pdf"
 import { downloadBuilderReportPptx } from "@/lib/report-builder/export-pptx"
 import { downloadBuilderReportExcel } from "@/lib/report-builder/export-excel"
+import { fetchCombinedSalesByRegionDistrict } from "@/lib/report-builder/combined-sales"
 
 const ALL_SENTINEL = "__all__"
 
@@ -229,7 +230,16 @@ export function ReportBuilderView() {
       if (format === "pdf") {
         downloadBuilderReportPdf(data, filename)
       } else if (format === "xlsx") {
-        await downloadBuilderReportExcel(data, filename)
+        // "Combined" sheet is a fixed set of 9 region/district-having
+        // sources matched up side by side -- independent of whatever
+        // blocks are actually on the canvas (see combined-sales.ts).
+        const combined = await fetchCombinedSalesByRegionDistrict({
+          dateFrom,
+          dateTo,
+          region: region.trim() || undefined,
+          district: district.trim() || undefined,
+        })
+        await downloadBuilderReportExcel(data, filename, combined)
       } else {
         await downloadBuilderReportPptx(data, filename)
       }
