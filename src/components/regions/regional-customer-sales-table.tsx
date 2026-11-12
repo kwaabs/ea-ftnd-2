@@ -46,10 +46,23 @@ interface UnifiedRecord {
   servicePointCode: string
   accountType: string
   billConsumptionValue: number
+  billConsumptionType: string | null
   debtAmount: number | null
   billingMonth: number | null
   billingYear: number | null
   billStatus: string | null
+}
+
+// billConsumptionType: "A" (actual meter read), "E" (estimated), "N/A" (no
+// reading) — same classification used on the Customer Consumption pages'
+// Customer Records table. A blank/null value (seen in production data)
+// reads the same as "N/A".
+function consumptionTypeBadge(raw: string | null | undefined) {
+  const type = (raw || "").trim().toUpperCase()
+  if (type === "A") return { label: "A", title: "Actual meter reading", className: "bg-green-50 text-green-700 border-green-200" }
+  if (type === "E") return { label: "E", title: "Estimated reading", className: "bg-amber-50 text-amber-700 border-amber-200" }
+  if (type === "N/A" || type === "") return { label: "N/A", title: "No reading available", className: "bg-red-50 text-red-700 border-red-200" }
+  return { label: type, title: `Reading type: ${type}`, className: "bg-gray-50 text-gray-600 border-gray-200" }
 }
 
 function formatNumber(value: number | null | undefined): string {
@@ -156,6 +169,7 @@ export function RegionalCustomerSalesTable({ region, district, dateRange, meterM
         servicePointCode: r.servicePointCode,
         accountType: r.accountType,
         billConsumptionValue: r.billConsumptionValue,
+        billConsumptionType: r.billConsumptionType,
         debtAmount: r.debtAmount,
         billingMonth: r.billingMonth,
         billingYear: r.billingYear,
@@ -173,6 +187,7 @@ export function RegionalCustomerSalesTable({ region, district, dateRange, meterM
         servicePointCode: r.servicePointCode,
         accountType: r.accountType,
         billConsumptionValue: r.billConsumptionValue,
+        billConsumptionType: r.billConsumptionType,
         debtAmount: r.debtAmount,
         billingMonth: r.billingMonth,
         billingYear: r.billingYear,
@@ -405,7 +420,16 @@ export function RegionalCustomerSalesTable({ region, district, dateRange, meterM
                     </TableCell>
                     <TableCell className="py-2">{record.accountType || "—"}</TableCell>
                     <TableCell className="text-right bg-blue-50/50 py-2 font-semibold text-blue-700 tabular-nums">
-                      {formatKwhRaw(record.billConsumptionValue)}
+                      <span className="inline-flex items-center justify-end gap-1.5">
+                        <Badge
+                          variant="outline"
+                          title={consumptionTypeBadge(record.billConsumptionType).title}
+                          className={`h-4 px-1.5 text-[10px] font-semibold ${consumptionTypeBadge(record.billConsumptionType).className}`}
+                        >
+                          {consumptionTypeBadge(record.billConsumptionType).label}
+                        </Badge>
+                        {formatKwhRaw(record.billConsumptionValue)}
+                      </span>
                     </TableCell>
                     <TableCell className="text-right py-2 tabular-nums">
                       {record.debtAmount == null ? (
