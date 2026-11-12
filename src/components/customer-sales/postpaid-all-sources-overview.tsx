@@ -152,9 +152,32 @@ function buildReadingQualityByKey(
   return result
 }
 
-function readingQualityTitle(bucket: ReadingQualityBucket | undefined): string {
-  if (!bucket) return "No reading quality data"
-  return `Actual ${bucket.actualPct.toFixed(1)}% • Estimated ${bucket.estimatedPct.toFixed(1)}% • No Reading ${bucket.noReadingPct.toFixed(1)}%${bucket.otherPct > 0 ? ` • Other ${bucket.otherPct.toFixed(1)}%` : ""}`
+// Full Actual/Estimated/No Reading (+ Other, if present) breakdown for one
+// table cell — each line is a dot + percentage + label, with the kWh value
+// alongside it.
+function ReadingQualityCell({ bucket }: { bucket: ReadingQualityBucket | undefined }) {
+  if (!bucket) return <>—</>
+  const rows: { label: string; color: string; pct: number; kwh: number }[] = [
+    { label: "Actual", color: "bg-green-600", pct: bucket.actualPct, kwh: bucket.actualKwh },
+    { label: "Estimated", color: "bg-amber-600", pct: bucket.estimatedPct, kwh: bucket.estimatedKwh },
+    { label: "No Reading", color: "bg-red-600", pct: bucket.noReadingPct, kwh: bucket.noReadingKwh },
+  ]
+  if (bucket.otherPct > 0) {
+    rows.push({ label: "Other", color: "bg-gray-400", pct: bucket.otherPct, kwh: bucket.otherKwh })
+  }
+  return (
+    <div className="space-y-1">
+      {rows.map((r) => (
+        <div key={r.label} className="flex items-center gap-1.5 text-xs whitespace-nowrap">
+          <span className={`h-2 w-2 rounded-full shrink-0 ${r.color}`} />
+          <span className="font-medium">
+            {r.pct.toFixed(1)}% {r.label}
+          </span>
+          <span className="text-muted-foreground">· {formatKwh(r.kwh)}</span>
+        </div>
+      ))}
+    </div>
+  )
 }
 
 function withLeadingSource(rows: RegionRow[]): RegionRow[] {
@@ -735,20 +758,8 @@ export function PostpaidAllSourcesOverview({ dateRange, region, district }: Post
                             "—"
                           )}
                         </td>
-                        <td className="py-2.5 pl-4" title={readingQualityTitle(rq)}>
-                          {rq ? (
-                            <>
-                              <span className="inline-flex items-center gap-1.5 text-xs font-medium">
-                                <span className="h-2 w-2 rounded-full bg-green-600 shrink-0" />
-                                {rq.actualPct.toFixed(1)}% Actual
-                              </span>
-                              <div className="text-xs text-muted-foreground mt-0.5">
-                                {formatKwh(rq.actualKwh)}
-                              </div>
-                            </>
-                          ) : (
-                            "—"
-                          )}
+                        <td className="py-2.5 pl-4">
+                          <ReadingQualityCell bucket={rq} />
                         </td>
                       </tr>
                     )
@@ -823,20 +834,8 @@ export function PostpaidAllSourcesOverview({ dateRange, region, district }: Post
                             "—"
                           )}
                         </td>
-                        <td className="py-2.5 pl-4" title={readingQualityTitle(rq)}>
-                          {rq ? (
-                            <>
-                              <span className="inline-flex items-center gap-1.5 text-xs font-medium">
-                                <span className="h-2 w-2 rounded-full bg-green-600 shrink-0" />
-                                {rq.actualPct.toFixed(1)}% Actual
-                              </span>
-                              <div className="text-xs text-muted-foreground mt-0.5">
-                                {formatKwh(rq.actualKwh)}
-                              </div>
-                            </>
-                          ) : (
-                            "—"
-                          )}
+                        <td className="py-2.5 pl-4">
+                          <ReadingQualityCell bucket={rq} />
                         </td>
                       </tr>
                     )
