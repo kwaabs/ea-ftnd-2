@@ -737,10 +737,15 @@ export function PostpaidAllSourcesOverview({ dateRange, region, district }: Post
                         </td>
                         <td className="py-2.5 pl-4" title={readingQualityTitle(rq)}>
                           {rq ? (
-                            <span className="inline-flex items-center gap-1.5 text-xs font-medium">
-                              <span className="h-2 w-2 rounded-full bg-green-600 shrink-0" />
-                              {rq.actualPct.toFixed(1)}% Actual
-                            </span>
+                            <>
+                              <span className="inline-flex items-center gap-1.5 text-xs font-medium">
+                                <span className="h-2 w-2 rounded-full bg-green-600 shrink-0" />
+                                {rq.actualPct.toFixed(1)}% Actual
+                              </span>
+                              <div className="text-xs text-muted-foreground mt-0.5">
+                                {formatKwh(rq.actualKwh)}
+                              </div>
+                            </>
                           ) : (
                             "—"
                           )}
@@ -820,10 +825,15 @@ export function PostpaidAllSourcesOverview({ dateRange, region, district }: Post
                         </td>
                         <td className="py-2.5 pl-4" title={readingQualityTitle(rq)}>
                           {rq ? (
-                            <span className="inline-flex items-center gap-1.5 text-xs font-medium">
-                              <span className="h-2 w-2 rounded-full bg-green-600 shrink-0" />
-                              {rq.actualPct.toFixed(1)}% Actual
-                            </span>
+                            <>
+                              <span className="inline-flex items-center gap-1.5 text-xs font-medium">
+                                <span className="h-2 w-2 rounded-full bg-green-600 shrink-0" />
+                                {rq.actualPct.toFixed(1)}% Actual
+                              </span>
+                              <div className="text-xs text-muted-foreground mt-0.5">
+                                {formatKwh(rq.actualKwh)}
+                              </div>
+                            </>
                           ) : (
                             "—"
                           )}
