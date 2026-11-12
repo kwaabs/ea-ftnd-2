@@ -168,3 +168,86 @@ export async function fetchCombinedSalesByRegionDistrict(filters: CombinedSalesF
 
   return { sources: COMBINED_SOURCES.map((s) => ({ key: s.key, label: s.label })), regions }
 }
+
+// Month-on-month breakdown — deliberately done by repeating the SAME
+// region+district aggregate call once per calendar month (narrowing
+// dateFrom/dateTo to that month) rather than adding "month" as a groupBy
+// dimension, because that dimension isn't uniformly available: Zeus/BOT/
+// BXC have one, but MMS/Holley/ECASH4's aggregate endpoints don't expose
+// any month-level groupBy at all (confirmed against their service.go
+// files). Filtering by date range instead works identically for every
+// source regardless of that, at the cost of one full fetch per month.
+export interface MonthlyCombinedSales {
+  month: string
+  result: CombinedSalesResult
+}
+
+const MAX_MONTHS = 24
+
+function pad2(n: number): string {
+  return String(n).padStart(2, "0")
+}
+
+function toIsoDate(y: number, m: number, d: number): string {
+  return `${y}-${pad2(m + 1)}-${pad2(d)}`
+}
+
+// One entry per calendar month overlapping [dateFrom, dateTo], each
+// clipped to the overall range at its first/last month (so a range
+// starting mid-month doesn't pull in that month's earlier, out-of-range
+// days for the day-precision sources).
+function enumerateCalendarMonths(
+  dateFrom: string,
+  dateTo: string,
+): { label: string; start: string; end: string }[] {
+  const from = new Date(`${dateFrom}T00:00:00Z`)
+  const to = new Date(`${dateTo}T00:00:00Z`)
+  const months: { label: string; start: string; end: string }[] = []
+
+  let y = from.getUTCFullYear()
+  let m = from.getUTCMonth()
+  const lastY = to.getUTCFullYear()
+  const lastM = to.getUTCMonth()
+
+  while (y < lastY || (y === lastY && m <= lastM)) {
+    const monthStartIso = toIsoDate(y, m, 1)
+    const daysInMonth = new Date(Date.UTC(y, m + 1, 0)).getUTCDate()
+    const monthEndIso = toIsoDate(y, m, daysInMonth)
+    const start = monthStartIso > dateFrom ? monthStartIso : dateFrom
+    const end = monthEndIso < dateTo ? monthEndIso : dateTo
+    const label = new Date(`${monthStartIso}T00:00:00Z`).toLocaleString("en-US", {
+      month: "short",
+      year: "numeric",
+      timeZone: "UTC",
+    })
+    months.push({ label, start, end })
+
+    m += 1
+    if (m > 11) {
+      m = 0
+      y += 1
+    }
+  }
+  return months
+}
+
+export async function fetchCombinedSalesMonthly(filters: CombinedSalesFilters): Promise<MonthlyCombinedSales[]> {
+  const months = enumerateCalendarMonths(filters.dateFrom, filters.dateTo)
+  if (months.length > MAX_MONTHS) {
+    throw new Error(
+      `Month-on-month breakdown would cover ${months.length} months (max ${MAX_MONTHS}) — narrow the date range and try again.`,
+    )
+  }
+
+  // Sequential, not Promise.all across months: each month already fans
+  // out to 9 parallel source requests internally, so running every month
+  // at once too would mean dozens of concurrent requests hitting the
+  // backend for a wide range. One month at a time keeps load bounded,
+  // at the cost of total time scaling with month count.
+  const out: MonthlyCombinedSales[] = []
+  for (const month of months) {
+    const result = await fetchCombinedSalesByRegionDistrict({ ...filters, dateFrom: month.start, dateTo: month.end })
+    out.push({ month: month.label, result })
+  }
+  return out
+}
