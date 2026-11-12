@@ -42,6 +42,18 @@ function formatMoney(value: number | null | undefined) {
     return "₵" + value.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })
 }
 
+// billConsumptionType: "A" (actual meter read), "E" (estimated), "N/A" (no
+// reading) — same classification as the Reading Quality cards elsewhere on
+// this page, just per-row instead of aggregated. A blank/null value (seen
+// in production data) reads the same as "N/A".
+function consumptionTypeBadge(raw: string | null | undefined) {
+    const type = (raw || "").trim().toUpperCase()
+    if (type === "A") return { label: "A", title: "Actual meter reading", className: "bg-green-50 text-green-700 border-green-200" }
+    if (type === "E") return { label: "E", title: "Estimated reading", className: "bg-amber-50 text-amber-700 border-amber-200" }
+    if (type === "N/A" || type === "") return { label: "N/A", title: "No reading available", className: "bg-red-50 text-red-700 border-red-200" }
+    return { label: type, title: `Reading type: ${type}`, className: "bg-gray-50 text-gray-600 border-gray-200" }
+}
+
 function formatDate(value: string | null | undefined) {
     if (!value) return "—"
     const d = new Date(value)
@@ -505,7 +517,16 @@ export function CustomerSalesDetail({
                                                 {c.accountType || "—"}
                                             </TableCell>
                                             <TableCell className="text-right font-semibold text-blue-700 tabular-nums bg-blue-50/50">
-                                                {formatKwh(c.billConsumptionValue)}
+                                                <span className="inline-flex items-center justify-end gap-1.5">
+                                                    <Badge
+                                                        variant="outline"
+                                                        title={consumptionTypeBadge(c.billConsumptionType).title}
+                                                        className={`h-4 px-1.5 text-[10px] font-semibold ${consumptionTypeBadge(c.billConsumptionType).className}`}
+                                                    >
+                                                        {consumptionTypeBadge(c.billConsumptionType).label}
+                                                    </Badge>
+                                                    {formatKwh(c.billConsumptionValue)}
+                                                </span>
                                             </TableCell>
                                             <TableCell className="text-right tabular-nums text-sm">
                                                 {formatMoney(c.billAmount)}
