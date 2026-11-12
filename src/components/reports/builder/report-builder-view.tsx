@@ -11,7 +11,7 @@ import { useRef, useState } from "react"
 import { Responsive, WidthProvider } from "react-grid-layout/legacy"
 import "react-grid-layout/css/styles.css"
 import "react-resizable/css/styles.css"
-import { Plus, Download, Loader2, FileText, Presentation } from "lucide-react"
+import { Plus, Download, Loader2, FileText, FileSpreadsheet, Presentation } from "lucide-react"
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -30,6 +30,7 @@ import { captureElementAsPngDataUrl } from "@/lib/export-utils"
 import type { BuilderExportBlock, BuilderExportData } from "@/lib/report-builder/export-data"
 import { downloadBuilderReportPdf } from "@/lib/report-builder/export-pdf"
 import { downloadBuilderReportPptx } from "@/lib/report-builder/export-pptx"
+import { downloadBuilderReportExcel } from "@/lib/report-builder/export-excel"
 
 const ALL_SENTINEL = "__all__"
 
@@ -78,7 +79,7 @@ export function ReportBuilderView() {
   const [district, setDistrict] = useState("")
   const [paletteSource, setPaletteSource] = useState<DataSourceKey>(DATA_SOURCE_LIST[0].key)
   const [reportTitle, setReportTitle] = useState("Custom Report")
-  const [exporting, setExporting] = useState<"pdf" | "pptx" | null>(null)
+  const [exporting, setExporting] = useState<"pdf" | "pptx" | "xlsx" | null>(null)
   const [exportError, setExportError] = useState<string | null>(null)
 
   // Phase 2 export: each block reports its resolved data up via
@@ -131,6 +132,12 @@ export function ReportBuilderView() {
     setBlocks((prev) => prev.filter((b) => b.id !== id))
   }
 
+  // Shared title/groupByLabel logic for both export paths below.
+  const titleFor = (b: PlacedBlock, def: (typeof DATA_SOURCES)[DataSourceKey]) => {
+    const groupByLabel = def.groupByOptions.find((g) => g.value === (b.groupBy || def.defaultGroupBy))?.label
+    return `${def.label}${groupByLabel ? ` by ${groupByLabel}` : ""}${b.drillRegion ? ` — ${b.drillRegion}` : ""}`
+  }
+
   // Builds one BuilderExportBlock per canvas block, in reading order
   // (top-to-bottom, left-to-right by grid position) -- a bar/line block
   // captures its live chart DOM node as a PNG (same approach
@@ -140,51 +147,76 @@ export function ReportBuilderView() {
   // numerator/denominator; any other source viewed in KPI mode carries
   // just its summed total, matching exactly what the on-screen card
   // itself shows in that mode.
-  const handleExport = async (format: "pdf" | "pptx") => {
+  const buildExportBlocksWithCharts = async (ordered: PlacedBlock[]) => {
+    const exportBlocks: BuilderExportBlock[] = []
+    for (const b of ordered) {
+      const def = DATA_SOURCES[b.dataSource]
+      const resolved = blockDataRef.current.get(b.id)
+      const title = titleFor(b, def)
+
+      if (b.visualization === "bar" || b.visualization === "line") {
+        const el = chartElRef.current.get(b.id)
+        try {
+          const image = await captureElementAsPngDataUrl(el, { pixelRatio: 2 })
+          exportBlocks.push({ title, visualization: b.visualization, valueLabel: def.valueLabel, secondaryLabel: def.secondaryLabel, image })
+          continue
+        } catch {
+          // A chart that hasn't laid out yet (or failed to capture)
+          // shouldn't block the rest of the export -- fall through to
+          // exporting its rows as a table instead of dropping it entirely.
+        }
+      }
+
+      if (def.kpiOnly && resolved?.kpi) {
+        exportBlocks.push({ title, visualization: "kpi", valueLabel: def.valueLabel, kpi: resolved.kpi })
+      } else if (b.visualization === "kpi") {
+        exportBlocks.push({
+          title,
+          visualization: "kpi",
+          valueLabel: def.valueLabel,
+          total: { value: resolved?.kpiTotal ?? 0, groupCount: resolved?.rows.length ?? 0 },
+        })
+      } else {
+        exportBlocks.push({
+          title,
+          visualization: "table",
+          valueLabel: def.valueLabel,
+          secondaryLabel: def.secondaryLabel,
+          rows: resolved?.rows ?? [],
+        })
+      }
+    }
+    return exportBlocks
+  }
+
+  // Excel never captures a chart as an image -- every block exports its
+  // underlying groupBy rows (or kpiOnly's numerator/denominator), even one
+  // shown on screen as a bar/line chart, since a spreadsheet is for the
+  // numbers themselves.
+  const buildExportBlocksDataOnly = (ordered: PlacedBlock[]): BuilderExportBlock[] =>
+    ordered.map((b) => {
+      const def = DATA_SOURCES[b.dataSource]
+      const resolved = blockDataRef.current.get(b.id)
+      const title = titleFor(b, def)
+      if (def.kpiOnly && resolved?.kpi) {
+        return { title, visualization: "kpi", valueLabel: def.valueLabel, kpi: resolved.kpi }
+      }
+      return {
+        title,
+        visualization: "table",
+        valueLabel: def.valueLabel,
+        secondaryLabel: def.secondaryLabel,
+        rows: resolved?.rows ?? [],
+      }
+    })
+
+  const handleExport = async (format: "pdf" | "pptx" | "xlsx") => {
     setExporting(format)
     setExportError(null)
     try {
       const ordered = [...blocks].sort((a, b) => a.y - b.y || a.x - b.x)
-      const exportBlocks: BuilderExportBlock[] = []
-
-      for (const b of ordered) {
-        const def = DATA_SOURCES[b.dataSource]
-        const resolved = blockDataRef.current.get(b.id)
-        const groupByLabel = def.groupByOptions.find((g) => g.value === (b.groupBy || def.defaultGroupBy))?.label
-        const title = `${def.label}${groupByLabel ? ` by ${groupByLabel}` : ""}${b.drillRegion ? ` — ${b.drillRegion}` : ""}`
-
-        if (b.visualization === "bar" || b.visualization === "line") {
-          const el = chartElRef.current.get(b.id)
-          try {
-            const image = await captureElementAsPngDataUrl(el, { pixelRatio: 2 })
-            exportBlocks.push({ title, visualization: b.visualization, valueLabel: def.valueLabel, secondaryLabel: def.secondaryLabel, image })
-            continue
-          } catch {
-            // A chart that hasn't laid out yet (or failed to capture)
-            // shouldn't block the rest of the export -- fall through to
-            // exporting its rows as a table instead of dropping it entirely.
-          }
-        }
-
-        if (def.kpiOnly && resolved?.kpi) {
-          exportBlocks.push({ title, visualization: "kpi", valueLabel: def.valueLabel, kpi: resolved.kpi })
-        } else if (b.visualization === "kpi") {
-          exportBlocks.push({
-            title,
-            visualization: "kpi",
-            valueLabel: def.valueLabel,
-            total: { value: resolved?.kpiTotal ?? 0, groupCount: resolved?.rows.length ?? 0 },
-          })
-        } else {
-          exportBlocks.push({
-            title,
-            visualization: "table",
-            valueLabel: def.valueLabel,
-            secondaryLabel: def.secondaryLabel,
-            rows: resolved?.rows ?? [],
-          })
-        }
-      }
+      const exportBlocks =
+        format === "xlsx" ? buildExportBlocksDataOnly(ordered) : await buildExportBlocksWithCharts(ordered)
 
       const data: BuilderExportData = {
         title: reportTitle.trim() || "Custom Report",
@@ -196,6 +228,8 @@ export function ReportBuilderView() {
 
       if (format === "pdf") {
         downloadBuilderReportPdf(data, filename)
+      } else if (format === "xlsx") {
+        await downloadBuilderReportExcel(data, filename)
       } else {
         await downloadBuilderReportPptx(data, filename)
       }
@@ -252,6 +286,9 @@ export function ReportBuilderView() {
               </DropdownMenuItem>
               <DropdownMenuItem onClick={() => handleExport("pptx")} disabled={exporting !== null}>
                 <Presentation className="h-4 w-4 mr-1.5" /> Export as PPTX
+              </DropdownMenuItem>
+              <DropdownMenuItem onClick={() => handleExport("xlsx")} disabled={exporting !== null}>
+                <FileSpreadsheet className="h-4 w-4 mr-1.5" /> Export as Excel
               </DropdownMenuItem>
             </DropdownMenuContent>
           </DropdownMenu>
