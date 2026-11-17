@@ -7,6 +7,7 @@
 // numbers here, since that's what a spreadsheet is for.
 import type { BuilderExportBlock, BuilderExportData } from "@/lib/report-builder/export-data"
 import type { MonthlyCombinedSales } from "@/lib/report-builder/combined-sales"
+import type { MonthlyBspImports } from "@/lib/report-builder/bsp-imports"
 
 // Excel sheet names: max 31 chars, none of \ / ? * [ ] : , and unique
 // within the workbook (sheet "names" are compared case-insensitively).
@@ -79,10 +80,42 @@ function combinedSalesToRows(monthly: MonthlyCombinedSales[]): Record<string, st
   return rows
 }
 
+// "BSP Imports" sheet rows -- Region (subtotal) + Station layout, same
+// outline convention as the Combined sheet, but with its own Import/
+// Export/Net columns instead of one column per sales source, since this
+// is a single source, not several matched up side by side.
+function bspImportsToRows(monthly: MonthlyBspImports[]): Record<string, string | number>[] {
+  const rows: Record<string, string | number>[] = []
+  monthly.forEach(({ month, regions }) => {
+    regions.forEach((region) => {
+      rows.push({
+        Month: month,
+        Region: region.label,
+        Station: "",
+        "Import (kWh)": region.importKwh,
+        "Export (kWh)": region.exportKwh,
+        "Net (kWh)": region.netKwh,
+      })
+      region.stations.forEach((station) => {
+        rows.push({
+          Month: month,
+          Region: "",
+          Station: station.label,
+          "Import (kWh)": station.importKwh,
+          "Export (kWh)": station.exportKwh,
+          "Net (kWh)": station.netKwh,
+        })
+      })
+    })
+  })
+  return rows
+}
+
 export async function downloadBuilderReportExcel(
   data: BuilderExportData,
   filename: string,
   combined?: MonthlyCombinedSales[],
+  bspImports?: MonthlyBspImports[],
 ) {
   const XLSX = await import("xlsx")
   const workbook = XLSX.utils.book_new()
@@ -100,6 +133,9 @@ export async function downloadBuilderReportExcel(
           { Field: `See "Combined" sheet -- every source matched up by month/region/district (${combined.length} month${combined.length === 1 ? "" : "s"}).`, Value: "" },
         ]
       : []),
+    ...(bspImports && bspImports.length > 0
+      ? [{ Field: `See "BSP Imports" sheet -- incomer meter imports/exports by month/region/station.`, Value: "" }]
+      : []),
   ]
   XLSX.utils.book_append_sheet(
     workbook,
@@ -112,6 +148,11 @@ export async function downloadBuilderReportExcel(
   if (combined && combined.length > 0) {
     const sheet = XLSX.utils.json_to_sheet(combinedSalesToRows(combined))
     XLSX.utils.book_append_sheet(workbook, sheet, sheetNameFor("Combined", -1, used))
+  }
+
+  if (bspImports && bspImports.length > 0) {
+    const sheet = XLSX.utils.json_to_sheet(bspImportsToRows(bspImports))
+    XLSX.utils.book_append_sheet(workbook, sheet, sheetNameFor("BSP Imports", -1, used))
   }
 
   data.blocks.forEach((block, i) => {
