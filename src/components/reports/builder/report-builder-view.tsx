@@ -22,6 +22,14 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog"
 import { DATA_SOURCE_LIST, DATA_SOURCES, type DataSourceKey } from "@/lib/report-builder/data-sources"
 import type { ReportBlock } from "@/lib/report-builder/types"
 import { ReportBlockCard, type ReportBlockResolvedData } from "@/components/reports/builder/report-block"
@@ -32,6 +40,13 @@ import { downloadBuilderReportPdf } from "@/lib/report-builder/export-pdf"
 import { downloadBuilderReportPptx } from "@/lib/report-builder/export-pptx"
 import { downloadBuilderReportExcel } from "@/lib/report-builder/export-excel"
 import { fetchCombinedSalesMonthly } from "@/lib/report-builder/combined-sales"
+import { fetchBspImportsMonthly } from "@/lib/report-builder/bsp-imports"
+
+const EXPORT_FORMAT_LABEL: Record<"pdf" | "pptx" | "xlsx", string> = {
+  pdf: "PDF",
+  pptx: "PPTX",
+  xlsx: "Excel",
+}
 
 const ALL_SENTINEL = "__all__"
 
@@ -82,6 +97,13 @@ export function ReportBuilderView() {
   const [reportTitle, setReportTitle] = useState("Custom Report")
   const [exporting, setExporting] = useState<"pdf" | "pptx" | "xlsx" | null>(null)
   const [exportError, setExportError] = useState<string | null>(null)
+  // Set when a format is picked from the Export menu, before the actual
+  // export runs -- opens a confirmation dialog pre-filled with the
+  // current date range so a stale/wrong range doesn't silently go out in
+  // the download. Editing the dialog's inputs edits dateFrom/dateTo
+  // directly (single source of truth with the canvas's own date filter),
+  // so "confirm" always exports whatever the dialog currently shows.
+  const [pendingFormat, setPendingFormat] = useState<"pdf" | "pptx" | "xlsx" | null>(null)
 
   // Phase 2 export: each block reports its resolved data up via
   // onDataChange (blockDataRef) and exposes its chart DOM node via
@@ -230,17 +252,21 @@ export function ReportBuilderView() {
       if (format === "pdf") {
         downloadBuilderReportPdf(data, filename)
       } else if (format === "xlsx") {
-        // "Combined" sheet is a fixed set of 9 region/district-having
-        // sources matched up side by side, broken out month by month --
-        // independent of whatever blocks are actually on the canvas (see
-        // combined-sales.ts).
-        const combined = await fetchCombinedSalesMonthly({
+        // "Combined" and "BSP Imports" are both fixed sheets, independent
+        // of whatever blocks are actually on the canvas -- see
+        // combined-sales.ts and bsp-imports.ts respectively. Run in
+        // parallel: neither depends on the other.
+        const exportFilters = {
           dateFrom,
           dateTo,
           region: region.trim() || undefined,
           district: district.trim() || undefined,
-        })
-        await downloadBuilderReportExcel(data, filename, combined)
+        }
+        const [combined, bspImports] = await Promise.all([
+          fetchCombinedSalesMonthly(exportFilters),
+          fetchBspImportsMonthly(exportFilters),
+        ])
+        await downloadBuilderReportExcel(data, filename, combined, bspImports)
       } else {
         await downloadBuilderReportPptx(data, filename)
       }
@@ -292,13 +318,13 @@ export function ReportBuilderView() {
               </Button>
             </DropdownMenuTrigger>
             <DropdownMenuContent align="end">
-              <DropdownMenuItem onClick={() => handleExport("pdf")} disabled={exporting !== null}>
+              <DropdownMenuItem onClick={() => setPendingFormat("pdf")} disabled={exporting !== null}>
                 <FileText className="h-4 w-4 mr-1.5" /> Export as PDF
               </DropdownMenuItem>
-              <DropdownMenuItem onClick={() => handleExport("pptx")} disabled={exporting !== null}>
+              <DropdownMenuItem onClick={() => setPendingFormat("pptx")} disabled={exporting !== null}>
                 <Presentation className="h-4 w-4 mr-1.5" /> Export as PPTX
               </DropdownMenuItem>
-              <DropdownMenuItem onClick={() => handleExport("xlsx")} disabled={exporting !== null}>
+              <DropdownMenuItem onClick={() => setPendingFormat("xlsx")} disabled={exporting !== null}>
                 <FileSpreadsheet className="h-4 w-4 mr-1.5" /> Export as Excel
               </DropdownMenuItem>
             </DropdownMenuContent>
@@ -306,6 +332,47 @@ export function ReportBuilderView() {
         </div>
       </div>
       {exportError && <p className="text-sm text-red-600">{exportError}</p>}
+
+      <Dialog open={pendingFormat !== null} onOpenChange={(open) => !open && setPendingFormat(null)}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Confirm export range</DialogTitle>
+            <DialogDescription>
+              Exporting as {pendingFormat ? EXPORT_FORMAT_LABEL[pendingFormat] : ""}. Double-check the date range
+              below — adjust it here if needed before the download starts.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="flex flex-wrap items-end gap-3">
+            <div className="space-y-1">
+              <label className="text-xs text-muted-foreground">From</label>
+              <Input type="date" value={dateFrom} onChange={(e) => setDateFrom(e.target.value)} className="w-[160px]" />
+            </div>
+            <div className="space-y-1">
+              <label className="text-xs text-muted-foreground">To</label>
+              <Input type="date" value={dateTo} onChange={(e) => setDateTo(e.target.value)} className="w-[160px]" />
+            </div>
+          </div>
+          {(region.trim() || district.trim()) && (
+            <p className="text-xs text-muted-foreground">
+              Also filtered by {[region.trim(), district.trim()].filter(Boolean).join(" / ")}.
+            </p>
+          )}
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setPendingFormat(null)}>
+              Cancel
+            </Button>
+            <Button
+              onClick={() => {
+                const format = pendingFormat
+                setPendingFormat(null)
+                if (format) handleExport(format)
+              }}
+            >
+              Confirm & Export
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       <Card>
         <CardContent className="pt-5 flex flex-wrap items-end gap-3">
