@@ -334,7 +334,7 @@ export function ReportBuilderView() {
       {exportError && <p className="text-sm text-red-600">{exportError}</p>}
 
       <Dialog open={pendingFormat !== null} onOpenChange={(open) => !open && setPendingFormat(null)}>
-        <DialogContent>
+        <DialogContent className="sm:max-w-lg">
           <DialogHeader>
             <DialogTitle>Confirm export range</DialogTitle>
             <DialogDescription>

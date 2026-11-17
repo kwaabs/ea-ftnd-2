@@ -182,7 +182,7 @@ export interface MonthlyCombinedSales {
   result: CombinedSalesResult
 }
 
-const MAX_MONTHS = 24
+export const MAX_MONTHS = 24
 
 function pad2(n: number): string {
   return String(n).padStart(2, "0")
@@ -195,8 +195,10 @@ function toIsoDate(y: number, m: number, d: number): string {
 // One entry per calendar month overlapping [dateFrom, dateTo], each
 // clipped to the overall range at its first/last month (so a range
 // starting mid-month doesn't pull in that month's earlier, out-of-range
-// days for the day-precision sources).
-function enumerateCalendarMonths(
+// days for the day-precision sources). Exported for bsp-imports.ts's
+// meter-level breakdown, which needs the same month buckets to build its
+// (roster meter x month) cross product.
+export function enumerateCalendarMonths(
   dateFrom: string,
   dateTo: string,
 ): { label: string; start: string; end: string }[] {
