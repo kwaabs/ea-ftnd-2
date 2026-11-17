@@ -57,7 +57,11 @@ async function fetchAllBspMeters(filters: CombinedSalesFilters): Promise<RosterM
     }
     const rows = json.data?.data || []
     rows.forEach((m) => {
-      meters.push({ meterNumber: m.meter_number, region: m.region || "Unknown", station: m.station || "Unknown" })
+      // A BSP meter with no region or no station assigned is excluded
+      // entirely, not bucketed under "Unknown" -- per the explicit ask,
+      // it doesn't belong on this sheet at all.
+      if (!m.region?.trim() || !m.station?.trim()) return
+      meters.push({ meterNumber: m.meter_number, region: m.region.trim(), station: m.station.trim() })
     })
     const pages = json.data?.meta?.pages || 1
     if (rows.length === 0 || page >= pages) break
@@ -165,8 +169,11 @@ export async function fetchBspImportsMonthly(filters: CombinedSalesFilters): Pro
     const key = meterKey(row.meter_number)
     if (!key) return
 
-    if (!consumptionMeterLocation.has(key)) {
-      consumptionMeterLocation.set(key, { region: row.region || "Unknown", station: row.station || "Unknown" })
+    // Same exclusion rule as the roster: only record a location when both
+    // region and station are present, so an orphan meter with neither
+    // stays unplaceable below rather than falling back to "Unknown".
+    if (!consumptionMeterLocation.has(key) && row.region?.trim() && row.station?.trim()) {
+      consumptionMeterLocation.set(key, { region: row.region.trim(), station: row.station.trim() })
     }
 
     const sortKey = monthSortKeyFromDateString(row.consumption_date)
@@ -207,7 +214,7 @@ export async function fetchBspImportsMonthly(filters: CombinedSalesFilters): Pro
         region = { label: shortRegionLabel(regionRaw), stations: new Map() }
         regionMap.set(regionKey, region)
       }
-      const stationKey = (stationRaw || "Unknown").trim().toLowerCase()
+      const stationKey = stationRaw.trim().toLowerCase()
       let station = region.stations.get(stationKey)
       if (!station) {
         station = { label: stationRaw, meters: new Map() }
@@ -221,11 +228,13 @@ export async function fetchBspImportsMonthly(filters: CombinedSalesFilters): Pro
     rosterByKey.forEach((m, key) => placeMeter(key, m.meterNumber, m.region, m.station))
 
     // Then any meter with consumption this month that the roster doesn't
-    // know about, placed using its own reported region/station.
+    // know about, placed using its own reported region/station -- skipped
+    // entirely if it has neither (same exclusion rule as the roster).
     meterConsumption.forEach((_, key) => {
       if (rosterByKey.has(key)) return
       const loc = consumptionMeterLocation.get(key)
-      placeMeter(key, key, loc?.region || "Unknown", loc?.station || "Unknown")
+      if (!loc) return
+      placeMeter(key, key, loc.region, loc.station)
     })
 
     const regions: BspRegionRow[] = Array.from(regionMap.values())
