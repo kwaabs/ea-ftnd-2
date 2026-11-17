@@ -80,10 +80,12 @@ function combinedSalesToRows(monthly: MonthlyCombinedSales[]): Record<string, st
   return rows
 }
 
-// "BSP Imports" sheet rows -- Region (subtotal) + Station layout, same
-// outline convention as the Combined sheet, but with its own Import/
-// Export/Net columns instead of one column per sales source, since this
-// is a single source, not several matched up side by side.
+// "BSP Imports" sheet rows -- Region (subtotal) -> Station (subtotal) ->
+// Meter (detail) layout, same outline convention as the Combined sheet,
+// but with its own Import/Export/Net columns instead of one column per
+// sales source, since this is a single source, not several matched up
+// side by side. Every roster meter gets a row for every month, 0s and
+// all -- see bsp-imports.ts for why.
 function bspImportsToRows(monthly: MonthlyBspImports[]): Record<string, string | number>[] {
   const rows: Record<string, string | number>[] = []
   monthly.forEach(({ month, regions }) => {
@@ -92,6 +94,7 @@ function bspImportsToRows(monthly: MonthlyBspImports[]): Record<string, string |
         Month: month,
         Region: region.label,
         Station: "",
+        "Meter Number": "",
         "Import (kWh)": region.importKwh,
         "Export (kWh)": region.exportKwh,
         "Net (kWh)": region.netKwh,
@@ -101,9 +104,21 @@ function bspImportsToRows(monthly: MonthlyBspImports[]): Record<string, string |
           Month: month,
           Region: "",
           Station: station.label,
+          "Meter Number": "",
           "Import (kWh)": station.importKwh,
           "Export (kWh)": station.exportKwh,
           "Net (kWh)": station.netKwh,
+        })
+        station.meters.forEach((meter) => {
+          rows.push({
+            Month: month,
+            Region: "",
+            Station: "",
+            "Meter Number": meter.label,
+            "Import (kWh)": meter.importKwh,
+            "Export (kWh)": meter.exportKwh,
+            "Net (kWh)": meter.netKwh,
+          })
         })
       })
     })
